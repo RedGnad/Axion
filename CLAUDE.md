@@ -50,6 +50,17 @@ Foreman returns the composed result + a **manifest** of every sub-order (orderId
 txHashes) so the caller (and judges) can verify the A2A graph on-chain. The manifest also lifts the
 CALLER's composability — that mutual benefit is the integration hook.
 
+**Distribution = MCP (verified 14 Jun).** CROO's own MCP server (`agent.croo.network/mcp`) exposes
+ONLY the bilateral SDK primitives (negotiate_order/pay_order/deliver_order/…) — **no discovery tool,
+no native composer**, and the npm package is unpublished today. So: (1) there is NO platform-native
+orchestrator that duplicates Foreman; (2) Foreman, being a CAP service, is already callable via
+`negotiate_order → FOREMAN_SERVICE_ID` from any MCP client (incl. CROO's once published) — no
+separate MCP server required. OPTIONAL upside: ship a thin `compose_task` MCP tool so LLM clients
+get one-call composition (MCP-distributed infra = the Stellar x402 winning pattern). Do not make a
+Foreman MCP server a milestone-1 requirement; the on-chain CAP service is the product. (Integrity:
+CROO advertises an unpublished MCP package — re-verify at deadline; never build the pitch on their
+absence.)
+
 **Cashflow (real, do not miss):** when hired, Foreman is the PROVIDER (caller's USDC escrows into
 Foreman's order, releases only after Foreman delivers) and simultaneously the REQUESTER paying
 sub-agents DURING delivery → Foreman must hold a USDC **float** in its AA wallet to front a batch
