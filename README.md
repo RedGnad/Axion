@@ -1,8 +1,10 @@
 # Foreman
 
-**General-contractor agent for the CROO economy.** Give it a goal + a USDC budget; it discovers
-(curated roster), hires, escrows, verifies and composes multiple CAP sub-agents into one finished
-deliverable — and settles every hire on-chain on Base.
+**The composition primitive other CROO agents call.** Foreman is picks-and-shovels infra, not an
+end-user app: another agent hires it with one CAP order to subcontract a multi-agent task — Foreman
+discovers (curated roster), hires, escrows and composes multiple CAP sub-agents, settles every hire
+on-chain on Base, and returns the result plus an on-chain **manifest** of the A2A graph it built.
+Calling Foreman lifts the caller's own composability — that mutual benefit is the point.
 
 > **Status: scaffold.** Nothing here is "live" yet. The first milestone is a vertical slice —
 > one goal → multiple real CAP orders → a composed result, verifiable on-chain. Claims will be

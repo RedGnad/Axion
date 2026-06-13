@@ -8,6 +8,50 @@
 
 @/Users/red.g/CascadeProjects/Master/playbook.md
 
+## Positioning — APEX (iii): picks-and-shovels, consumed BY other agents
+Foreman is NOT an end-user product. It is a **composition primitive that OTHER CROO agents call**
+to subcontract a multi-agent task — trustless agent→agent subcontracting with on-chain escrow per
+sub-hire. This is what out-ceils the bare orchestrator: it keeps the 25%+30% strength, sharpens
+Innovation (agents subcontracting trustless on-chain = agent-native), and fixes Adoption with a
+REALIZABLE in-window userbase — the other registered teams' agents — instead of a consumer
+audience we don't have. (Out-of-sample support: playbook picks-and-shovels-win-infra +
+ecosystem-motion-in-window.)
+
+**LOAD-BEARING PIER / kill-condition (attack EARLY, never fake):** ≥1–2 INDEPENDENT teams' agents
+must genuinely call Foreman in-window. If unmet, the Adoption/Innovation edge is synthetic and we
+honestly degrade to a bare orchestrator. CROO feeds aggregated order data to judges + scores
+"organic" — a faked integration loses points AND breaks our rules. Confidence is LOW (taste
+unvalidated); this is a reasoned ceiling, not a guaranteed winner.
+
+## Consumable interface (the adoption lever — keep it 5-lines-to-integrate)
+Foreman registers ONE CAP service (Dashboard) → `FOREMAN_SERVICE_ID`. Any agent hires it via the
+standard verified path: `negotiateOrder({ serviceId: FOREMAN_SERVICE_ID, requirements })`. The
+`requirements` JSON IS Foreman's public contract (see `src/contract.ts`):
+```jsonc
+{ "goal": "natural-language composite task",
+  "budgetUSDC": "max smallest-unit Foreman may spend across sub-hires",
+  "deliverable": "text" | "file",
+  "constraints": { "maxSubAgents": 6, "deadlineSeconds": 300 } }
+```
+Foreman returns the composed result + a **manifest** of every sub-order (orderIds, agents, Base
+txHashes) so the caller (and judges) can verify the A2A graph on-chain. The manifest also lifts the
+CALLER's composability — that mutual benefit is the integration hook.
+
+**Cashflow (real, do not miss):** when hired, Foreman is the PROVIDER (caller's USDC escrows into
+Foreman's order, releases only after Foreman delivers) and simultaneously the REQUESTER paying
+sub-agents DURING delivery → Foreman must hold a USDC **float** in its AA wallet to front a batch
+of sub-hires before its parent order clears. Margin = caller payment − Σ(sub-budgets + feeAmount).
+
+## Outreach plan (turn the kill-condition into an attack, in-window)
+1. Ship Foreman + public `FOREMAN_SERVICE_ID` + a 5-line integration snippet EARLY.
+2. Post in the CROO community: "subcontract any multi-agent task in 5 lines; your agent gets
+   composability + a richer demo, you skip building orchestration." Offer a small USDC **faucet**
+   so teams test-call for free (removes friction → real organic orders).
+3. Seed the roster with the 2 existing store agents (Chainguard, Web3 Address Intel) as both
+   hireable sub-agents AND reciprocal callers.
+4. Co-demo an integrator (their agent calling Foreman live) in the Demo Day video = organic A2A +
+   ecosystem motion. NEVER fabricate this; if no one integrates, report honestly.
+
 ## Why this wins (verified against the official rubric)
 Judging (official image, tier [O], verified 13 Jun):
 - **Technical Execution 30%** — robust CAP, reliable A2A, payment-state handling. **Bonus: 10+
