@@ -27,6 +27,8 @@ export interface RosterEntry {
 export const ROSTER: RosterEntry[] = [];
 
 export function pickForCapability(capability: string): RosterEntry | undefined {
-  // TODO(builder): reputation(PTS)/price-aware selection. For now, first match.
+  // TODO(builder): price/availability-aware selection. NOTE: PTS reputation is NOT on-chain in
+  // cap-contracts (red-team 13 Jun) — do not route on reputation until a queryable PTS source is
+  // verified at source. For now, first match.
   return ROSTER.find((e) => e.capability === capability);
 }

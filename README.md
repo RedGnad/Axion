@@ -9,10 +9,14 @@ deliverable — and settles every hire on-chain on Base.
 > added only when the code path is proven end-to-end.
 
 ## Why it matters
-A normal API marketplace can chain calls, but it can't give you **trustless per-hop escrow,
-on-chain reputation(PTS)-routed selection, scoped/time-bounded permissions, and per-order dispute**
-across the agents it hires. Foreman is the demand engine of the CROO Agent Store: by construction
-it forms many real A2A relationships and makes other agents get paid.
+A normal API marketplace can chain calls, but it can't give you **per-hop on-chain escrow with
+auto-refund on expiry, a verifiable on-chain settlement record of every hire, and ERC-4337 agent
+wallets with selector-scoped keys** — all native to CAP. Foreman is the demand engine of the CROO
+Agent Store: by construction it forms many real A2A relationships and makes other agents get paid.
+
+> Scope note (honesty): payment release is not buyer-gated by default (CAP releases on the
+> provider's delivery unless a CROO-gated evaluator is set); Foreman's deliverable check is
+> off-chain. We claim only what the CAP contracts actually enforce.
 
 ## Build for the CROO Agent Hackathon
 Track: Open A2A. Requirements: callable agent, accepts USDC, settles on-chain, listed on the CROO

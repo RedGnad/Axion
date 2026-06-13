@@ -17,9 +17,22 @@ Judging (official image, tier [O], verified 13 Jun):
   agents BY CONSTRUCTION. **Depth ≠ count: re-hire counterparties + chain multi-hop, not just
   one-shot fan-out.**
 - **Innovation 20%** — "impossible / much worse on a normal API marketplace?" → the answer is
-  **the on-chain trust layer**: trustless per-hop escrow + reputation(PTS)-routed selection +
-  scoped/time-bounded permissions across N hired agents + per-order dispute. NOT "orchestration"
+  **the on-chain trust layer, claimed ONLY as verified in cap-contracts**: per-hop **escrow**
+  with **delivery-window + auto-refund on expiry** (CAPVault) + an **on-chain settlement record**
+  of every hire + optional **trusted-evaluator arbitration** (EVALUATOR_ROLE) + ERC-4337 AA
+  wallet with **owner/executor selector-scoped keys** (CROOValidationModule). NOT "orchestration"
   alone (that exists on normal marketplaces).
+  **DO-NOT-OVERCLAIM (red-team 13 Jun, verified in code):**
+  - The **buyer is NOT the on-chain evaluator by default.** With `needEvaluation=false`,
+    `deliverOrder` releases payment to the provider immediately (no buyer veto; requestor cannot
+    reject in DELIVER phase). With `needEvaluation=true`, only `EVALUATOR_ROLE` (CROO-gated) can
+    approve/refund. → Foreman's quality check is **off-chain, post-delivery**, UNLESS we confirm
+    Foreman can hold EVALUATOR_ROLE for its own orders. Never claim "buyer-gated release."
+  - **No on-chain reputation/PTS** in cap-contracts or SDK types. PTS is off-chain/backend. →
+    Do NOT claim "reputation-routed selection." Roster routes on price/availability until a
+    queryable PTS source is verified at source.
+  - **Scoped permissions** = owner/executor selector-whitelist on the agent's OWN AA wallet,
+    NOT per-hire grants to counterparties. Describe it correctly.
 - **Usability & Real Adoption 15%** — real users, **organic** interactions, retention. → orders
   must be genuinely useful (never wash; CROO sees aggregated order data — integrity IS scored).
 - **Presentation 10%** — demo clarity, README reproducibility, Demo Day. → "one prompt pays six
@@ -51,9 +64,24 @@ ONE class `AgentClient` does both roles. Confirmed methods:
 3. **Pre-fund the agent's AA (ERC-4337) wallet with USDC** before `payOrder` (the SDK checks the
    agent-wallet balance, not the controller address). Base mainnet.
 
-### On-chain (tier [P], github.com/CROO-Network/cap-contracts)
-`CAPCore`, `CAPVault` (ERC-4337), `IERC8004IdentityRegistry`, `CROOExchange`,
-`CROOValidationModule`. Verify orders on-chain (`cast`) for judge-facing proof.
+### On-chain lifecycle + payment (tier [P], github.com/CROO-Network/cap-contracts)
+State machine (ICAPCore): `NEGOTIATION ──payOrder──► LOCK ──deliverOrder──► DELIVER
+──evaluateOrder──► CLEAR` (reject/expire → REJECTED/refund). Contracts: `CAPCore`,
+`CAPVault` (pure escrow), `IERC8004IdentityRegistry`, `CROOValidationModule` (ERC-7579
+owner/executor selector scoping), `CROOExchange` (sells the AGENT itself — NOT order flow, don't
+confuse), `CAPSwapExecutor` (fund-order execution).
+- **Escrow is real:** `payOrder`→`CAPVault.setupEscrow` (`transferFrom`) OR `payOrderX402`→
+  `setupEscrowX402` (EIP-3009 `transferWithAuthorization`, gasless USDC). Standard path needs the
+  requestor to **approve CAPVault for `budget` first** — confirm whether the node-sdk `payOrder`
+  does approve+pay or uses the x402 path before funding.
+- **Escrow service FEE:** SDK `Order.feeAmount` = on-chain escrow fee in USDC. Foreman must charge
+  caller > Σ(sub-budget + feeAmount) + margin, or it loses USDC per hire. Bake fee into the math.
+- **Evaluation:** `needEvaluation=false` → `deliverOrder` auto-`releasePayment(provider)` →CLEAR
+  (no buyer veto). `needEvaluation=true` → `evaluateOrder(isApproved)` is `onlyRole(EVALUATOR_ROLE)`.
+  Decide per order; verify whether Foreman can hold EVALUATOR_ROLE for its hires. `rejectOrder`
+  reverts in DELIVER phase.
+- **Refund safety:** on expiry past `deliveryWindow`, escrow refunds the requestor — this is the
+  real buyer protection (not buyer-gated release). Verify every hire on-chain (`cast`) for the demo.
 
 ## Integrity rules (binding — from Master)
 - Never mark a feature live/ready without end-to-end implementation. README says scaffold/
@@ -70,8 +98,10 @@ ONE class `AgentClient` does both roles. Confirmed methods:
 `src/index.ts` entrypoint → `src/orchestrator.ts` core loop:
 1. **Plan** — decompose the incoming goal into typed subtasks (LLM).
 2. **Route** — for each subtask pick a serviceId from `src/roster.ts` (reputation/price aware).
-3. **Hire (parallel)** — `negotiateOrder` → `payOrder` → await `OrderCompleted` → `getDelivery`,
-   per subtask, with escrow + scoped permissions + timeout/dispute handling.
+3. **Hire (parallel)** — `negotiateOrder` → `payOrder` (escrow LOCK) → await `OrderCompleted` →
+   `getDelivery`, per subtask, with delivery-window/expiry-refund handling. Foreman's quality
+   check on each deliverable is OFF-CHAIN (post-delivery) — see DO-NOT-OVERCLAIM above; do not
+   claim on-chain buyer-gated release.
 4. **Compose** — assemble verified sub-deliverables into one result.
 5. **Sell** — Foreman is itself a registered service; it delivers the composed result to its
    caller and settles (price > Σ sub-costs = margin). Builds its own PTS.
