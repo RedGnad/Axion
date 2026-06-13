@@ -17,11 +17,24 @@ REALIZABLE in-window userbase — the other registered teams' agents — instead
 audience we don't have. (Out-of-sample support: playbook picks-and-shovels-win-infra +
 ecosystem-motion-in-window.)
 
-**LOAD-BEARING PIER / kill-condition (attack EARLY, never fake):** ≥1–2 INDEPENDENT teams' agents
-must genuinely call Foreman in-window. If unmet, the Adoption/Innovation edge is synthetic and we
-honestly degrade to a bare orchestrator. CROO feeds aggregated order data to judges + scores
-"organic" — a faked integration loses points AND breaks our rules. Confidence is LOW (taste
-unvalidated); this is a reasoned ceiling, not a guaranteed winner.
+**LOAD-BEARING PIER — TWO-SIDED ecosystem dependency (red-team 14 Jun; store = 0 agents/0 orders,
+field = 0 BUIDLs / 77 registered / 28 days left):**
+- HIRE side: with an empty store there is nothing to compose → we self-seed all sub-agents → graph
+  diversity is self-manufactured (judges see aggregated order data → reads as synthetic).
+- DEMAND side: "other agents call Foreman" is optimistic — 77 registered / 0 shipped → realistically
+  0–2 integrators, late. Do NOT make this the floor.
+
+**Therefore: FLOOR vs UPSIDE (build to the floor, the field is near-empty so the floor wins/places).**
+- FLOOR (must work even if the ecosystem stays empty): a genuinely useful composer over a coherent
+  set of OUR OWN leaf-agents, labelled `ours`, with on-chain-verifiable orders, listed, crisp demo.
+  In a track with ~0 real submissions this floor already places.
+- UPSIDE (lifts Adoption+Innovation if it lands, never the floor): ≥1–2 INDEPENDENT teams' agents
+  genuinely call Foreman, and/or real third-party agents in the roster. Attack early, NEVER fake —
+  CROO scores "organic" + feeds aggregated order data to judges.
+- HONEST MANIFEST: every SubOrderRef carries `ours: boolean`; never claim third-party diversity we
+  don't have. Re-census near deadline for (a) rival orchestrators (duplication — currently none, but
+  orchestrator is the OBVIOUS read of A2A 25% → expect crowding) and (b) hireable third-party agents.
+Confidence LOW (taste unvalidated); reasoned ceiling, not a guaranteed winner.
 
 ## Consumable interface (the adoption lever — keep it 5-lines-to-integrate)
 Foreman registers ONE CAP service (Dashboard) → `FOREMAN_SERVICE_ID`. Any agent hires it via the

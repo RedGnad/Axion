@@ -28,6 +28,9 @@ export interface SubOrderRef {
   serviceId: string;
   orderId: string;
   payTxHash: string;
+  /** Honesty flag: true if this sub-agent is one of ours (seeded), false if third-party.
+   *  Never present a self-seeded graph as organic third-party diversity. */
+  ours: boolean;
 }
 
 export interface ForemanResult {
