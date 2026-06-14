@@ -1,5 +1,5 @@
 {
-  "name": "foreman",
+  "name": "axion",
   "version": "0.0.1",
   "private": true,
   "description": "General-contractor CAP agent: hires, escrows, verifies and composes other CROO agents",
@@ -9,10 +9,13 @@
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "slice": "node --env-file=.env --import tsx src/slice.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@croo-network/sdk": "^0.2.1"
+    "@anthropic-ai/sdk": "^0.104.1",
+    "@croo-network/sdk": "^0.2.1",
+    "ethers": "^6.13.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

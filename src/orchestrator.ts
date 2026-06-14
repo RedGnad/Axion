@@ -1,64 +1,110 @@
 import { AgentClient, EventType } from '@croo-network/sdk';
+import { EventBus } from './events.js';
 import { pickForCapability, type RosterEntry } from './roster.js';
 
-/** A subtask the planner produced from the incoming goal. */
+/** A subtask the (deterministic) planner produced from the incoming goal. */
 export interface Subtask {
   capability: string;
   requirements: string; // JSON string passed to negotiateOrder({ requirements })
 }
 
-/** Result of hiring one sub-agent (one real A2A edge). */
+/** Result of hiring one sub-agent (one real on-chain A2A edge). */
 export interface HireResult {
   subtask: Subtask;
   service: RosterEntry;
   orderId: string;
   payTxHash: string;
+  clearTxHash: string;
   deliverable: string;
 }
 
+const CREATE_TIMEOUT_MS = 60_000; // provider must accept → backend creates order on-chain
+const COMPLETE_TIMEOUT_MS = 180_000; // pay → provider delivers → CLEAR
+
 /**
- * Foreman core loop: plan -> route -> hire (parallel) -> compose.
+ * Axion core loop: plan -> route -> hire (DAG) -> compose.
  * Every hire is one real on-chain CAP order (one A2A edge). See CLAUDE.md for the rubric mapping.
+ * The planner is DETERMINISTIC (no LLM) — only the `summarize` leaf spends LLM tokens.
  */
 export class Orchestrator {
-  constructor(private readonly client: AgentClient) {}
+  constructor(
+    private readonly client: AgentClient,
+    private readonly bus: EventBus,
+  ) {}
 
-  /** Step 1: decompose a natural-language goal into typed subtasks. */
-  async plan(goal: string): Promise<Subtask[]> {
-    // TODO(builder): call the LLM (latest Claude) to decompose `goal` into subtasks whose
-    // capabilities exist in the roster. Keep it deterministic + bounded.
-    throw new Error(`plan() not implemented for goal: ${goal}`);
-  }
-
-  /** Step 3: hire one sub-agent end-to-end (negotiate -> pay -> await delivery). */
+  /** Hire one sub-agent end-to-end: negotiate -> OrderCreated -> pay -> OrderCompleted -> delivery. */
   async hire(subtask: Subtask): Promise<HireResult> {
     const service = pickForCapability(subtask.capability);
     if (!service) throw new Error(`no roster service for capability: ${subtask.capability}`);
 
-    // Verified SDK path (tier [P]): negotiate -> OrderCreated -> pay -> OrderCompleted -> delivery.
-    // TODO(builder): wire via connectWebSocket() events, add escrow scoping + timeout/dispute.
     const neg = await this.client.negotiateOrder({
       serviceId: service.serviceId,
       requirements: subtask.requirements,
     });
-    void neg; // wired in the vertical slice
-    throw new Error('hire() wiring incomplete — implement the pay/await/getDelivery flow');
+    const negotiationId = neg.negotiationId;
+    console.log(`[axion] negotiated ${subtask.capability} -> ${service.label} (neg ${negotiationId})`);
+
+    const created = await this.bus.wait(
+      (e) => e.type === EventType.OrderCreated && e.negotiation_id === negotiationId,
+      CREATE_TIMEOUT_MS,
+      `OrderCreated(${subtask.capability})`,
+    );
+    const orderId = created.order_id;
+    if (!orderId) throw new Error(`OrderCreated had no order_id for ${subtask.capability}`);
+
+    // Escrow LOCK. Throws InsufficientBalanceError if Axion's AA wallet lacks order.price USDC.
+    const pay = await this.client.payOrder(orderId);
+    console.log(`[axion] paid order ${orderId} (tx ${pay.txHash})`);
+
+    await this.bus.wait(
+      (e) => e.type === EventType.OrderCompleted && e.order_id === orderId,
+      COMPLETE_TIMEOUT_MS,
+      `OrderCompleted(${subtask.capability})`,
+    );
+
+    const [delivery, order] = await Promise.all([
+      this.client.getDelivery(orderId),
+      this.client.getOrder(orderId),
+    ]);
+
+    return {
+      subtask,
+      service,
+      orderId,
+      payTxHash: order.payTxHash,
+      clearTxHash: order.clearTxHash,
+      deliverable: delivery.deliverableText,
+    };
   }
 
-  /** Steps 1-4: run a full goal -> composed deliverable. */
-  async run(goal: string): Promise<{ result: string; hires: HireResult[] }> {
-    const subtasks = await this.plan(goal);
-    const hires = await Promise.all(subtasks.map((s) => this.hire(s)));
-    const result = this.compose(goal, hires);
-    return { result, hires };
+  /** Run a full goal -> composed deliverable as a 2-stage DAG. */
+  async run(goal: string): Promise<{ output: string; hires: HireResult[] }> {
+    // Stage 1: parallel data leafs (whatever our roster actually provides).
+    const dataCaps = ['price', 'onchain-context'].filter((c) => pickForCapability(c));
+    if (dataCaps.length === 0) throw new Error('roster has no data leafs to hire');
+    const stage1 = await Promise.all(
+      dataCaps.map((c) => this.hire({ capability: c, requirements: JSON.stringify({ ask: goal }) })),
+    );
+
+    // Stage 2 (depth): a summarizer consumes stage-1 outputs — only if that leaf is registered.
+    const stage2: HireResult[] = [];
+    if (pickForCapability('summarize')) {
+      const inputs = stage1.map((h) => `## ${h.service.label}\n${h.deliverable}`).join('\n\n');
+      stage2.push(
+        await this.hire({ capability: 'summarize', requirements: JSON.stringify({ goal, inputs }) }),
+      );
+    }
+
+    const hires = [...stage1, ...stage2];
+    return { output: this.compose(goal, hires), hires };
   }
 
-  /** Step 4: assemble verified sub-deliverables into one result. */
+  /** Assemble verified sub-deliverables into one markdown result. */
   compose(goal: string, hires: HireResult[]): string {
-    // TODO(builder): real composition. Placeholder keeps the type honest, not a claim of work.
-    void goal;
-    return hires.map((h) => h.deliverable).join('\n');
+    const summary = hires.find((h) => h.subtask.capability === 'summarize');
+    const body = summary
+      ? summary.deliverable
+      : hires.map((h) => `## ${h.service.label}\n${h.deliverable}`).join('\n\n');
+    return `# Brief: ${goal}\n\n${body}`;
   }
 }
-
-export { EventType };

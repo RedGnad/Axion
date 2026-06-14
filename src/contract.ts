@@ -1,19 +1,21 @@
 /**
- * Foreman's public consumable contract — the interface OTHER CAP agents call.
+ * Axion's public consumable contract — the interface OTHER CAP agents call.
  *
- * Foreman registers one CAP service (FOREMAN_SERVICE_ID). A caller hires it with the verified SDK
- * path `negotiateOrder({ serviceId: FOREMAN_SERVICE_ID, requirements })`, where `requirements` is
- * `JSON.stringify(ForemanRequest)`. Foreman returns `JSON.stringify(ForemanResult)` as its
+ * Axion registers one CAP service (AXION_SERVICE_ID). A caller hires it with the verified SDK
+ * path `negotiateOrder({ serviceId: AXION_SERVICE_ID, requirements })`, where `requirements` is
+ * `JSON.stringify(AxionRequest)`. Axion returns `JSON.stringify(AxionResult)` as its
  * deliverable. Keep this stable and tiny — it is the adoption lever (5 lines to integrate).
  */
 
-export interface ForemanRequest {
+export interface AxionRequest {
   /** Natural-language composite task to fan out across sub-agents. */
   goal: string;
-  /** Max USDC (token smallest unit) Foreman may spend across all sub-hires. */
+  /** Max USDC (token smallest unit) Axion may spend across all sub-hires. */
   budgetUSDC: string;
-  /** Shape of the composed deliverable returned to the caller. */
-  deliverable: 'text' | 'file';
+  /** Shape of the composed deliverable returned to the caller.
+   *  Note: the CAP SDK's DeliverableType is `text | schema` (no `file`). `file` delivery is a
+   *  deferred upside via uploadFile/getDownloadURL (object key), not wired in the floor slice. */
+  deliverable: 'text' | 'schema';
   constraints?: {
     /** Upper bound on distinct sub-agents hired (graph breadth). */
     maxSubAgents?: number;
@@ -22,7 +24,7 @@ export interface ForemanRequest {
   };
 }
 
-/** One sub-order Foreman placed — a single on-chain A2A edge, verifiable on Base. */
+/** One sub-order Axion placed — a single on-chain A2A edge, verifiable on Base. */
 export interface SubOrderRef {
   capability: string;
   serviceId: string;
@@ -33,7 +35,7 @@ export interface SubOrderRef {
   ours: boolean;
 }
 
-export interface ForemanResult {
+export interface AxionResult {
   /** The composed output (text, or an object key when deliverable === 'file'). */
   output: string;
   /** Proof manifest: every sub-hire so the caller + judges can verify the graph on-chain. */

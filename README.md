@@ -1,35 +1,50 @@
-# Foreman
+# Axion
 
-**The composition primitive other CROO agents call.** Foreman is picks-and-shovels infra, not an
-end-user app: another agent hires it with one CAP order to subcontract a multi-agent task — Foreman
-discovers (curated roster), hires, escrows and composes multiple CAP sub-agents, settles every hire
-on-chain on Base, and returns the result plus an on-chain **manifest** of the A2A graph it built.
-Calling Foreman lifts the caller's own composability — that mutual benefit is the point.
+**The composition primitive other CROO agents call.** Given a goal + USDC budget, Axion
+subcontracts a multi-agent task: it hires CAP sub-agents, escrows USDC per sub-hire, composes
+their deliverables, and returns the result plus an on-chain **manifest** of every sub-order
+(orderId, pay/clear tx, and an honest `ours` flag). Picks-and-shovels infra — not an end-user app.
 
-> **Status: scaffold.** Nothing here is "live" yet. The first milestone is a vertical slice —
-> one goal → multiple real CAP orders → a composed result, verifiable on-chain. Claims will be
-> added only when the code path is proven end-to-end.
+## Verified on-chain — Base mainnet (2026-06-14)
+`npm run slice` ran a real **2-hire composition**. 0.01 USDC per hire. **Both sub-agents are ours**
+(`ours: true` in the manifest — this is NOT third-party A2A diversity; see Scope below).
+**4 transactions, all status: success on Base mainnet:**
 
-## Why it matters
-A normal API marketplace can chain calls, but it can't give you **per-hop on-chain escrow with
-auto-refund on expiry, a verifiable on-chain settlement record of every hire, and ERC-4337 agent
-wallets with selector-scoped keys** — all native to CAP. Foreman is the demand engine of the CROO
-Agent Store: by construction it forms many real A2A relationships and makes other agents get paid.
+**Hire 1 — price** (Chainlink ETH/USD on Base) · order `74acca1c-0bb4-4543-b027-8dcf6c34986e`
+- pay&nbsp;&nbsp; `0xdc519fc734a3c90bcaf522338b1e0f319a5cb2853e593efadae6b138ce239dd6`
+- clear `0x17fac13ffd3a944c44f206176ac1f5f41faf8946b4692507a9cc8d7faeacebdb`
 
-> Scope note (honesty): payment release is not buyer-gated by default (CAP releases on the
-> provider's delivery unless a CROO-gated evaluator is set); Foreman's deliverable check is
-> off-chain. We claim only what the CAP contracts actually enforce.
+**Hire 2 — summarize** (Claude Haiku, consumes hire 1) · order `c0207887-9373-456c-b3ca-136ce4fefc9f`
+- pay&nbsp;&nbsp; `0x3d0b547a1968ea7166ad1357cdbfed5b7680c1d2a2b43b9450fd204aa3c2181a`
+- clear `0x377c0cca733f12276953bb662a5fbeb76136c12ed91fd8394ae1550a5c94c5ed`
 
-## Build for the CROO Agent Hackathon
-Track: Open A2A. Requirements: callable agent, accepts USDC, settles on-chain, listed on the CROO
-Agent Store, CAP-integrated, open-source (MIT), ≤5-min demo. See `CLAUDE.md` for the verified
-build facts, the rubric mapping, and the integrity rules.
+Verify any: `https://basescan.org/tx/<hash>` (real USDC transfer; pay via ERC-4337, clear via CAPCore).
 
-## Develop
+## What works today (the floor)
+- **Deterministic planner** (no LLM) → 2-stage DAG: stage-1 data leaf(s) → stage-2 summarizer.
+- Each hire is one real CAP order: `negotiate → pay (escrow LOCK) → deliver → CLEAR`.
+- `price` leaf reads the verified Chainlink ETH/USD feed on Base
+  (`0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`, `description() == "ETH / USD"`); `summarize`
+  leaf uses Claude Haiku.
+- Returns the composed brief + a manifest carrying `ours: boolean` per sub-order.
+
+## Honest scope (what is NOT claimed)
+- **Both counterparties are our own seeded leaf-agents** (`ours: true`). There is **no third-party
+  or "organic" A2A diversity yet** — an independent team's agent calling Axion is the next milestone.
+- Payment release is **not buyer-gated** (CAP releases to the provider on delivery); Axion's
+  deliverable check is **off-chain**. The real buyer protection is refund-on-expiry.
+- No on-chain reputation/PTS — the roster routes on availability, not reputation.
+
+## Run
 ```bash
 npm install
-cp .env.example .env   # fill CROO_SDK_KEY (issued in the CROO Dashboard) + ANTHROPIC_API_KEY
-npm run start          # scaffold entrypoint
+cp .env.example .env    # fill the CROO + Anthropic values listed below
+npm run slice           # starts the leaf providers + the Axion buyer, runs one composition
 ```
-SDK: [`@croo-network/sdk`](https://github.com/CROO-Network/node-sdk). Agent + service creation and
-SDK-Key issuance happen in the CROO Dashboard, not the SDK.
+`.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `CROO_SDK_KEY` (Axion), `LEAF_PRICE_SDK_KEY`,
+`LEAF_PRICE_SERVICE_ID`, `LEAF_SUMMARIZE_SDK_KEY`, `LEAF_SUMMARIZE_SERVICE_ID`, `ANTHROPIC_API_KEY`.
+
+## Build for the CROO Agent Hackathon
+Track: Open A2A. CAP SDK: [`@croo-network/sdk`](https://github.com/CROO-Network/node-sdk). MIT.
+See `CLAUDE.md` for the verified build facts, the rubric mapping, and the integrity rules.
+Agent + service creation and SDK-Key issuance happen in the CROO Dashboard, not the SDK.

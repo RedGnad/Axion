@@ -1,34 +1,42 @@
 /**
  * Curated roster of hireable CAP services (the SDK has no discovery method — see CLAUDE.md).
  *
- * Each entry is a serviceId registered in the CROO Agent Store that Foreman can hire via
- * `negotiateOrder({ serviceId, requirements })`. Seed this with:
- *   - our own leaf-agents (registered in the Dashboard), and
- *   - real third-party agents from the store we genuinely use.
- *
- * INTEGRITY: only list services Foreman actually calls when it needs that output. Do not pad
- * the roster to inflate the A2A graph — orders must be organic (CROO scores "organic" + feeds
- * aggregated order data to judges).
+ * Built lazily from env so .env is loaded first. A leaf appears ONLY if its serviceId env var
+ * is set — never hardcode a fake serviceId, and `ours: true` only for agents we registered.
+ * As we register more leafs in the Dashboard, add their env var below.
  */
 
 export interface RosterEntry {
-  /** Capability tag the planner routes subtasks to (e.g. "summarize", "price", "format"). */
+  /** Capability tag the planner routes subtasks to (e.g. "price", "summarize"). */
   capability: string;
   /** CAP serviceId to negotiate against. */
   serviceId: string;
   /** Human label for logs / demo. */
   label: string;
-  /** Whether this is one of our own seeded leaf-agents (for transparency in the demo). */
+  /** Whether this is one of our own seeded leaf-agents (honesty flag for the manifest). */
   ours: boolean;
 }
 
-// TODO(builder): fill from real registered services. Empty until the first service is registered
-// in the Dashboard — do NOT hardcode fake serviceIds.
-export const ROSTER: RosterEntry[] = [];
+/** Map of capability -> the env var holding its serviceId. Extend as leafs get registered. */
+const LEAF_ENV: { capability: string; label: string; env: string }[] = [
+  { capability: 'price', label: 'ETH price (Chainlink, Base)', env: 'LEAF_PRICE_SERVICE_ID' },
+  { capability: 'onchain-context', label: 'Base on-chain context', env: 'LEAF_CONTEXT_SERVICE_ID' },
+  { capability: 'summarize', label: 'Plain-English summarizer', env: 'LEAF_SUMMARIZE_SERVICE_ID' },
+];
+
+let cached: RosterEntry[] | undefined;
+
+export function getRoster(): RosterEntry[] {
+  if (cached) return cached;
+  cached = LEAF_ENV.flatMap(({ capability, label, env }) => {
+    const serviceId = process.env[env];
+    return serviceId ? [{ capability, serviceId, label, ours: true }] : [];
+  });
+  return cached;
+}
 
 export function pickForCapability(capability: string): RosterEntry | undefined {
-  // TODO(builder): price/availability-aware selection. NOTE: PTS reputation is NOT on-chain in
-  // cap-contracts (red-team 13 Jun) — do not route on reputation until a queryable PTS source is
-  // verified at source. For now, first match.
-  return ROSTER.find((e) => e.capability === capability);
+  // Price/availability-aware selection would go here. NOTE: no on-chain PTS reputation exists
+  // in cap-contracts (red-team) — do not route on reputation. First match for now.
+  return getRoster().find((e) => e.capability === capability);
 }
