@@ -37,6 +37,13 @@ const THIRD_PARTY: RosterEntry[] = [
     label: 'VERIS Trust Compare (3rd-party)',
     ours: false,
   },
+  {
+    // Genuine GC use: Axion checks an agent's trust-score history before relying on it.
+    capability: 'trust-history',
+    serviceId: 'b9ee9739-23d8-490d-a4ff-d6ce172bb40e', // agent fa09bc1f — VERIS Trust Receipt History (verified ONLINE)
+    label: 'VERIS Trust Receipt History (3rd-party)',
+    ours: false,
+  },
 ];
 
 let cached: RosterEntry[] | undefined;

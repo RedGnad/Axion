@@ -25,16 +25,19 @@ async function main(): Promise<void> {
   const bus = new EventBus(ws);
   const orchestrator = new Orchestrator(axion, bus);
 
-  const entry = getRoster().find((r) => !r.ours);
-  if (!entry) throw new Error('no third-party service in roster');
+  const targetCap = process.argv[2];
+  const entry = targetCap
+    ? getRoster().find((r) => r.capability === targetCap && !r.ours)
+    : getRoster().find((r) => !r.ours);
+  if (!entry) throw new Error(`no third-party service in roster${targetCap ? ` for capability ${targetCap}` : ''}`);
   console.log(`[axion] hiring THIRD-PARTY: ${entry.label}\n  serviceId=${entry.serviceId} ours=${entry.ours}\n`);
 
   const hire = await orchestrator.hire({
     capability: entry.capability,
     requirements: JSON.stringify({
-      goal: 'Compare the trust of these CROO agents and identify the strongest, with reasons.',
-      agents: ['axion-price', 'axion-summarize'],
-      agentIds: ['0364ae3b-edd3-440d-9ecd-2f89c491cf41', '7177fd53-9515-42d6-9586-b9da42d1a63e'],
+      goal: 'Audit the trust of the CROO agent axion-price and return your standard report.',
+      agents: ['axion-price'],
+      agentIds: ['0364ae3b-edd3-440d-9ecd-2f89c491cf41'],
     }),
   });
 

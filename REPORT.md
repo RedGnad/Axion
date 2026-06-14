@@ -30,14 +30,19 @@ Every order below is `status=completed` (NEGOTIATION→LOCK→DELIVER→CLEAR). 
 | 2 | price | ✅ ours | `74acca1c-0bb4-4543-b027-8dcf6c34986e` | 0.01 | `0xdc519fc734a3c90bcaf522338b1e0f319a5cb2853e593efadae6b138ce239dd6` | `0x17fac13ffd3a944c44f206176ac1f5f41faf8946b4692507a9cc8d7faeacebdb` |
 | 3 | summarize | ✅ ours | `c0207887-9373-456c-b3ca-136ce4fefc9f` | 0.01 | `0x3d0b547a1968ea7166ad1357cdbfed5b7680c1d2a2b43b9450fd204aa3c2181a` | `0x377c0cca733f12276953bb662a5fbeb76136c12ed91fd8394ae1550a5c94c5ed` |
 | 4 | trust-vet | ❌ **THIRD-PARTY** | `56ee53e1-485f-4ea9-bf8d-e79eb661ca86` | 0.10 | `0x51627c054b3e0a3d1c4a92ebda03c6ecdad96112d3a9a3227706243040436cf1` | `0xd947754603d7b77c7cf7090b7ce6d2bdc1405d50245f0dccd0fd4e08a2b096e8` |
+| 5 | trust-history | ❌ **THIRD-PARTY** | `090d0f39-18d2-4e6b-acf3-aaae4f29b1d5` | 0.20 | `0x9bbcd15b80031d69bc72ecbe6fe0aa12532b216435911ef09272444c31e22be7` | `0x90fd76be56e58e5b509e7cd5231c74f56b992f6730094020fea1be77cd747912` |
 
-**4 completed orders → 8 on-chain txs** (4 pay + 4 clear).
+**5 completed orders → 10 on-chain txs** (5 pay + 5 clear). **Of these, 2 are non-self-trade**
+(orders #4 and #5 — both paid to the third-party VERIS agent).
 
-### The non-self-trade settlement (order #4)
-Order `56ee53e1…` is the load-bearing proof: Axion (requester `0x064c…B5Cb`) paid the **VERIS**
-agent (provider `0x25E6…C70C`) — a **different developer's wallet**. Verified:
-`order.providerWalletAddress` is NOT any of our wallets. This is a genuine A2A edge, recorded
-`ours:false` in the manifest. (VERIS returned a real but null-result trust report — see §6.)
+### The non-self-trade settlements (orders #4 and #5)
+The load-bearing proof: Axion (requester `0x064c…B5Cb`) paid the **VERIS** agent twice — provider
+`0x25E6933538cbf1AED53BDccC5Ab06b70EcECC70C`, a **different developer's wallet** (verified
+`order.providerWalletAddress` is NOT any of our wallets, on both orders). Two genuine A2A edges,
+recorded `ours:false`. Order #5 (Trust Receipt History) returned substantive content (a trust audit
+of axion-price: legitimacy 1/100, maturity 13/100, confidence 63%); order #4 (Trust Compare)
+returned a null-result. Orders #1–3 are our own composition (self-trade, `ours:true`) and are not
+counted toward the non-self-trade requirement.
 
 ## 4. How to verify independently
 ```bash
@@ -63,16 +68,19 @@ console.log(o.status,o.requesterWalletAddress,o.providerWalletAddress);})()'
 |---|---|
 | Listed & discoverable on the Agent Store | Axion serviceId `28263c7f…` active; appears in `/backend/v1/services`; self-negotiate returns "cannot negotiate own service". |
 | CAP-integrated + real USDC settlement | All 4 orders settled USDC on Base via CAP (escrow → clear). |
-| ≥ 2 completed on-chain transactions | 4 completed orders / 8 txs. |
-| No obvious self-trade loops | Order #4 is a genuine third-party settlement (provider wallet ≠ ours). |
+| ≥ 2 completed on-chain transactions | 5 completed orders / 10 txs — **2 of them non-self-trade** (orders #4, #5 to third-party VERIS). |
+| No obvious self-trade loops | Orders #4 and #5 are genuine third-party settlements (provider wallet ≠ ours). Orders #1–3 are a real composition product, disclosed as `ours:true`. |
 | One agent / one dev | Submitting **Axion** (`28263c7f…`), wallet `0x064c…B5Cb`. |
 
 ## 6. Honest scope & caveats (what we do NOT claim)
 - **Orders #1–3 are between our own agents** (`ours:true`). We do not present them as third-party
   diversity. Only order #4 (VERIS) is third-party.
-- **VERIS returned a null-result** ("insufficient evidence" on our agents). The *settlement* is
-  real and verifiable; the *content* is thin because VERIS had no data on our agents. For a polished
-  demo, a third-party with substantive output would be preferable.
+- **Third-party content varied.** Order #4 (VERIS Trust Compare) returned a null-result
+  ("insufficient evidence"); order #5 (VERIS Trust Receipt History) returned a substantive audit.
+  Both *settlements* are real and verifiable on-chain regardless of content.
+- **Only one third-party provider was reachable.** Both non-self-trade orders went to the same
+  VERIS agent — the only live third-party found in the liveness sweep. Counterparty diversity is
+  therefore 1 external agent, not many.
 - **Most third-party providers are offline.** A liveness sweep (2026-06-14) of listed third-party
   services found only VERIS online — services are listed but their providers aren't running.
 - **Demand side not yet proven.** "An external team's agent calls Axion" has not happened. Axion is
