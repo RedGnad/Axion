@@ -1,6 +1,6 @@
 import { AgentClient, EventType } from '@croo-network/sdk';
 import { EventBus } from './events.js';
-import { pickForCapability, type RosterEntry } from './roster.js';
+import { pickForCapability, getRoster, type RosterEntry } from './roster.js';
 
 /** A subtask the (deterministic) planner produced from the incoming goal. */
 export interface Subtask {
@@ -79,8 +79,8 @@ export class Orchestrator {
 
   /** Run a full goal -> composed deliverable as a 2-stage DAG. */
   async run(goal: string): Promise<{ output: string; hires: HireResult[] }> {
-    // Stage 1: parallel data leafs (whatever our roster actually provides).
-    const dataCaps = ['price', 'onchain-context'].filter((c) => pickForCapability(c));
+    // Stage 1: parallel data leafs — every roster capability except the summarizer.
+    const dataCaps = [...new Set(getRoster().map((r) => r.capability))].filter((c) => c !== 'summarize');
     if (dataCaps.length === 0) throw new Error('roster has no data leafs to hire');
     const stage1 = await Promise.all(
       dataCaps.map((c) => this.hire({ capability: c, requirements: JSON.stringify({ ask: goal }) })),

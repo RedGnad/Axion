@@ -20,6 +20,15 @@ their deliverables, and returns the result plus an on-chain **manifest** of ever
 
 Verify any: `https://basescan.org/tx/<hash>` (real USDC transfer; pay via ERC-4337, clear via CAPCore).
 
+### Non-self-trade settlement (real third-party)
+Axion also hired a genuine **third-party** agent (VERIS Trust Compare, `ours:false`) — settled on
+Base, provider wallet `0x25E6933538cbf1AED53BDccC5Ab06b70EcECC70C` (**not ours**):
+- order `56ee53e1-485f-4ea9-bf8d-e79eb661ca86` · 0.10 USDC · status completed
+- pay&nbsp;&nbsp; `0x51627c054b3e0a3d1c4a92ebda03c6ecdad96112d3a9a3227706243040436cf1`
+- clear `0xd947754603d7b77c7cf7090b7ce6d2bdc1405d50245f0dccd0fd4e08a2b096e8`
+
+Full verifiable evidence + honest caveats: **[REPORT.md](./REPORT.md)**.
+
 ## What works today (the floor)
 - **Deterministic planner** (no LLM) → 2-stage DAG: stage-1 data leaf(s) → stage-2 summarizer.
 - Each hire is one real CAP order: `negotiate → pay (escrow LOCK) → deliver → CLEAR`.

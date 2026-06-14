@@ -24,14 +24,30 @@ const LEAF_ENV: { capability: string; label: string; env: string }[] = [
   { capability: 'summarize', label: 'Plain-English summarizer', env: 'LEAF_SUMMARIZE_SERVICE_ID' },
 ];
 
+/**
+ * Real THIRD-PARTY services on the CROO store (ours:false) that Axion genuinely hires.
+ * These are public serviceIds verified live via the marketplace listing — never invented.
+ * Hiring them produces non-self-trade A2A edges (real diversity).
+ */
+const THIRD_PARTY: RosterEntry[] = [
+  {
+    // Genuine GC use: Axion vets/compares the trust of candidate agents before hiring.
+    capability: 'trust-vet',
+    serviceId: '01261c7d-0b7f-4145-9fc8-d46d051ff228', // agent fa09bc1f — VERIS Trust Compare (verified ONLINE)
+    label: 'VERIS Trust Compare (3rd-party)',
+    ours: false,
+  },
+];
+
 let cached: RosterEntry[] | undefined;
 
 export function getRoster(): RosterEntry[] {
   if (cached) return cached;
-  cached = LEAF_ENV.flatMap(({ capability, label, env }) => {
+  const ours = LEAF_ENV.flatMap(({ capability, label, env }) => {
     const serviceId = process.env[env];
     return serviceId ? [{ capability, serviceId, label, ours: true }] : [];
   });
+  cached = [...ours, ...THIRD_PARTY];
   return cached;
 }
 
