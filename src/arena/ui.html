@@ -70,6 +70,10 @@
   .kart.win .car{animation:bob .6s infinite alternate}
   .kart.win .est{color:var(--gold)}
   @keyframes bob{to{transform:translateY(-3px)}}
+  .kart.idle .car{animation:rev .28s infinite alternate}
+  .kart.idle .est{color:var(--dim); animation:blink 1s infinite}
+  @keyframes rev{from{transform:translateX(-1px) rotate(1deg)}to{transform:translateX(2px) rotate(-3deg)}}
+  @keyframes blink{50%{opacity:.35}}
   .marker{position:absolute; top:0; bottom:0; width:2px; transition:left 1.1s ease}
   .marker.line{background:repeating-linear-gradient(var(--gold) 0 6px, transparent 6px 12px)}
   .marker.finish{background:linear-gradient(var(--over),var(--under)); box-shadow:0 0 14px rgba(255,59,107,.6)}
@@ -167,7 +171,7 @@ function render(s){
   $('closeP').textContent = r && r.closePrice ? usd(r.closePrice) : '—';
   $('lineV').textContent = r && r.line!=null ? usd(r.line) : '—';
   $('ampV').textContent = r && r.amplitude!=null ? usd(r.amplitude) : '—';
-  $('phaseV').textContent = r ? r.phase : '—';
+  $('phaseV').textContent = r ? ({open:'agents estimating',betting:'betting open',settled:'settled'}[r.phase]||r.phase) : '—';
 
   // countdown
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer=null; }
@@ -195,11 +199,12 @@ function renderTrack(r){
 
   let html = '';
   for (const c of r.competitors){
-    const x = c.estimate!=null ? pos(c.estimate) : 2;
+    const idle = c.estimate==null;
+    const x = idle ? 3 : pos(c.estimate);
     html += `<div class="lane"><span class="name">${c.label}</span>`+
-      `<div class="kart ${c.isWinner?'win':''}" style="left:${x}%" title="${(c.rationale||'').replace(/"/g,'&quot;')}">`+
+      `<div class="kart ${idle?'idle':''} ${c.isWinner?'win':''}" style="left:${x}%" title="${(c.rationale||'').replace(/"/g,'&quot;')}">`+
       `<span class="car">${c.isWinner?'🏆':'🏎️'}</span>`+
-      `<span class="est">${c.estimate!=null?usd(c.estimate):'…'}</span></div></div>`;
+      `<span class="est">${idle?'estimating…':usd(c.estimate)}</span></div></div>`;
   }
   // markers
   if (r.line!=null) html += `<div class="marker line" style="left:${pos(r.line)}%"><span class="lbl">line ${usd(r.line)}</span></div>`;
