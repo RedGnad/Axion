@@ -5,7 +5,7 @@ import { getDataAgent } from '../roster.js';
 import { fetchPythPrice } from './oracle.js';
 import { PERSONALITIES, type Personality } from './personalities.js';
 import { forecast, type DataInput } from './forecast.js';
-import { reasonHash, settle } from './settle.js';
+import { consensusLine, reasonHash, settle } from './settle.js';
 import type { Forecast, Round } from './types.js';
 import type { CompetitorRequest, CompetitorResponse } from './competitor-contract.js';
 
@@ -49,6 +49,15 @@ export interface ArenaEdge {
 export interface RoundResult {
   round: Round;
   edges: ArenaEdge[];
+  /** The betting line = consensus (median) amplitude estimate. */
+  line: number;
+}
+
+/** Live phase hooks so a UI/server can stream a round as it happens. */
+export interface RoundHooks {
+  onOpen?: (info: { id: string; openPrice: number; settleAtMs: number }) => void;
+  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[] }) => void;
+  onSettled?: (result: RoundResult) => void;
 }
 
 interface ClientCfg {
@@ -212,11 +221,13 @@ export async function runRound(
   competitors: Competitor[],
   cfg: ClientCfg,
   windowSeconds = 60,
+  hooks: RoundHooks = {},
 ): Promise<RoundResult> {
   const id = `round-${Date.now()}`;
   const open = await fetchPythPrice();
   const settleAtMs = Date.now() + windowSeconds * 1000;
   console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); settles in ${windowSeconds}s`);
+  hooks.onOpen?.({ id, openPrice: open.price, settleAtMs });
 
   // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
@@ -224,9 +235,11 @@ export async function runRound(
   const played = await Promise.all(competitors.map((c) => play(c, ctx)));
   const forecasts = played.map((p) => p.forecast);
   const edges = played.flatMap((p) => p.edges);
+  const line = consensusLine(forecasts);
   for (const f of forecasts) {
     console.log(`[arena] ${f.competitor} estimates amplitude $${f.prediction.toFixed(2)} — "${f.rationale}"`);
   }
+  hooks.onEstimates?.({ forecasts, line, edges });
 
   // Betting window: bets are placed against the bookmaker during this wait (separate process).
   const waitMs = settleAtMs - Date.now();
@@ -241,5 +254,7 @@ export async function runRound(
   );
 
   const round: Round = { id, phase: 'settled', openPrice: open.price, closePrice: close.price, settleAtMs, forecasts, outcome };
-  return { round, edges };
+  const result: RoundResult = { round, edges, line };
+  hooks.onSettled?.(result);
+  return result;
 }

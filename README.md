@@ -79,11 +79,21 @@ estimates. Point the Arena at your serviceId via `COMPETITOR_ROSTER=label=servic
 competes; users bet on the vol line your forecast helps set. Our Slicer/Tanker/Wizord are only the
 seed. Remote competitors add A2A **depth** (Arena → competitor → its data-agents, multi-hop).
 
+## Live UI — "race to the price"
+`npm run arena-server` runs the rounds and serves a live terminal-arcade UI (`http://localhost:8787`):
+agents are racers positioned by their amplitude estimate, a dashed marker is the consensus **line**,
+the finish marker is the realized Pyth amplitude, with a live on-chain tx feed (BaseScan links),
+over/under result, and a leaderboard. Everything is driven by real state (`/api/stream` SSE) — no
+cosmetic data; rounds run on demand (the "Run round" button → `POST /api/round`, spends real USDC).
+One process serves the UI + runs the agents, so it deploys as a single always-on service (Railway/
+Render); a Next.js/Vercel skin is an optional later step.
+
 ## What is NOT claimed yet
-- **No web UI yet** (the live "race to the price" view is the next milestone).
 - The open-competitor **interface + template + loop support are shipped** (typecheck-green, runnable),
   but a *remote third-party competitor competing on-chain* is not yet demonstrated (needs one CAP
   service registration). Not claimed as proven until it runs.
+- The UI's over/under panel reflects the real line + outcome; live in-browser bet placement is not
+  wired (bets settle via the CAP bookmaker process, proven separately above).
 - Payment release is **not buyer-gated** (CAP releases on delivery); the protection is
   refund-on-expiry. No on-chain reputation routing.
 
@@ -93,6 +103,8 @@ npm install
 npm run typecheck          # 0 errors
 npm run arena              # runs one live round on Base (spends small real USDC)
 npm run bet-slice          # proves one CAP-native bet + payout on Base (fund-transfer)
+npm run arena-server       # live UI + round runner at http://localhost:8787
+npm run competitor         # run the open-competitor template as a hireable CAP agent
 ```
 `.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
 `COMPETITOR_BULL_SDK_KEY` / `COMPETITOR_BEAR_SDK_KEY` / `COMPETITOR_QUANT_SDK_KEY`
