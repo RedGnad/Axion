@@ -55,6 +55,11 @@ interface ArenaState {
   feed: FeedItem[];
 }
 
+// Long-running server: a stray WebSocket/async error must never take down the HTTP server.
+// Log and keep serving (availability over strictness for a live demo endpoint).
+process.on('uncaughtException', (e) => console.error('[arena-server] uncaughtException:', (e as Error)?.message ?? e));
+process.on('unhandledRejection', (e) => console.error('[arena-server] unhandledRejection:', (e as Error)?.message ?? e));
+
 const PORT = Number(process.env.PORT ?? '8787');
 const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
