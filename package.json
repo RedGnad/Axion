@@ -13,6 +13,7 @@
     "serve": "node --env-file=.env --import tsx src/serve.ts",
     "arena": "node --env-file=.env --import tsx src/arena/run.ts",
     "bet-slice": "node --env-file=.env --import tsx src/arena/bet-slice.ts",
+    "competitor": "node --env-file=.env --import tsx src/arena/competitor.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

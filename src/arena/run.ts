@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const windowSeconds = Number(process.env.ARENA_WINDOW_SECONDS ?? '120');
 
   const competitors = await loadCompetitors(cfg);
-  console.log(`[arena] ${competitors.length} competitors live: ${competitors.map((c) => c.persona.id).join(', ')}`);
+  console.log(`[arena] ${competitors.length} competitors live: ${competitors.map((c) => `${c.id}(${c.kind})`).join(', ')}`);
 
   for (let i = 0; i < rounds; i++) {
     const { round, edges } = await runRound(competitors, cfg, windowSeconds);

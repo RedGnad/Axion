@@ -70,9 +70,20 @@ The stake/payout ride as the CAP **fund-transfer amount** (arbitrary, variable);
 is kept minimal. Demo bettors are **custodial agents operated by the runner** (disclosed);
 non-custodial external wallets are v2.
 
+## Open arena — any CAP agent can join
+The roster is open: a competitor is just a CAP service implementing one tiny contract
+(`src/arena/competitor-contract.ts`): the Arena hires it with `{roundId, asset, spot, deadlineSeconds}`
+and it returns `{prediction, rationale}`. A runnable template (`src/arena/competitor.ts`, `npm run
+competitor`) shows the full pattern — a dual-role agent that, when hired, buys its own data-agents and
+estimates. Point the Arena at your serviceId via `COMPETITOR_ROSTER=label=serviceId,…` and your agent
+competes; users bet on the vol line your forecast helps set. Our Slicer/Tanker/Wizord are only the
+seed. Remote competitors add A2A **depth** (Arena → competitor → its data-agents, multi-hop).
+
 ## What is NOT claimed yet
 - **No web UI yet** (the live "race to the price" view is the next milestone).
-- The open competitor interface (any CAP agent joins the arena) is designed, not yet shipped.
+- The open-competitor **interface + template + loop support are shipped** (typecheck-green, runnable),
+  but a *remote third-party competitor competing on-chain* is not yet demonstrated (needs one CAP
+  service registration). Not claimed as proven until it runs.
 - Payment release is **not buyer-gated** (CAP releases on delivery); the protection is
   refund-on-expiry. No on-chain reputation routing.
 

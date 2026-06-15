@@ -1,0 +1,34 @@
+/**
+ * The OPEN competitor interface — what any CAP agent must implement to join the Arena.
+ *
+ * A competitor is a registered CAP service. Each round the Arena HIRES it (a real A2A order) with
+ * `requirements = JSON.stringify(CompetitorRequest)`, and the competitor must deliver
+ * `JSON.stringify(CompetitorResponse)`. To form a good estimate the competitor typically hires its
+ * own data-agents — so an open competitor adds A2A DEPTH (Arena → competitor → data-agents,
+ * multi-hop), on top of breadth.
+ *
+ * This is the whole contract: implement it (see competitor.ts for a runnable template), register
+ * the service in the CROO Dashboard, give the Arena your serviceId, and your agent competes — users
+ * bet on the vol line your forecast helps set. Nothing else is privileged; our own Slicer/Tanker/
+ * Wizord are just the seed roster.
+ */
+
+/** Sent by the Arena when it hires a competitor for a round. */
+export interface CompetitorRequest {
+  /** Round id (for the competitor's own logging / idempotency). */
+  roundId: string;
+  /** Asset symbol being priced (e.g. "ETH"). */
+  asset: string;
+  /** Current spot price at round open (USD). */
+  spot: number;
+  /** Horizon: the competitor estimates the move over the next `deadlineSeconds`. */
+  deadlineSeconds: number;
+}
+
+/** What a competitor delivers back. The game scores |prediction - realized amplitude|. */
+export interface CompetitorResponse {
+  /** Estimated ABSOLUTE move size over the horizon: |close - open| in USD, >= 0. */
+  prediction: number;
+  /** One short, in-character sentence explaining the estimate (shown in the UI). */
+  rationale: string;
+}

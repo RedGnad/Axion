@@ -7,23 +7,31 @@ import { PERSONALITIES, type Personality } from './personalities.js';
 import { forecast, type DataInput } from './forecast.js';
 import { reasonHash, settle } from './settle.js';
 import type { Forecast, Round } from './types.js';
+import type { CompetitorRequest, CompetitorResponse } from './competitor-contract.js';
 
 /**
  * One Arena round, end-to-end and verifiable on-chain:
- *   1. open  — read ETH/USD spot from Chainlink (context).
- *   2. hire  — each competitor buys its capabilities from real data-agents = real CAP orders (A2A).
- *   3. forecast — each persona turns the data it PAID for into a committed prediction + reasonHash.
- *   4. settle — after the window, re-read Chainlink; closest forecast wins (objective, riggable by none).
+ *   1. open  — read ETH/USD spot from Pyth.
+ *   2. play  — each competitor estimates the amplitude. LOCAL competitors (our seeded personas) buy
+ *      data-agents directly; REMOTE competitors are open CAP agents the Arena HIRES (Arena → agent →
+ *      its data-agents = multi-hop A2A). Both produce a committed estimate + reasonHash.
+ *   3. settle — after the window, re-read Pyth; closest amplitude estimate wins (ties = co-winners).
  *
- * Every hire is a real on-chain order; running this spends USDC, so competitors are loaded from
- * env (one SDK-Key per personality) and the function fail-fasts if none are configured. Betting is
- * layered on top by the bookmaker (separate process) during the window between step 3 and 4.
+ * Every hire is a real on-chain order; running this spends USDC. Local competitors load from env
+ * (one SDK-Key per archetype); remote competitors from COMPETITOR_ROSTER. Betting is layered on top
+ * by the bookmaker during the window (bets on the vol line, not the agent).
  */
 
-export interface Competitor {
-  persona: Personality;
-  client: AgentClient;
-  orchestrator: Orchestrator;
+export type Competitor =
+  | { kind: 'local'; id: string; label: string; persona: Personality; orchestrator: Orchestrator }
+  | { kind: 'remote'; id: string; label: string; serviceId: string; ours: boolean; orchestrator: Orchestrator };
+
+/** Context passed to each competitor for a round. */
+interface PlayCtx {
+  roundId: string;
+  asset: string;
+  spot: number;
+  horizonSeconds: number;
 }
 
 /** One on-chain A2A edge produced this round (for the manifest / live feed). */
@@ -54,21 +62,39 @@ function competitorKeyEnv(p: Personality): string {
   return `COMPETITOR_${p.archetype.toUpperCase()}_SDK_KEY`;
 }
 
-/** Build a live competitor (own client + WS + event bus + orchestrator) per configured personality. */
+/**
+ * Build the round's competitors: LOCAL personas (one SDK-Key per archetype) plus optional REMOTE
+ * open competitors from `COMPETITOR_ROSTER` (comma-separated `label=serviceId`). Remotes are hired
+ * by an Arena buyer client (ARENA_SDK_KEY, else CROO_SDK_KEY) and count as third-party (ours:false).
+ */
 export async function loadCompetitors(cfg: ClientCfg): Promise<Competitor[]> {
   const clientCfg = { baseURL: cfg.baseURL, wsURL: cfg.wsURL, ...(cfg.rpcURL ? { rpcURL: cfg.rpcURL } : {}) };
   const competitors: Competitor[] = [];
+
   for (const persona of PERSONALITIES) {
     const key = process.env[competitorKeyEnv(persona)];
     if (!key) continue;
     const client = new AgentClient(clientCfg, key);
     const ws = await client.connectWebSocket();
     const bus = new EventBus(ws);
-    competitors.push({ persona, client, orchestrator: new Orchestrator(client, bus) });
+    competitors.push({ kind: 'local', id: persona.id, label: persona.label, persona, orchestrator: new Orchestrator(client, bus) });
   }
+
+  const roster = (process.env.COMPETITOR_ROSTER ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const arenaKey = process.env.ARENA_SDK_KEY ?? process.env.CROO_SDK_KEY;
+  if (roster.length && arenaKey) {
+    const arenaClient = new AgentClient(clientCfg, arenaKey);
+    const arenaWs = await arenaClient.connectWebSocket();
+    const arenaOrch = new Orchestrator(arenaClient, new EventBus(arenaWs));
+    for (const entry of roster) {
+      const [label, serviceId] = entry.includes('=') ? entry.split('=') : [entry, entry];
+      competitors.push({ kind: 'remote', id: label, label, serviceId, ours: false, orchestrator: arenaOrch });
+    }
+  }
+
   if (competitors.length === 0) {
     throw new Error(
-      `no competitors configured — set at least one of: ${PERSONALITIES.map(competitorKeyEnv).join(', ')}`,
+      `no competitors configured — set at least one of: ${PERSONALITIES.map(competitorKeyEnv).join(', ')} (or COMPETITOR_ROSTER + ARENA_SDK_KEY)`,
     );
   }
   return competitors;
@@ -90,42 +116,43 @@ function buildRequirements(capability: string): string {
   }
 }
 
-/** Have one competitor hire all its capabilities and commit an amplitude estimate. */
-async function playCompetitor(c: Competitor, spot: number, horizonSeconds: number): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
+/** Estimate for one competitor (local persona or remote open agent). */
+async function play(c: Competitor, ctx: PlayCtx): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
+  return c.kind === 'local' ? playLocal(c, ctx) : playRemote(c, ctx);
+}
+
+/** Local persona: buy its data-agents directly, then estimate the amplitude. */
+async function playLocal(
+  c: Extract<Competitor, { kind: 'local' }>,
+  ctx: PlayCtx,
+): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
   const hires: HireResult[] = [];
   for (const capability of c.persona.capabilities) {
     const service = getDataAgent(capability);
     if (!service) {
-      console.warn(`[arena] ${c.persona.id}: no data-agent for capability '${capability}' — skipping`);
+      console.warn(`[arena] ${c.id}: no data-agent for capability '${capability}' — skipping`);
       continue;
     }
     try {
       hires.push(await c.orchestrator.hireService(service, buildRequirements(capability)));
     } catch (err) {
       // A third-party provider may be offline despite "online" in the catalog — degrade, don't crash.
-      console.warn(`[arena] ${c.persona.id}: hire '${capability}' (${service.label}) failed: ${(err as Error).message}`);
+      console.warn(`[arena] ${c.id}: hire '${capability}' (${service.label}) failed: ${(err as Error).message}`);
     }
   }
 
   const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
-  const draft = await forecast(c.persona, spot, inputs, horizonSeconds);
-  const hiredServiceIds = hires.map((h) => h.service.serviceId);
+  const draft = await forecast(c.persona, ctx.spot, inputs, ctx.horizonSeconds);
 
   const f: Forecast = {
-    competitor: c.persona.id,
+    competitor: c.id,
     prediction: draft.prediction,
     rationale: draft.rationale,
-    hiredServiceIds,
-    reasonHash: reasonHash({
-      competitor: c.persona.id,
-      prediction: draft.prediction,
-      rationale: draft.rationale,
-      inputs: JSON.stringify(inputs),
-    }),
+    hiredServiceIds: hires.map((h) => h.service.serviceId),
+    reasonHash: reasonHash({ competitor: c.id, prediction: draft.prediction, rationale: draft.rationale, inputs: JSON.stringify(inputs) }),
   };
-
   const edges: ArenaEdge[] = hires.map((h) => ({
-    competitor: c.persona.id,
+    competitor: c.id,
     capability: h.service.capability,
     serviceId: h.service.serviceId,
     label: h.service.label,
@@ -134,7 +161,46 @@ async function playCompetitor(c: Competitor, spot: number, horizonSeconds: numbe
     clearTxHash: h.clearTxHash,
     ours: h.service.ours,
   }));
+  return { forecast: f, edges };
+}
 
+/** Remote open competitor: the Arena HIRES its CAP service (one A2A edge); the agent's own data
+ *  sub-hires happen inside it (multi-hop, on-chain, not in our manifest). */
+async function playRemote(
+  c: Extract<Competitor, { kind: 'remote' }>,
+  ctx: PlayCtx,
+): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
+  const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds };
+  const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
+  const hire = await c.orchestrator.hireService(service, JSON.stringify(request));
+
+  let prediction = 0;
+  let rationale = '(no response)';
+  try {
+    const resp = JSON.parse(hire.deliverable) as Partial<CompetitorResponse>;
+    prediction = Math.abs(Number(resp.prediction)) || 0;
+    if (typeof resp.rationale === 'string' && resp.rationale.trim()) rationale = resp.rationale.trim();
+  } catch {
+    /* malformed competitor response → counts as a 0 estimate */
+  }
+
+  const f: Forecast = {
+    competitor: c.id,
+    prediction,
+    rationale,
+    hiredServiceIds: [c.serviceId],
+    reasonHash: reasonHash({ competitor: c.id, prediction, rationale, inputs: `remote:${c.serviceId}` }),
+  };
+  const edges: ArenaEdge[] = [{
+    competitor: c.id,
+    capability: 'competitor',
+    serviceId: c.serviceId,
+    label: c.label,
+    orderId: hire.orderId,
+    payTxHash: hire.payTxHash,
+    clearTxHash: hire.clearTxHash,
+    ours: c.ours,
+  }];
   return { forecast: f, edges };
 }
 
@@ -152,13 +218,14 @@ export async function runRound(
   const settleAtMs = Date.now() + windowSeconds * 1000;
   console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); settles in ${windowSeconds}s`);
 
-  // Each competitor hires + forecasts in parallel (their hires interleave as real CAP orders).
+  // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
-  const played = await Promise.all(competitors.map((c) => playCompetitor(c, open.price, windowSeconds)));
+  const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds };
+  const played = await Promise.all(competitors.map((c) => play(c, ctx)));
   const forecasts = played.map((p) => p.forecast);
   const edges = played.flatMap((p) => p.edges);
   for (const f of forecasts) {
-    console.log(`[arena] ${f.competitor} estimates amplitude $${f.prediction.toFixed(2)} — "${f.rationale}" (${f.hiredServiceIds.length} hires)`);
+    console.log(`[arena] ${f.competitor} estimates amplitude $${f.prediction.toFixed(2)} — "${f.rationale}"`);
   }
 
   // Betting window: bets are placed against the bookmaker during this wait (separate process).
