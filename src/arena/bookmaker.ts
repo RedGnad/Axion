@@ -1,6 +1,6 @@
 import { AgentClient, EventType, DeliverableType, type Event } from '@croo-network/sdk';
 import { EventBus } from '../events.js';
-import { payouts, type Stake } from './settle.js';
+import { payouts, volOutcome, type Stake } from './settle.js';
 import { USDC_BASE, type Bet, type BetRequest, type PayoutRecord } from './bet.js';
 
 /**
@@ -58,12 +58,12 @@ export class Bookmaker {
         try {
           const neg = await this.cfg.client.getNegotiation(order.negotiationId);
           const req = JSON.parse(neg.requirements ?? '{}') as Partial<BetRequest>;
-          if (!req.round_id || !req.bet_on || !req.claim_service_id) {
-            throw new Error('bet requirements missing round_id/bet_on/claim_service_id');
+          if (!req.round_id || (req.side !== 'over' && req.side !== 'under') || !req.claim_service_id) {
+            throw new Error("bet requirements missing round_id / side('over'|'under') / claim_service_id");
           }
           const bet: Bet = {
             bettor: order.requesterAgentId,
-            backed: req.bet_on,
+            backed: req.side,
             amount: Number(order.fundAmount ?? '0'),
             claimServiceId: req.claim_service_id,
             orderId: order.orderId,
@@ -72,9 +72,9 @@ export class Bookmaker {
           this.record(req.round_id, bet);
           await this.cfg.client.deliverOrder(e.order_id, {
             deliverableType: DeliverableType.Text,
-            deliverableText: JSON.stringify({ receipt: 'bet-accepted', round: req.round_id, backed: req.bet_on, amount: bet.amount }),
+            deliverableText: JSON.stringify({ receipt: 'bet-accepted', round: req.round_id, side: req.side, amount: bet.amount }),
           });
-          console.log(`[bookmaker] booked ${bet.amount} on ${bet.backed} (round ${req.round_id}) from ${bet.bettor}`);
+          console.log(`[bookmaker] booked ${bet.amount} on '${bet.backed}' (round ${req.round_id}) from ${bet.bettor}`);
         } catch (err) {
           console.error('[bookmaker] record/deliver bet failed:', (err as Error).message);
         }
@@ -96,17 +96,33 @@ export class Bookmaker {
   }
 
   /**
-   * Settle a round: pari-mutuel split of the pool to bettors who backed `winner`, paid as CAP
-   * fund-transfer orders (bookmaker hires each winner's claim service with fundAmount = winnings).
-   * Returns the executed payouts + leftover dust (kept by the bookmaker, disclosed).
+   * Settle a round on the VOL OUTCOME: realized amplitude vs the agents' consensus `line`.
+   * Pari-mutuel split of the pool to bettors on the winning side, paid as CAP fund-transfer orders.
+   * On a 'push' (amplitude exactly == line, rare) every bettor is refunded their own stake.
+   * Returns executed payouts + leftover dust (kept by the bookmaker, disclosed).
    */
-  async settleRound(roundId: string, winner: string): Promise<{ paid: PayoutRecord[]; pool: number; dust: number }> {
+  async settleRound(
+    roundId: string,
+    line: number,
+    actualAmplitude: number,
+  ): Promise<{ side: string; paid: PayoutRecord[]; pool: number; dust: number }> {
     const bets = this.betsFor(roundId);
-    const stakes: Stake[] = bets.map((b) => ({ bettor: b.bettor, backed: b.backed, amount: b.amount }));
-    const { payouts: due, pool, dust } = payouts(stakes, winner);
-
+    const side = volOutcome(actualAmplitude, line);
+    const pool = bets.reduce((s, b) => s + b.amount, 0);
     const claimByBettor = new Map(bets.map((b) => [b.bettor, b.claimServiceId]));
     const paid: PayoutRecord[] = [];
+
+    // Push → refund every bettor their own stake.
+    if (side === 'push') {
+      for (const b of bets) {
+        const rec = await this.payWinner(b.claimServiceId, b.amount, roundId);
+        paid.push({ bettor: b.bettor, amount: b.amount, orderId: rec.orderId, payTxHash: rec.payTxHash });
+      }
+      return { side, paid, pool, dust: 0 };
+    }
+
+    const stakes: Stake[] = bets.map((b) => ({ bettor: b.bettor, backed: b.backed, amount: b.amount }));
+    const { payouts: due, dust } = payouts(stakes, side);
     for (const [bettor, amount] of Object.entries(due)) {
       const claimServiceId = claimByBettor.get(bettor);
       if (!claimServiceId || amount <= 0) continue;
@@ -114,7 +130,8 @@ export class Bookmaker {
       paid.push({ bettor, amount, orderId: rec.orderId, payTxHash: rec.payTxHash });
       console.log(`[bookmaker] paid ${amount} to ${bettor} (order ${rec.orderId})`);
     }
-    return { paid, pool, dust };
+    console.log(`[bookmaker] round ${roundId} settled: amplitude ${actualAmplitude.toFixed(2)} vs line ${line.toFixed(2)} → '${side}'`);
+    return { side, paid, pool, dust };
   }
 
   /** Pay one winner via a CAP fund-transfer order (bookmaker = requester). */

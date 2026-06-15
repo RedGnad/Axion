@@ -14,12 +14,19 @@
 /** USDC on Base (6 decimals) — the fund token for stakes and payouts. */
 export const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
-/** The `requirements` JSON a bettor sends when hiring the bookmaker service. */
+/**
+ * The `requirements` JSON a bettor sends when hiring the bookmaker service.
+ *
+ * Bets are on the VOL OUTCOME (will realized amplitude be over/under the agents' consensus line),
+ * NOT on which agent wins. This is the calibrated design: the vol outcome is genuinely uncertain so
+ * there is no soft-exploit (backing the always-conservative agent), and the agents' forecasts become
+ * the published line / expert opinion that informs bettors instead of being the bet itself.
+ */
 export interface BetRequest {
   /** Which round this bet is for. */
   round_id: string;
-  /** Competitor id backed (slicer|tanker|wizord). */
-  bet_on: string;
+  /** Side backed: 'over' or 'under' the round's consensus amplitude line. */
+  side: 'over' | 'under';
   /**
    * The bettor's own require_fund_transfer service id — the bookmaker hires it to pay winnings.
    * Demo bettors are custodial agents operated by the UI (disclosed); external wallets = v2.
@@ -30,7 +37,7 @@ export interface BetRequest {
 /** A recorded, paid stake (one on-chain bet order to the bookmaker). */
 export interface Bet {
   bettor: string; // requester agent id
-  backed: string; // competitor id
+  backed: string; // side backed ('over' | 'under')
   amount: number; // smallest-unit USDC staked (the fundAmount)
   claimServiceId: string;
   orderId: string;

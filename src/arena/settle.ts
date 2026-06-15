@@ -9,6 +9,23 @@ import type { Forecast, RoundOutcome } from './types.js';
  * caller; this module only does the comparison + the integrity hash. No USDC here.
  */
 
+/** The betting line = the agents' consensus (median) amplitude estimate. Bettors bet over/under it. */
+export function consensusLine(forecasts: Forecast[]): number {
+  if (forecasts.length === 0) throw new Error('no forecasts to form a line');
+  const xs = forecasts.map((f) => f.prediction).sort((a, b) => a - b);
+  const mid = Math.floor(xs.length / 2);
+  return xs.length % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2;
+}
+
+export type VolSide = 'over' | 'under' | 'push';
+
+/** Resolve the vol bet: realized amplitude vs the line. Exact tie (rare) = push → refund. */
+export function volOutcome(actualAmplitude: number, line: number): VolSide {
+  if (actualAmplitude > line) return 'over';
+  if (actualAmplitude < line) return 'under';
+  return 'push';
+}
+
 /** Commit-time integrity anchor: proves a forecast predates the outcome. */
 export function reasonHash(parts: {
   competitor: string;
