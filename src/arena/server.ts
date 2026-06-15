@@ -29,6 +29,8 @@ interface RoundView {
   closePrice?: number;
   line?: number;
   amplitude?: number;
+  /** Live realized amplitude from Pyth during the betting window (the moving "current move"). */
+  liveAmplitude?: number;
   settleAtMs?: number;
   competitors: CompetitorView[];
 }
@@ -124,21 +126,22 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
   state.status = 'running';
   try {
     await runRound(competitors, cfg, WINDOW, {
-      onOpen: ({ id, openPrice, settleAtMs }) => {
+      onOpen: ({ id, openPrice }) => {
         state.round = {
           id,
           phase: 'open',
           openPrice,
-          settleAtMs,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
-        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; estimating amplitude…`);
+        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring data & estimating…`);
         broadcast();
       },
-      onEstimates: ({ forecasts, line, edges }) => {
+      onEstimates: ({ forecasts, line, edges, settleAtMs }) => {
         if (!state.round) return;
         state.round.phase = 'betting';
         state.round.line = line;
+        state.round.settleAtMs = settleAtMs;
+        state.round.liveAmplitude = 0;
         state.round.competitors = forecasts.map((f) => ({
           id: f.competitor,
           ...personaMeta(f.competitor),
@@ -148,7 +151,12 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         for (const e of edges) {
           pushFeed(`${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`, BASESCAN + e.payTxHash);
         }
-        pushFeed(`Line set at $${line.toFixed(2)} — over/under open for betting`);
+        pushFeed(`Line set at $${line.toFixed(2)} — over/under open; move building live…`);
+        broadcast();
+      },
+      onTick: ({ liveAmplitude }) => {
+        if (!state.round) return;
+        state.round.liveAmplitude = liveAmplitude;
         broadcast();
       },
       onSettled: ({ round, line }) => {

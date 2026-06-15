@@ -55,8 +55,10 @@ export interface RoundResult {
 
 /** Live phase hooks so a UI/server can stream a round as it happens. */
 export interface RoundHooks {
-  onOpen?: (info: { id: string; openPrice: number; settleAtMs: number }) => void;
-  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[] }) => void;
+  onOpen?: (info: { id: string; openPrice: number }) => void;
+  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; settleAtMs: number }) => void;
+  /** Fires every ~2s during the betting window with the live realized amplitude from Pyth. */
+  onTick?: (info: { liveAmplitude: number; settleAtMs: number }) => void;
   onSettled?: (result: RoundResult) => void;
 }
 
@@ -225,9 +227,8 @@ export async function runRound(
 ): Promise<RoundResult> {
   const id = `round-${Date.now()}`;
   const open = await fetchPythPrice();
-  const settleAtMs = Date.now() + windowSeconds * 1000;
-  console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); settles in ${windowSeconds}s`);
-  hooks.onOpen?.({ id, openPrice: open.price, settleAtMs });
+  console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); agents estimating…`);
+  hooks.onOpen?.({ id, openPrice: open.price });
 
   // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
@@ -239,11 +240,20 @@ export async function runRound(
   for (const f of forecasts) {
     console.log(`[arena] ${f.competitor} estimates amplitude $${f.prediction.toFixed(2)} — "${f.rationale}"`);
   }
-  hooks.onEstimates?.({ forecasts, line, edges });
+  // Betting window starts NOW (after estimates) so the race is watchable: a clean window during
+  // which the live realized amplitude accumulates from Pyth toward the agents' guesses.
+  const settleAtMs = Date.now() + windowSeconds * 1000;
+  hooks.onEstimates?.({ forecasts, line, edges, settleAtMs });
 
-  // Betting window: bets are placed against the bookmaker during this wait (separate process).
-  const waitMs = settleAtMs - Date.now();
-  if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
+  while (Date.now() < settleAtMs) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const live = await fetchPythPrice();
+      hooks.onTick?.({ liveAmplitude: Math.abs(live.price - open.price), settleAtMs });
+    } catch {
+      /* transient Hermes hiccup — keep ticking */
+    }
+  }
 
   const close = await fetchPythPrice();
   const actualAmplitude = Math.abs(close.price - open.price);
