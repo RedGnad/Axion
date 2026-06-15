@@ -136,21 +136,22 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring data & estimating…`);
         broadcast();
       },
-      onEstimates: ({ forecasts, line, edges, settleAtMs }) => {
+      onEstimate: ({ forecast, edges }) => {
+        if (!state.round) return;
+        const c = state.round.competitors.find((x) => x.id === forecast.competitor);
+        if (c) { c.estimate = forecast.prediction; c.rationale = forecast.rationale; }
+        for (const e of edges) {
+          pushFeed(`${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`, BASESCAN + e.payTxHash);
+        }
+        pushFeed(`${personaMeta(forecast.competitor).label} estimates $${forecast.prediction.toFixed(2)}`);
+        broadcast();
+      },
+      onEstimates: ({ line, settleAtMs }) => {
         if (!state.round) return;
         state.round.phase = 'betting';
         state.round.line = line;
         state.round.settleAtMs = settleAtMs;
         state.round.liveAmplitude = 0;
-        state.round.competitors = forecasts.map((f) => ({
-          id: f.competitor,
-          ...personaMeta(f.competitor),
-          estimate: f.prediction,
-          rationale: f.rationale,
-        }));
-        for (const e of edges) {
-          pushFeed(`${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`, BASESCAN + e.payTxHash);
-        }
         pushFeed(`Line set at $${line.toFixed(2)} — over/under open; move building live…`);
         broadcast();
       },

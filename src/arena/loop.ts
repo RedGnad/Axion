@@ -56,6 +56,8 @@ export interface RoundResult {
 /** Live phase hooks so a UI/server can stream a round as it happens. */
 export interface RoundHooks {
   onOpen?: (info: { id: string; openPrice: number }) => void;
+  /** Fires as EACH competitor finishes, so its kart takes position one-by-one (watchable hiring). */
+  onEstimate?: (info: { forecast: Forecast; edges: ArenaEdge[] }) => void;
   onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; settleAtMs: number }) => void;
   /** Fires every ~2s during the betting window with the live realized amplitude from Pyth. */
   onTick?: (info: { liveAmplitude: number; settleAtMs: number }) => void;
@@ -233,7 +235,14 @@ export async function runRound(
   // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
   const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds };
-  const played = await Promise.all(competitors.map((c) => play(c, ctx)));
+  // Stream each competitor's estimate as soon as it lands → karts take position one-by-one.
+  const played = await Promise.all(
+    competitors.map(async (c) => {
+      const r = await play(c, ctx);
+      hooks.onEstimate?.({ forecast: r.forecast, edges: r.edges });
+      return r;
+    }),
+  );
   const forecasts = played.map((p) => p.forecast);
   const edges = played.flatMap((p) => p.edges);
   const line = consensusLine(forecasts);
