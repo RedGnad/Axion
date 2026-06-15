@@ -54,11 +54,25 @@ volatility view:
 - **Manifest carries `ours` per order**: this round, all six counterparties are genuine third
   parties (`ours:false`).
 
+## Betting — proven on-chain (Base, 2026-06-15)
+Bets are on the **vol outcome**: will realized amplitude land **over/under the agents' consensus
+line** (median estimate)? The vol outcome is genuinely uncertain, so there is no soft-exploit
+(unlike "back the always-conservative agent"); the agents' forecasts become the published line.
+Pari-mutuel: the winning side splits the pool; an exact tie (push) refunds everyone.
+
+`npm run bet-slice` settled one real CAP-native bet (fund-transfer): a bettor staked **0.05 USDC**
+on `over`; on settlement the bookmaker paid the winnings **0.05 USDC** back on-chain. Both legs
+`status: success`:
+- bet (stake → bookmaker fund addr): `0x17c0fa2d74e072207bfdbf318aadd66d449f98589e9e3833f7d0975496d4f795`
+- payout (winnings → bettor fund addr): `0xb963734f54602e8565373576a4574591921a5e67056bb74673c869344a14aae7`
+
+The stake/payout ride as the CAP **fund-transfer amount** (arbitrary, variable); the service price
+is kept minimal. Demo bettors are **custodial agents operated by the runner** (disclosed);
+non-custodial external wallets are v2.
+
 ## What is NOT claimed yet
-- **Betting / sponsor is scaffolded, not proven on-chain.** `src/arena/bookmaker.ts` implements the
-  CAP-native fund-transfer flow but has not yet settled a real bet — it is clearly marked
-  `NOT YET PROVEN ON-CHAIN`. No bet figures are presented as live.
 - **No web UI yet** (the live "race to the price" view is the next milestone).
+- The open competitor interface (any CAP agent joins the arena) is designed, not yet shipped.
 - Payment release is **not buyer-gated** (CAP releases on delivery); the protection is
   refund-on-expiry. No on-chain reputation routing.
 
@@ -67,6 +81,7 @@ volatility view:
 npm install
 npm run typecheck          # 0 errors
 npm run arena              # runs one live round on Base (spends small real USDC)
+npm run bet-slice          # proves one CAP-native bet + payout on Base (fund-transfer)
 ```
 `.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
 `COMPETITOR_BULL_SDK_KEY` / `COMPETITOR_BEAR_SDK_KEY` / `COMPETITOR_QUANT_SDK_KEY`

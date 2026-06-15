@@ -1,4 +1,4 @@
-import { AgentClient, EventType, DeliverableType, type Event } from '@croo-network/sdk';
+import { AgentClient, EventType, DeliverableType, type Event, type EventStream } from '@croo-network/sdk';
 import { EventBus } from '../events.js';
 import { payouts, volOutcome, type Stake } from './settle.js';
 import { USDC_BASE, type Bet, type BetRequest, type PayoutRecord } from './bet.js';
@@ -9,9 +9,9 @@ import { USDC_BASE, type Bet, type BetRequest, type PayoutRecord } from './bet.j
  *    the staked fundAmount on pay, delivers a receipt.
  *  - REQUESTER at settlement: hires each winning bettor's claim service with fundAmount = winnings.
  *
- * ⚠️ NOT YET PROVEN ON-CHAIN. This is the fail-fast scaffold for milestone 2. The exact
- * fund-transfer pay batch (and whether payOrder routes via x402) must be validated with real USDC
- * before any README claim. #2 (direct AA transfer) / #3 (EOA) remain fallbacks to test if #1 fails.
+ * PROVEN ON-CHAIN 2026-06-15 via `npm run bet-slice` (mechanism #1, fund-transfer): a 0.05 USDC bet
+ * staked to the bookmaker fund address and a 0.05 USDC payout to the winner's fund address both
+ * settled on Base. #2 (direct AA transfer) / #3 (EOA) were not needed.
  */
 
 const CREATE_TIMEOUT_MS = 60_000;
@@ -35,9 +35,9 @@ export class Bookmaker {
   constructor(private readonly cfg: BookmakerConfig) {}
 
   /** Attach provider handlers to the bookmaker's WS: accept bets + record stakes. */
-  async start(): Promise<void> {
-    const ws = await this.cfg.client.connectWebSocket();
-
+  /** Attach provider handlers (accept bets + record stakes) to the bookmaker's SHARED WS.
+   *  One WS per SDK-Key is enforced by CROO, so the caller passes the same stream its EventBus uses. */
+  attach(ws: EventStream): void {
     ws.on(EventType.NegotiationCreated, (e: Event) => {
       void (async () => {
         if (e.service_id !== this.cfg.serviceId || !e.negotiation_id) return; // only bets on us
