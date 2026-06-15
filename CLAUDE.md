@@ -17,8 +17,15 @@ REALIZABLE in-window userbase — the other registered teams' agents — instead
 audience we don't have. (Out-of-sample support: playbook picks-and-shovels-win-infra +
 ecosystem-motion-in-window.)
 
-**LOAD-BEARING PIER — TWO-SIDED ecosystem dependency (red-team 14 Jun; store = 0 agents/0 orders,
-field = 0 BUIDLs / 77 registered / 28 days left):**
+**⚠️ SUPERSEDED BY THE ARENA PIVOT (15 Jun) — kept for the red-team reasoning, not the premise.**
+Axion is now THE ARENA: a live on-chain world where personality agents (Slicer/Tanker/Wizord)
+compete to forecast ETH/USD and users bet/sponsor (see `src/arena/`). Two stale premises below are
+CORRECTED: (a) the store is NOT empty — census 15 Jun = 32 services / 19 agents / 19 online; (b) the
+HIRE-side "self-seed only" no longer holds — competitors hire REAL third-party data-agents
+(`roster.DATA_AGENTS`, all `ours:false`), so A2A diversity is organic, not self-manufactured.
+
+**LOAD-BEARING PIER — TWO-SIDED ecosystem dependency (red-team 14 Jun; field = 0 BUIDLs / 77
+registered):**
 - HIRE side: with an empty store there is nothing to compose → we self-seed all sub-agents → graph
   diversity is self-manufactured (judges see aggregated order data → reads as synthetic).
 - DEMAND side: "other agents call Axion" is optimistic — 77 registered / 0 shipped → realistically
@@ -50,16 +57,17 @@ Axion returns the composed result + a **manifest** of every sub-order (orderIds,
 txHashes) so the caller (and judges) can verify the A2A graph on-chain. The manifest also lifts the
 CALLER's composability — that mutual benefit is the integration hook.
 
-**Distribution = MCP (verified 14 Jun).** CROO's own MCP server (`agent.croo.network/mcp`) exposes
-ONLY the bilateral SDK primitives (negotiate_order/pay_order/deliver_order/…) — **no discovery tool,
-no native composer**, and the npm package is unpublished today. So: (1) there is NO platform-native
-orchestrator that duplicates Axion; (2) Axion, being a CAP service, is already callable via
-`negotiate_order → AXION_SERVICE_ID` from any MCP client (incl. CROO's once published) — no
-separate MCP server required. OPTIONAL upside: ship a thin `compose_task` MCP tool so LLM clients
-get one-call composition (MCP-distributed infra = the Stellar x402 winning pattern). Do not make a
-Axion MCP server a milestone-1 requirement; the on-chain CAP service is the product. (Integrity:
-CROO advertises an unpublished MCP package — re-verify at deadline; never build the pitch on their
-absence.)
+**Distribution = MCP (re-verified 15 Jun — CORRECTED).** CROO's MCP server **IS published**:
+`npx @croo-network/mcp-server` (env CROO_SDK_KEY/CROO_API_URL/CROO_WS_URL), exposing
+negotiate_order/pay_order/deliver_order/get_order/list_orders/get_delivery/upload_file/… AND a
+discovery surface ("Find me a DeFi data agent on CROO"). So: (1) Axion, being a CAP service, is
+callable via `negotiate_order → AXION_SERVICE_ID` from any MCP client — no separate MCP server
+required; (2) there is no platform-native COMPOSER that duplicates Axion. OPTIONAL upside: a thin
+`compose_task` MCP tool for one-call composition (Stellar x402 winning pattern). Not a milestone-1
+requirement; the on-chain CAP service is the product. **Discovery is also available without the SDK
+via PUBLIC unauthenticated HTTP**: `GET api.croo.network/backend/v1/public/services` (full catalog:
+serviceId, agentId, name, price, orders7d, feeConfig), `/public/agents` (onlineStatus, volume),
+`/public/live-feed`. (The SDK-Key itself canNOT read `/services` — 401; use the public endpoints.)
 
 **Cashflow (real, do not miss):** when hired, Axion is the PROVIDER (caller's USDC escrows into
 Axion's order, releases only after Axion delivers) and simultaneously the REQUESTER paying
@@ -125,10 +133,13 @@ ONE class `AgentClient` does both roles. Confirmed methods:
 ### Hard constraints found in-source (do NOT rediscover the slow way)
 1. **Agent creation + service registration + SDK-Key issuance happen in the CROO Dashboard, NOT
    the SDK.** Seeding N leaf-agents = N manual dashboard registrations (budget the time).
-2. **No discovery/search method in the SDK.** A requester targets a known `serviceId`. →
-   Axion runs on a **curated roster of serviceIds** (`src/roster.ts`). Do not build a
-   dependency on a discovery API; if `api.croo.network` later exposes a list endpoint, treat as
-   a bonus, verify at source first.
+2. **No discovery in the SDK, but YES via public HTTP (corrected 15 Jun).** The SDK has no
+   search method, but `GET api.croo.network/backend/v1/public/services` + `/public/agents`
+   (unauthenticated) ARE the catalog — used to census the roster. Axion still runs on a curated
+   roster of serviceIds (`src/roster.ts`/`DATA_AGENTS`), now seeded from that public census.
+   **Census 15 Jun: 32 services / 19 agents / 19 online** (the earlier "store empty / only VERIS
+   live" finding is STALE — marketplace is active; "online" still ≠ accepts negotiation, probe at
+   first hire).
 3. **Pre-fund the agent's AA (ERC-4337) wallet with USDC** before `payOrder` (the SDK checks the
    agent-wallet balance, not the controller address). Base mainnet.
 

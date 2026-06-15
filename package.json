@@ -11,6 +11,7 @@
     "start": "tsx src/index.ts",
     "slice": "node --env-file=.env --import tsx src/slice.ts",
     "serve": "node --env-file=.env --import tsx src/serve.ts",
+    "arena": "node --env-file=.env --import tsx src/arena/run.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

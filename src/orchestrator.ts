@@ -36,7 +36,12 @@ export class Orchestrator {
   async hire(subtask: Subtask): Promise<HireResult> {
     const service = pickForCapability(subtask.capability);
     if (!service) throw new Error(`no roster service for capability: ${subtask.capability}`);
+    return this.hireService(service, subtask.requirements);
+  }
 
+  /** Hire an EXPLICIT service (used by the Arena, which routes competitors to data-agents by id). */
+  async hireService(service: RosterEntry, requirements: string): Promise<HireResult> {
+    const subtask: Subtask = { capability: service.capability, requirements };
     const neg = await this.client.negotiateOrder({
       serviceId: service.serviceId,
       requirements: subtask.requirements,
@@ -73,7 +78,8 @@ export class Orchestrator {
       orderId,
       payTxHash: order.payTxHash,
       clearTxHash: order.clearTxHash,
-      deliverable: delivery.deliverableText,
+      // Many agents deliver structured data in deliverableSchema (type=schema), not text.
+      deliverable: delivery.deliverableText || delivery.deliverableSchema || '',
     };
   }
 

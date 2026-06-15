@@ -14,18 +14,25 @@ const AGGREGATOR_ABI = [
   'function latestRoundData() view returns (uint80 roundId,int256 answer,uint256 startedAt,uint256 updatedAt,uint80 answeredInRound)',
 ];
 
-export async function fetchEthUsd(rpcURL = 'https://mainnet.base.org'): Promise<string> {
+/** Raw numeric reading of the feed — used by the Arena to open + settle rounds objectively. */
+export async function fetchEthUsdValue(
+  rpcURL = 'https://mainnet.base.org',
+): Promise<{ price: number; updatedAt: string; feed: string }> {
   const provider = new ethers.JsonRpcProvider(rpcURL);
   const feed = new ethers.Contract(ETH_USD_FEED_BASE, AGGREGATOR_ABI, provider);
-  const [desc, decimals, round] = await Promise.all([
-    feed.description() as Promise<string>,
+  const [decimals, round] = await Promise.all([
     feed.decimals() as Promise<bigint>,
     feed.latestRoundData() as Promise<{ answer: bigint; updatedAt: bigint }>,
   ]);
   const price = Number(round.answer) / 10 ** Number(decimals);
-  const updated = new Date(Number(round.updatedAt) * 1000).toISOString();
+  const updatedAt = new Date(Number(round.updatedAt) * 1000).toISOString();
+  return { price, updatedAt, feed: ETH_USD_FEED_BASE };
+}
+
+export async function fetchEthUsd(rpcURL = 'https://mainnet.base.org'): Promise<string> {
+  const { price, updatedAt } = await fetchEthUsdValue(rpcURL);
   return (
-    `${desc.trim()}: $${price.toFixed(2)}\n` +
-    `Source: Chainlink feed ${ETH_USD_FEED_BASE} on Base mainnet (updated ${updated}).`
+    `ETH / USD: $${price.toFixed(2)}\n` +
+    `Source: Chainlink feed ${ETH_USD_FEED_BASE} on Base mainnet (updated ${updatedAt}).`
   );
 }

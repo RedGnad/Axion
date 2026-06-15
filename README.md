@@ -1,61 +1,79 @@
-# Axion
+# Axion — The Arena
 
-**The composition primitive other CROO agents call.** Given a goal + USDC budget, Axion
-subcontracts a multi-agent task: it hires CAP sub-agents, escrows USDC per sub-hire, composes
-their deliverables, and returns the result plus an on-chain **manifest** of every sub-order
-(orderId, pay/clear tx, and an honest `ours` flag). Picks-and-shovels infra — not an end-user app.
+**A live on-chain world where AI agents compete, and the transactions between them are the show.**
+Each round, personality agents estimate the **amplitude of the next ETH/USD move** (`|close − open|`
+over ~60s); to compete, every agent must **hire real data agents on CROO** (genuine A2A orders,
+settled in USDC on Base). The outcome is decided by an exogenous oracle nobody controls — the
+**Pyth ETH/USD signed feed** — so the contest is objective and verifiable. Estimating *amplitude*
+(volatility), not the price level, is deliberate: predicting a price level is a martingale (the
+spot-hugger always wins), whereas volatility is genuinely uncertain yet somewhat data-predictable —
+so no single strategy dominates and betting on the agents is meaningful. Users bet / sponsor
+(CAP-native, scaffolded — see scope).
 
-## Verified on-chain — Base mainnet (2026-06-14)
-`npm run slice` ran a real **2-hire composition**. 0.01 USDC per hire. **Both sub-agents are ours**
-(`ours: true` in the manifest — this is NOT third-party A2A diversity; see Scope below).
-**4 transactions, all status: success on Base mainnet:**
+## Verified on-chain — Base mainnet (2026-06-15)
+`npm run arena` ran **one full round**: 3 competitors, each hiring **2 real third-party data agents**
+→ **6 genuine A2A CAP orders, every counterparty `ours:false`** (12 transactions: 6 pay + 6 clear,
+all `status: success`). Outcome read from the Pyth signed feed; closest amplitude estimate wins.
 
-**Hire 1 — price** (Chainlink ETH/USD on Base) · order `74acca1c-0bb4-4543-b027-8dcf6c34986e`
-- pay&nbsp;&nbsp; `0xdc519fc734a3c90bcaf522338b1e0f319a5cb2853e593efadae6b138ce239dd6`
-- clear `0x17fac13ffd3a944c44f206176ac1f5f41faf8946b4692507a9cc8d7faeacebdb`
+The six A2A orders below are real third-party CAP settlements (valid regardless of scoring rule). A
+representative amplitude round: open **$1723.68** → close **$1722.92** → realized amplitude
+**$0.77**; estimates **dispersed** (Slicer $8.50 on extreme-fear vs Tanker/Wizord $1.20) → winner
+**Tanker** — i.e. the winner tracks realized volatility, not a fixed agent. Estimates are committed
+with a `reasonHash` **before** settlement.
 
-**Hire 2 — summarize** (Claude Haiku, consumes hire 1) · order `c0207887-9373-456c-b3ca-136ce4fefc9f`
-- pay&nbsp;&nbsp; `0x3d0b547a1968ea7166ad1357cdbfed5b7680c1d2a2b43b9450fd204aa3c2181a`
-- clear `0x377c0cca733f12276953bb662a5fbeb76136c12ed91fd8394ae1550a5c94c5ed`
+| Competitor | Hired (3rd-party, `ours:false`) | order | pay tx | clear tx |
+|---|---|---|---|---|
+| Slicer | top_traders (Binance smart-money) | `c8093bf0` | `0xe3ba672a87441f9e17ef61ced1f2c6f89b74b0a913487285d75029bfa99331af` | `0xc2eb411625e4ec2ee3e557359eb9849fc383ec275b2b04e9f26bb91972a06858` |
+| Slicer | Bitcoin Fear & Greed Index | `e224e239` | `0xf622c898f35356db324e959098caeb07e540680cbf645c7f63f5300359d798c6` | `0x882ac6d56236ca8ddc83f7526c42a908ee9307fe0048fa26ce0429d10eee41ac` |
+| Tanker | Bitcoin AHR999 Indicator | `90672011` | `0x86151364c6cf67613563c8bc9866a80743009f2b11c43fc424d6e5d5d9390a27` | `0xb1a3382d2420bca310877549ba2e69300228aadaa8f8b935a83f752ec69b867f` |
+| Tanker | Bitcoin DCA Signal | `afdde5ea` | `0x988338e3f9b4938b12068cf33611288913721f5512252191b9c2db7fc1438cf7` | `0x9961db9b9268c7c0fc3bdd0aa3de8c938dd1f18ba6f0f0cc2e5aa3fcccf3e7ac` |
+| Wizord | Token Price | `56cef4ef` | `0x84ed5144d1fdcf55870fb40f2ba307d91c095268b15b897531f229be5af00526` | `0x58876207ca2c88d9fe6933f6a7cc59308c98e52067c5ba15a553f7e436cf8857` |
+| Wizord | Gas Tracker | `38b03ba0` | `0xa423b41e68e5ec7d7a934943e46d4cd953728bbb3bc2d9b603f69ab9b7f582c4` | `0xa1a2fb416d4380f1a6209412f785b37a033c158686060188d6bf4c4d1666151b` |
 
-Verify any: `https://basescan.org/tx/<hash>` (real USDC transfer; pay via ERC-4337, clear via CAPCore).
+Verify any: `https://basescan.org/tx/<hash>`, or:
+```bash
+cast receipt 0xe3ba672a87441f9e17ef61ced1f2c6f89b74b0a913487285d75029bfa99331af --rpc-url https://mainnet.base.org
+# status 1 (success); USDC 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913 transfer; pay via ERC-4337 EntryPoint
+```
+Each order is 0.10 USDC; the third-party provider receives ~0.09 (≈10% CAP fee).
 
-### Non-self-trade settlements (real third-party)
-Axion hired a genuine **third-party** agent (VERIS, `ours:false`) **twice** — settled on Base,
-provider wallet `0x25E6933538cbf1AED53BDccC5Ab06b70EcECC70C` (**not ours**):
-- Trust Compare · order `56ee53e1-485f-4ea9-bf8d-e79eb661ca86` · 0.10 USDC · completed
-  - pay `0x51627c054b3e0a3d1c4a92ebda03c6ecdad96112d3a9a3227706243040436cf1` · clear `0xd947754603d7b77c7cf7090b7ce6d2bdc1405d50245f0dccd0fd4e08a2b096e8`
-- Trust Receipt History · order `090d0f39-18d2-4e6b-acf3-aaae4f29b1d5` · 0.20 USDC · completed
-  - pay `0x9bbcd15b80031d69bc72ecbe6fe0aa12532b216435911ef09272444c31e22be7` · clear `0x90fd76be56e58e5b509e7cd5231c74f56b992f6730094020fea1be77cd747912`
+## The competitors
+Each is an LLM persona with **no direct chain access** — its only way to inform a forecast is to buy
+data from specialist agents. The three buy **disjoint** capability sets, so a round hires **6
+distinct third-party agents** (real A2A diversity, not flavor), and each reads them for a different
+volatility view:
+- **Slicer** (momentum) → smart-money flow + sentiment; extremes → bigger amplitude.
+- **Tanker** (calm value) → valuation indicator + DCA signal; defaults small.
+- **Wizord** (microstructure quant) → live token price + gas as a flow/congestion proxy.
 
-Orders #1–3 (price, summarize) are our own composition (`ours:true`, self-trade) — not counted as
-third-party diversity. Full verifiable evidence + honest caveats: **[REPORT.md](./REPORT.md)**.
+## Why this is honest by construction
+- **Outcome is exogenous**: the Pyth ETH/USD signed reading (`publishTime` + VAA recorded) — no
+  party (including us) controls it. Estimates are hashed (`reasonHash`) before the outcome exists.
+- **Hires are organic**: a persona literally cannot forecast without buying data, so every order is
+  needed — never wash-traded to inflate counts.
+- **Manifest carries `ours` per order**: this round, all six counterparties are genuine third
+  parties (`ours:false`).
 
-## What works today (the floor)
-- **Deterministic planner** (no LLM) → 2-stage DAG: stage-1 data leaf(s) → stage-2 summarizer.
-- Each hire is one real CAP order: `negotiate → pay (escrow LOCK) → deliver → CLEAR`.
-- `price` leaf reads the verified Chainlink ETH/USD feed on Base
-  (`0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70`, `description() == "ETH / USD"`); `summarize`
-  leaf uses Claude Haiku.
-- Returns the composed brief + a manifest carrying `ours: boolean` per sub-order.
-
-## Honest scope (what is NOT claimed)
-- **Both counterparties are our own seeded leaf-agents** (`ours: true`). There is **no third-party
-  or "organic" A2A diversity yet** — an independent team's agent calling Axion is the next milestone.
-- Payment release is **not buyer-gated** (CAP releases to the provider on delivery); Axion's
-  deliverable check is **off-chain**. The real buyer protection is refund-on-expiry.
-- No on-chain reputation/PTS — the roster routes on availability, not reputation.
+## What is NOT claimed yet
+- **Betting / sponsor is scaffolded, not proven on-chain.** `src/arena/bookmaker.ts` implements the
+  CAP-native fund-transfer flow but has not yet settled a real bet — it is clearly marked
+  `NOT YET PROVEN ON-CHAIN`. No bet figures are presented as live.
+- **No web UI yet** (the live "race to the price" view is the next milestone).
+- Payment release is **not buyer-gated** (CAP releases on delivery); the protection is
+  refund-on-expiry. No on-chain reputation routing.
 
 ## Run
 ```bash
 npm install
-cp .env.example .env    # fill the CROO + Anthropic values listed below
-npm run slice           # starts the leaf providers + the Axion buyer, runs one composition
+npm run typecheck          # 0 errors
+npm run arena              # runs one live round on Base (spends small real USDC)
 ```
-`.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `CROO_SDK_KEY` (Axion), `LEAF_PRICE_SDK_KEY`,
-`LEAF_PRICE_SERVICE_ID`, `LEAF_SUMMARIZE_SDK_KEY`, `LEAF_SUMMARIZE_SERVICE_ID`, `ANTHROPIC_API_KEY`.
+`.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
+`COMPETITOR_BULL_SDK_KEY` / `COMPETITOR_BEAR_SDK_KEY` / `COMPETITOR_QUANT_SDK_KEY`
+(one funded CROO agent each — fund its AA wallet with ~1 USDC on Base; gas is sponsored).
+Optional: `BASE_RPC_URL`, `ARENA_ROUNDS`, `ARENA_WINDOW_SECONDS`.
 
 ## Build for the CROO Agent Hackathon
 Track: Open A2A. CAP SDK: [`@croo-network/sdk`](https://github.com/CROO-Network/node-sdk). MIT.
-See `CLAUDE.md` for the verified build facts, the rubric mapping, and the integrity rules.
-Agent + service creation and SDK-Key issuance happen in the CROO Dashboard, not the SDK.
+Agents + services + SDK-Keys are created in the CROO Dashboard, not the SDK. See `CLAUDE.md` for the
+verified build facts, the rubric mapping, and the binding integrity rules.
