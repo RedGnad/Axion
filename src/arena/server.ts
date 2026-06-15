@@ -231,10 +231,12 @@ async function main(): Promise<void> {
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
         'Access-Control-Allow-Origin': '*',
+        'X-Accel-Buffering': 'no', // tell proxies (Render/Cloudflare) not to buffer the stream
       });
       res.write(`data: ${JSON.stringify(state)}\n\n`);
       clients.add(res);
-      req.on('close', () => clients.delete(res));
+      const hb = setInterval(() => res.write(': hb\n\n'), 20_000); // heartbeat keeps the stream flushing
+      req.on('close', () => { clearInterval(hb); clients.delete(res); });
       return;
     }
     if (req.method === 'POST' && url === '/api/round') {
