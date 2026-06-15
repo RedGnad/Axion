@@ -111,6 +111,18 @@ npm run competitor         # run the open-competitor template as a hireable CAP 
 (one funded CROO agent each — fund its AA wallet with ~1 USDC on Base; gas is sponsored).
 Optional: `BASE_RPC_URL`, `ARENA_ROUNDS`, `ARENA_WINDOW_SECONDS`.
 
+## Deploy (Render — one always-on service)
+The Arena is a single long-running process (CAP WebSocket + round loop + UI), so it deploys as one
+Render web service via `render.yaml`:
+1. Render → **New → Blueprint** → pick this repo (it reads `render.yaml`).
+2. Set the secret env vars in the dashboard: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
+   `COMPETITOR_BULL_SDK_KEY`, `COMPETITOR_BEAR_SDK_KEY`, `COMPETITOR_QUANT_SDK_KEY`, `BASE_RPC_URL`.
+   (`PORT` is injected by Render.)
+3. Deploy → the live URL serves the UI; "Run round" runs a real on-chain round (spends USDC).
+
+Note: Render's **free** plan sleeps after ~15 min idle (cold start; the agents' WS drop offline). For
+a durable always-on demo, use a paid instance or a keep-alive ping to `/api/state`.
+
 ## Build for the CROO Agent Hackathon
 Track: Open A2A. CAP SDK: [`@croo-network/sdk`](https://github.com/CROO-Network/node-sdk). MIT.
 Agents + services + SDK-Keys are created in the CROO Dashboard, not the SDK. See `CLAUDE.md` for the

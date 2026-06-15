@@ -1,0 +1,29 @@
+# Render Blueprint — deploys the Arena as one always-on web service (UI + SSE + round runner).
+# In Render: New → Blueprint → connect this repo. Set the secret env vars below in the dashboard
+# (they are sync:false so they are NOT stored in git). PORT is injected by Render automatically.
+services:
+  - type: web
+    name: axion-arena
+    runtime: node
+    plan: free # NOTE: free spins down after ~15 min idle (cold start + agents drop offline).
+    buildCommand: npm install
+    startCommand: npm run arena-server:prod
+    healthCheckPath: /api/state
+    envVars:
+      - key: CROO_API_URL
+        sync: false
+      - key: CROO_WS_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COMPETITOR_BULL_SDK_KEY
+        sync: false
+      - key: COMPETITOR_BEAR_SDK_KEY
+        sync: false
+      - key: COMPETITOR_QUANT_SDK_KEY
+        sync: false
+      - key: BASE_RPC_URL
+        sync: false
+      - key: ARENA_WINDOW_SECONDS
+        value: "60"
+      # Optional: COMPETITOR_ROSTER, ARENA_SDK_KEY, ARENA_AUTORUN

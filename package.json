@@ -15,16 +15,17 @@
     "bet-slice": "node --env-file=.env --import tsx src/arena/bet-slice.ts",
     "competitor": "node --env-file=.env --import tsx src/arena/competitor.ts",
     "arena-server": "node --env-file=.env --import tsx src/arena/server.ts",
+    "arena-server:prod": "node --import tsx src/arena/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@croo-network/sdk": "^0.2.1",
-    "ethers": "^6.13.0"
+    "ethers": "^6.13.0",
+    "tsx": "^4.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },
   "engines": {
