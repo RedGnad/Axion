@@ -187,6 +187,7 @@ const usd = (n) => n==null ? '—' : '$'+Number(n).toFixed(2);
 let countdownTimer = null;
 let lastFeedSig = '', lastLbSig = '';
 let latest = null; // latest server state; the race loop animates from this + the clock
+let pos = {};      // id -> current (interpolated) left%, eased toward target each frame
 
 function render(s){
   latest = s;
@@ -234,6 +235,7 @@ function ensureLanes(r){
       `<div class="kart grid" id="kart-${c.id}" style="left:4%"><span class="car">🏎️</span><span class="est" id="est-${c.id}">…</span></div></div>`
     ).join('') + `<div class="finishline"><span class="flbl">finish</span></div>`;
     trackKey = key;
+    pos = {}; // reset interpolated positions for the new round
   }
   for (const c of r.competitors){
     const kart = $('kart-'+c.id), estEl = $('est-'+c.id), car = kart && kart.querySelector('.car');
@@ -248,14 +250,16 @@ function ensureLanes(r){
   }
 }
 
-// The race: progress = (time elapsed) × (relative standing). The current leader rides the pace line
-// (reaches the finish exactly at the timer end); others trail by how far their estimate is from the
-// live real move. Standings (and thus the lead) shift as the move unfolds → real overtakes.
-const RACE_LEFT = 4, RACE_RIGHT = 94;
+// Track zones: 4%→25% = pre-race APPROACH (formation lap during hiring, NEUTRAL — no real standing
+// yet), 25%→94% = the SCORED race (progress = time × relative standing). Every kart eases toward its
+// target each frame (lerp) so there are NO teleports — phase changes and 2s standing steps all glide.
+const APPROACH_START = 4, RACE_LEFT = 25, RACE_RIGHT = 94;
 function raceTick(){
   const r = latest && latest.round;
   if (r && r.competitors && r.competitors.length){
+    const openMs = Number((r.id||'').split('-')[1]) || Date.now();
     const racing = (r.phase === 'betting' || r.phase === 'settled') && r.competitors.some(c=>c.estimate!=null);
+    const targets = {};
     if (racing){
       const truth = r.amplitude!=null ? r.amplitude : (r.liveAmplitude||0);
       const ests = r.competitors.map(c=>c.estimate).filter(v=>v!=null);
@@ -267,15 +271,25 @@ function raceTick(){
       }
       const timeFrac = r.phase==='settled' ? 1
         : Math.max(0, Math.min(1, (Date.now() - (r.raceStartMs||0)) / ((r.settleAtMs - r.raceStartMs) || 60000)));
+      let i = 0;
       for (const c of r.competitors){
-        const kart = $('kart-'+c.id); if (!kart) continue;
         const qn = maxQ>0 ? q[c.id]/maxQ : 0;
-        const left = RACE_LEFT + timeFrac * qn * (RACE_RIGHT - RACE_LEFT);
-        kart.style.left = left.toFixed(2) + '%';
-        kart.classList.toggle('lead', qn>=0.999 && r.phase==='betting');
+        targets[c.id] = RACE_LEFT + timeFrac * qn * (RACE_RIGHT - RACE_LEFT);
+        const kart = $('kart-'+c.id); if (kart) kart.classList.toggle('lead', qn>=0.999 && r.phase==='betting');
+        i++;
       }
     } else {
-      for (const c of r.competitors){ const kart = $('kart-'+c.id); if (kart) kart.style.left = RACE_LEFT+'%'; }
+      // Formation lap (hiring): all cars cruise together toward the start line (~24%), neutral.
+      const elapsed = Date.now() - openMs;
+      const base = APPROACH_START + (RACE_LEFT - 1 - APPROACH_START) * (1 - Math.exp(-elapsed/22000));
+      let i = 0;
+      for (const c of r.competitors){ targets[c.id] = base + Math.sin(Date.now()/600 + i*2.1)*1.1; i++; }
+    }
+    for (const c of r.competitors){
+      const kart = $('kart-'+c.id); if (!kart) continue;
+      if (pos[c.id]==null) pos[c.id] = APPROACH_START;
+      pos[c.id] += (targets[c.id] - pos[c.id]) * 0.12; // ease toward target → no teleports
+      kart.style.left = pos[c.id].toFixed(2) + '%';
     }
   }
   requestAnimationFrame(raceTick);
