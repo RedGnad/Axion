@@ -83,6 +83,16 @@ function personaMeta(id: string): { label: string; blurb: string } {
   return metaById.get(id) ?? { label: id, blurb: '' };
 }
 
+/** Recent real volatility: average |move| over WINDOW seconds across the live Pyth series (2s apart). */
+function computeRecentVol(): number {
+  const s = state.priceSeries;
+  const lag = Math.max(1, Math.round(WINDOW / 2)); // points ~ WINDOW seconds apart
+  if (s.length <= lag) return 0;
+  let sum = 0, n = 0;
+  for (let i = lag; i < s.length; i++) { sum += Math.abs(s[i] - s[i - lag]); n++; }
+  return n ? sum / n : 0;
+}
+
 function pushFeed(text: string, txUrl?: string): void {
   state.feed.unshift({ ts: Date.now(), text, txUrl });
   state.feed = state.feed.slice(0, 40);
@@ -196,7 +206,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         saveHistory();
         broadcast();
       },
-    });
+    }, { recentVol: computeRecentVol() });
   } catch (err) {
     pushFeed(`Round error: ${(err as Error).message}`);
     broadcast();

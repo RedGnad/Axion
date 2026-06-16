@@ -57,6 +57,7 @@ async function main(): Promise<void> {
         const req = JSON.parse(neg.requirements ?? '{}') as Partial<CompetitorRequest>;
         const spot = Number(req.spot) || 0;
         const horizon = Number(req.deadlineSeconds) || 60;
+        const baseline = req.recentVol && req.recentVol > 0 ? req.recentVol * persona.volMultiplier : undefined;
 
         const hires: HireResult[] = [];
         for (const capability of persona.capabilities) {
@@ -69,7 +70,7 @@ async function main(): Promise<void> {
           }
         }
         const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
-        const draft = await forecast(persona, spot, inputs, horizon);
+        const draft = await forecast(persona, spot, inputs, horizon, baseline);
         const response: CompetitorResponse = { prediction: draft.prediction, rationale: draft.rationale };
 
         await client.deliverOrder(e.order_id, {

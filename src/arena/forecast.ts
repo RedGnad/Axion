@@ -27,10 +27,20 @@ export async function forecast(
   spotPrice: number,
   inputs: DataInput[],
   horizonSeconds = 60,
+  baseline?: number,
 ): Promise<ForecastDraft> {
   const dataBlock = inputs.length
     ? inputs.map((i) => `### ${i.label}\n${i.text}`).join('\n\n')
     : '(no data purchased this round)';
+
+  // Calibrated baseline = recent real volatility × this persona's risk multiplier. It VARIES round
+  // to round (vol regime) and differs per persona → estimates move and stay distinct.
+  const baseLine = baseline && baseline > 0 ? baseline : undefined;
+  const guidance = baseLine
+    ? `Your calibrated baseline THIS round is $${baseLine.toFixed(2)} (recent real ETH volatility × ` +
+      `your risk style). Return a 2-decimal number within roughly ±25% of it, nudged by the data ` +
+      `(higher on extremes, lower when calm). `
+    : `Stay true to your risk style so the three competitors land on clearly DIFFERENT values. `;
 
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env
   const msg = await client.messages.create({
@@ -40,16 +50,16 @@ export async function forecast(
       persona.systemPrompt +
       `\n\nThe game: estimate the ABSOLUTE SIZE of the ETH/USD move (in USD, always >= 0) over the ` +
       `next ~${horizonSeconds} seconds — i.e. |price_then - price_now|, NOT the direction and NOT ` +
-      `the level. Stay true to YOUR risk band above — your number should reflect your persona, so ` +
-      `the three competitors land on clearly DIFFERENT values. Give a PRECISE 2-decimal number ` +
-      `(e.g. 1.37, 2.84 — never a round number like 2 or 2.0). Use ONLY the data provided plus the ` +
-      `spot; never invent numbers. Respond with ONLY a JSON object: ` +
+      `the level. ${guidance}Give a PRECISE 2-decimal number (e.g. 1.37, 2.84 — never a round ` +
+      `number). Respond with ONLY a JSON object: ` +
       `{"prediction": <usd amplitude, 2 decimals>, "rationale": "<one in-character sentence>"}.`,
     messages: [
       {
         role: 'user',
         content:
-          `Current ETH/USD spot: ${spotPrice}\n\nData you purchased:\n${dataBlock}\n\n` +
+          `Current ETH/USD spot: ${spotPrice}\n` +
+          (baseLine ? `Your baseline this round: $${baseLine.toFixed(2)}\n` : '') +
+          `\nData you purchased:\n${dataBlock}\n\n` +
           `Estimate the absolute USD move over the next ~${horizonSeconds}s as JSON.`,
       },
     ],
@@ -61,7 +71,10 @@ export async function forecast(
     .join('')
     .trim();
 
-  return parseForecast(text, spotPrice);
+  const draft = parseForecast(text, spotPrice);
+  // Safety clamp around the calibrated baseline so a misbehaving model can't break calibration.
+  if (baseLine) draft.prediction = Math.min(baseLine * 3, Math.max(baseLine * 0.3, draft.prediction));
+  return draft;
 }
 
 /** Robustly extract {prediction, rationale} as a non-negative USD amplitude. */

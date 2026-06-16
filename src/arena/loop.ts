@@ -32,6 +32,8 @@ interface PlayCtx {
   asset: string;
   spot: number;
   horizonSeconds: number;
+  /** Recent real volatility (typical move over the horizon, from Pyth) → calibrates estimates. */
+  recentVol: number;
 }
 
 /** One on-chain A2A edge produced this round (for the manifest / live feed). */
@@ -155,7 +157,8 @@ async function playLocal(
   const hires: HireResult[] = results.filter((h): h is HireResult => h !== null);
 
   const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
-  const draft = await forecast(c.persona, ctx.spot, inputs, ctx.horizonSeconds);
+  const baseline = ctx.recentVol * c.persona.volMultiplier; // calibrated, persona-distinct
+  const draft = await forecast(c.persona, ctx.spot, inputs, ctx.horizonSeconds, baseline);
 
   const f: Forecast = {
     competitor: c.id,
@@ -183,7 +186,7 @@ async function playRemote(
   c: Extract<Competitor, { kind: 'remote' }>,
   ctx: PlayCtx,
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
-  const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds };
+  const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds, recentVol: ctx.recentVol };
   const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
   const hire = await c.orchestrator.hireService(service, JSON.stringify(request));
 
@@ -226,15 +229,18 @@ export async function runRound(
   cfg: ClientCfg,
   windowSeconds = 60,
   hooks: RoundHooks = {},
+  opts: { recentVol?: number } = {},
 ): Promise<RoundResult> {
   const id = `round-${Date.now()}`;
   const open = await fetchPythPrice();
-  console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); agents estimating…`);
+  // Recent real volatility (typical move over the window). Falls back to ~0.05% of spot if unknown.
+  const recentVol = opts.recentVol && opts.recentVol > 0 ? opts.recentVol : open.price * 0.0005;
+  console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); recentVol ~$${recentVol.toFixed(2)}; agents estimating…`);
   hooks.onOpen?.({ id, openPrice: open.price });
 
   // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
-  const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds };
+  const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
   // Stream each competitor's estimate as soon as it lands → karts take position one-by-one.
   const played = await Promise.all(
     competitors.map(async (c) => {

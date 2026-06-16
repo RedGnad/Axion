@@ -23,6 +23,8 @@ export interface CompetitorRequest {
   spot: number;
   /** Horizon: the competitor estimates the move over the next `deadlineSeconds`. */
   deadlineSeconds: number;
+  /** Recent real volatility (typical move over the horizon) — a calibration hint; optional. */
+  recentVol?: number;
 }
 
 /** What a competitor delivers back. The game scores |prediction - realized amplitude|. */
