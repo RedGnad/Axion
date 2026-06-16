@@ -8,7 +8,7 @@ import type { Personality } from './personalities.js';
  * loop.ts). Uses Claude Haiku for cost (many rounds); swap to Sonnet for richer trash-talk.
  * Returns a number + one-line rationale; never invents data beyond what was provided.
  */
-const ARENA_MODEL = 'claude-haiku-4-5';
+const ARENA_MODEL = 'claude-sonnet-4-6'; // stronger persona-following → estimates stay distinct
 
 export interface DataInput {
   /** Human label of the data-agent that produced this (for the rationale + UI). */
@@ -40,9 +40,11 @@ export async function forecast(
       persona.systemPrompt +
       `\n\nThe game: estimate the ABSOLUTE SIZE of the ETH/USD move (in USD, always >= 0) over the ` +
       `next ~${horizonSeconds} seconds — i.e. |price_then - price_now|, NOT the direction and NOT ` +
-      `the level. Calm tape → small number (e.g. 0.5-2); fear/greed extremes, heavy positioning or ` +
-      `high gas → larger. Use ONLY the data provided plus the spot; never invent numbers. Respond ` +
-      `with ONLY a JSON object: {"prediction": <usd amplitude >= 0>, "rationale": "<one in-character sentence>"}.`,
+      `the level. Stay true to YOUR risk band above — your number should reflect your persona, so ` +
+      `the three competitors land on clearly DIFFERENT values. Give a PRECISE 2-decimal number ` +
+      `(e.g. 1.37, 2.84 — never a round number like 2 or 2.0). Use ONLY the data provided plus the ` +
+      `spot; never invent numbers. Respond with ONLY a JSON object: ` +
+      `{"prediction": <usd amplitude, 2 decimals>, "rationale": "<one in-character sentence>"}.`,
     messages: [
       {
         role: 'user',
