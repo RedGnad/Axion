@@ -8,7 +8,7 @@ import type { Personality } from './personalities.js';
  * loop.ts). Uses Claude Haiku for cost (many rounds); swap to Sonnet for richer trash-talk.
  * Returns a number + one-line rationale; never invents data beyond what was provided.
  */
-const ARENA_MODEL = 'claude-sonnet-4-6'; // stronger persona-following → estimates stay distinct
+const ARENA_MODEL = 'claude-haiku-4-5'; // cheap; distinct risk bands + 2-decimal contract keep estimates apart
 
 export interface DataInput {
   /** Human label of the data-agent that produced this (for the rationale + UI). */
