@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { loadCompetitors, runRound, type Competitor } from './loop.js';
 import { PERSONALITIES } from './personalities.js';
+import { fetchPythPrice } from './oracle.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -51,6 +52,9 @@ interface FeedItem {
 interface ArenaState {
   status: 'idle' | 'running' | 'view-only';
   asset: string;
+  /** Live ETH/USD from Pyth, streamed every ~2s so the screen is never static. */
+  livePrice?: number;
+  priceSeries: number[];
   round?: RoundView;
   history: HistoryItem[];
   leaderboard: { id: string; label: string; wins: number; rounds: number }[];
@@ -67,7 +71,7 @@ const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
 const BASESCAN = 'https://basescan.org/tx/';
 
-const state: ArenaState = { status: 'idle', asset: 'ETH', history: [], leaderboard: [], feed: [] };
+const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [] };
 const clients = new Set<import('node:http').ServerResponse>();
 let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
@@ -202,6 +206,21 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
 
 async function main(): Promise<void> {
   loadHistory();
+
+  // Always-on live ETH price stream (real Pyth, every 2s) → the screen is never static.
+  setInterval(() => {
+    void (async () => {
+      try {
+        const p = await fetchPythPrice();
+        state.livePrice = p.price;
+        state.priceSeries.push(Number(p.price.toFixed(2)));
+        if (state.priceSeries.length > 90) state.priceSeries.shift();
+        broadcast();
+      } catch {
+        /* transient Hermes hiccup */
+      }
+    })();
+  }, 2000);
 
   const cfg = {
     baseURL: process.env.CROO_API_URL ?? '',

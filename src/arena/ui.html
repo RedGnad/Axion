@@ -48,6 +48,15 @@
   button.run{font-family:var(--disp); letter-spacing:2px; text-transform:uppercase; font-size:12px; color:#06080b; background:var(--lime); border:0; padding:10px 16px; border-radius:2px; cursor:pointer; box-shadow:var(--glow)}
   button.run:disabled{background:var(--line); color:var(--dim); box-shadow:none; cursor:not-allowed}
 
+  .ticker{display:flex; align-items:center; gap:18px; margin-top:14px; padding:12px 16px; background:linear-gradient(180deg, rgba(255,255,255,.02), transparent), var(--panel); border:1px solid var(--line); border-radius:4px}
+  .ticker .px{display:flex; align-items:baseline; gap:10px; white-space:nowrap}
+  .ticker .plabel{font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--dim)}
+  .ticker .pval{font-family:var(--disp); font-weight:700; font-size:26px}
+  .ticker .pdelta{font-size:12px; font-family:var(--disp)}
+  .ticker .spark{flex:1; height:46px; min-width:60px}
+  .ticker .psrc{font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--dim); white-space:nowrap}
+  @media(max-width:680px){.ticker .spark{display:none}}
+
   .grid{display:grid; grid-template-columns:1fr 340px; gap:18px; margin-top:18px}
   @media(max-width:880px){.grid{grid-template-columns:1fr}}
   .panel{background:linear-gradient(180deg, rgba(255,255,255,.015), transparent), var(--panel); border:1px solid var(--line); border-radius:4px; padding:16px}
@@ -121,6 +130,16 @@
     <button class="run" id="runBtn">Run round</button>
   </header>
 
+  <div class="ticker">
+    <div class="px">
+      <span class="plabel">ETH / USD</span>
+      <span id="livePx" class="pval">—</span>
+      <span id="pxDelta" class="pdelta"></span>
+    </div>
+    <svg id="spark" class="spark" viewBox="0 0 600 46" preserveAspectRatio="none"></svg>
+    <div class="psrc">live · Pyth signed feed</div>
+  </div>
+
   <div class="grid">
     <div>
       <div class="panel">
@@ -161,12 +180,10 @@
 const $ = (id) => document.getElementById(id);
 const usd = (n) => n==null ? '—' : '$'+Number(n).toFixed(2);
 let countdownTimer = null;
-let lastSig = '';
+let lastFeedSig = '', lastLbSig = '';
 
 function render(s){
-  const sig = JSON.stringify(s);
-  if (sig === lastSig) return; // skip redundant re-renders (kills the feed flicker when idle)
-  lastSig = sig;
+  renderPrice(s); // live ETH stream — always moving, real Pyth
   $('asset').textContent = s.asset || 'ETH';
   const st = $('status'); st.className = 'chip status ' + (s.status||'');
   $('statusText').textContent = s.status || '—';
@@ -229,13 +246,30 @@ function renderOU(r){
   }
 }
 
+function renderPrice(s){
+  const px = s.livePrice;
+  $('livePx').textContent = px!=null ? '$'+px.toFixed(2) : '—';
+  const series = s.priceSeries || [];
+  if (series.length < 2){ $('spark').innerHTML=''; return; }
+  const min=Math.min(...series), max=Math.max(...series), range=(max-min)||1;
+  const W=600,H=46,pad=5;
+  const pts = series.map((v,i)=>{const x=(i/(series.length-1))*W; const y=H-pad-((v-min)/range)*(H-2*pad); return x.toFixed(1)+','+y.toFixed(1);}).join(' ');
+  const up = series[series.length-1] >= series[0];
+  const col = up ? 'var(--lime)' : 'var(--over)';
+  $('spark').innerHTML = `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  const d = series[series.length-1]-series[0];
+  const de=$('pxDelta'); de.textContent=(d>=0?'▲ +':'▼ ')+d.toFixed(2); de.style.color=col;
+}
+
 function renderLeaderboard(lb){
+  const sig = JSON.stringify(lb); if (sig===lastLbSig) return; lastLbSig=sig; // avoid flicker on price ticks
   const el = $('lb');
   if (!lb.length){ el.innerHTML = '<tr><td colspan="3" class="empty">no rounds yet</td></tr>'; return; }
   el.innerHTML = lb.map(r=>`<tr><td>${r.label}</td><td class="w">${r.wins}</td><td>${r.rounds}</td></tr>`).join('');
 }
 
 function renderFeed(feed){
+  const sig = JSON.stringify(feed); if (sig===lastFeedSig) return; lastFeedSig=sig; // avoid flicker on price ticks
   const el = $('feed');
   if (!feed.length){ el.innerHTML = '<div class="empty">waiting…</div>'; return; }
   el.innerHTML = feed.map(f=>{
