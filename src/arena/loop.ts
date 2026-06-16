@@ -139,20 +139,20 @@ async function playLocal(
   c: Extract<Competitor, { kind: 'local' }>,
   ctx: PlayCtx,
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
-  const hires: HireResult[] = [];
-  for (const capability of c.persona.capabilities) {
-    const service = getDataAgent(capability);
-    if (!service) {
-      console.warn(`[arena] ${c.id}: no data-agent for capability '${capability}' — skipping`);
-      continue;
-    }
-    try {
-      hires.push(await c.orchestrator.hireService(service, buildRequirements(capability)));
-    } catch (err) {
-      // A third-party provider may be offline despite "online" in the catalog — degrade, don't crash.
-      console.warn(`[arena] ${c.id}: hire '${capability}' (${service.label}) failed: ${(err as Error).message}`);
-    }
-  }
+  // Hire the persona's data-agents IN PARALLEL (sequential was ~60s each → ~2min/round).
+  const services = c.persona.capabilities.map((cap) => getDataAgent(cap)).filter((s): s is NonNullable<typeof s> => !!s);
+  const results = await Promise.all(
+    services.map(async (service) => {
+      try {
+        return await c.orchestrator.hireService(service, buildRequirements(service.capability));
+      } catch (err) {
+        // A third-party provider may be offline despite "online" — degrade, don't crash the round.
+        console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${(err as Error).message}`);
+        return null;
+      }
+    }),
+  );
+  const hires: HireResult[] = results.filter((h): h is HireResult => h !== null);
 
   const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
   const draft = await forecast(c.persona, ctx.spot, inputs, ctx.horizonSeconds);
