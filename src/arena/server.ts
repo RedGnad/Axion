@@ -32,6 +32,8 @@ interface RoundView {
   amplitude?: number;
   /** Live realized amplitude from Pyth during the betting window (the moving "current move"). */
   liveAmplitude?: number;
+  /** When the race (betting window) started — the client animates progress between this and settleAtMs. */
+  raceStartMs?: number;
   settleAtMs?: number;
   competitors: CompetitorView[];
 }
@@ -155,6 +157,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         state.round.phase = 'betting';
         state.round.line = line;
         state.round.settleAtMs = settleAtMs;
+        state.round.raceStartMs = Date.now();
         state.round.liveAmplitude = 0;
         pushFeed(`Line set at $${line.toFixed(2)} — over/under open; move building live…`);
         broadcast();

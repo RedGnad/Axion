@@ -73,15 +73,17 @@
   .track{position:relative; margin:22px 0 6px; padding:6px 44px 6px 0}
   .lane{position:relative; height:46px; margin:10px 0; border-bottom:1px dashed rgba(255,255,255,.06)}
   .lane .name{position:absolute; left:0; top:2px; font-family:var(--disp); font-size:12px; letter-spacing:1px; color:var(--dim); text-transform:uppercase; z-index:2}
-  .kart{position:absolute; left:4%; top:14px; transition:left .9s linear; display:flex; flex-direction:column; align-items:center; gap:2px; z-index:3}
-  .kart .car{font-size:22px; filter:drop-shadow(0 0 6px rgba(182,255,58,.5))}
+  .kart{position:absolute; left:4%; top:14px; display:flex; flex-direction:column; align-items:center; gap:2px; z-index:3; will-change:left}
+  .kart .car{font-size:22px; filter:drop-shadow(0 0 6px rgba(182,255,58,.45))}
   .kart .est{font-size:10px; color:var(--ink); white-space:nowrap}
-  .kart.win .car{animation:bob .5s infinite alternate; filter:drop-shadow(0 0 10px var(--gold))}
+  .kart.grid .car{animation:idle 1.6s ease-in-out infinite}
+  .kart.grid .est{color:var(--dim)}
+  @keyframes idle{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+  .kart.ready .car{filter:drop-shadow(0 0 9px var(--under))}
+  .kart.lead .car{filter:drop-shadow(0 0 9px var(--lime))}
+  .kart.win .car{animation:bob .5s infinite alternate; filter:drop-shadow(0 0 12px var(--gold))}
   .kart.win .est{color:var(--gold)}
   @keyframes bob{to{transform:translateY(-4px)}}
-  .kart.warmup{animation:warmup 2.4s ease-in-out infinite}
-  .kart.warmup .est{color:var(--dim)}
-  @keyframes warmup{0%,100%{left:4%}50%{left:24%}}
   /* fixed finish line at the right = "guessed exactly right" */
   .finishline{position:absolute; right:36px; top:0; bottom:6px; width:3px; background:linear-gradient(var(--lime),var(--gold)); box-shadow:0 0 16px rgba(182,255,58,.6); z-index:1}
   .finishline .flbl{position:absolute; right:-34px; top:50%; transform:translateY(-50%) rotate(90deg); font-size:9px; letter-spacing:2px; color:var(--gold); text-transform:uppercase}
@@ -184,8 +186,10 @@ const $ = (id) => document.getElementById(id);
 const usd = (n) => n==null ? '—' : '$'+Number(n).toFixed(2);
 let countdownTimer = null;
 let lastFeedSig = '', lastLbSig = '';
+let latest = null; // latest server state; the race loop animates from this + the clock
 
 function render(s){
+  latest = s;
   renderPrice(s); // live ETH stream — always moving, real Pyth
   $('asset').textContent = s.asset || 'ETH';
   const st = $('status'); st.className = 'chip status ' + (s.status||'');
@@ -199,6 +203,7 @@ function render(s){
   $('lineV').textContent = r && r.line!=null ? usd(r.line) : '—';
   $('ampV').textContent = r && r.amplitude!=null ? usd(r.amplitude) : '—';
   $('phaseV').textContent = r ? ({open:'agents estimating',betting:'betting open',settled:'settled'}[r.phase]||r.phase) : '—';
+  $('axisMax').textContent = r ? ('real move '+usd(r.amplitude!=null?r.amplitude:(r.liveAmplitude!=null?r.liveAmplitude:0))) : '—';
 
   // countdown
   if (countdownTimer) { clearInterval(countdownTimer); countdownTimer=null; }
@@ -210,51 +215,72 @@ function render(s){
     tick(); countdownTimer = setInterval(tick, 250);
   } else { $('countV').textContent=''; }
 
-  renderTrack(r);
+  ensureLanes(r);
   renderOU(r);
   renderLeaderboard(s.leaderboard||[]);
   renderFeed(s.feed||[]);
 }
 
+// Build lanes/karts ONCE and keep their label/state in sync. Positions are NOT set here — the
+// rAF race loop drives them so motion is smooth (and decoupled from 2s server ticks).
 let trackKey = '';
-function renderTrack(r){
+function ensureLanes(r){
   const track = $('track');
-  if (!r || !r.competitors || !r.competitors.length){ track.innerHTML = '<div class="empty">no active round — hit “Run round”.</div>'; trackKey=''; return; }
-  // Build the lanes/karts ONCE; afterwards we only move them (smooth CSS transitions).
+  if (!r || !r.competitors || !r.competitors.length){ if(trackKey){track.innerHTML='<div class="empty">no active round — hit “Run round”.</div>';} trackKey=''; return; }
   const key = r.competitors.map(c=>c.id).join(',');
   if (trackKey !== key){
     track.innerHTML = r.competitors.map(c=>
       `<div class="lane"><span class="name">${c.label}</span>`+
-      `<div class="kart warmup" id="kart-${c.id}"><span class="car">🏎️</span><span class="est" id="est-${c.id}">scouting…</span></div></div>`
+      `<div class="kart grid" id="kart-${c.id}" style="left:4%"><span class="car">🏎️</span><span class="est" id="est-${c.id}">…</span></div></div>`
     ).join('') + `<div class="finishline"><span class="flbl">finish</span></div>`;
     trackKey = key;
   }
-  // The "truth" the karts race to match: the live realized move (Pyth) during betting, final at settle.
-  const truth = r.amplitude!=null ? r.amplitude : (r.liveAmplitude!=null ? r.liveAmplitude : 0);
-  const ests = r.competitors.map(c=>c.estimate).filter(v=>v!=null);
-  const scale = Math.max(3, truth, ...(ests.length?ests:[0])) * 1.15;
-  $('axisMax').textContent = 'real move '+usd(truth);
   for (const c of r.competitors){
     const kart = $('kart-'+c.id), estEl = $('est-'+c.id), car = kart && kart.querySelector('.car');
     if (!kart) continue;
     kart.title = c.rationale || '';
-    if (c.estimate==null){
-      kart.classList.add('warmup'); kart.classList.remove('win');
-      kart.style.removeProperty('left');
-      if (estEl) estEl.textContent = 'scouting…';
-      if (car) car.textContent = '🏎️';
-    } else {
-      // Closer the estimate is to the real move → further right (toward the finish).
-      const d = Math.abs(c.estimate - truth);
-      const posPct = Math.max(4, Math.min(94, 100*(1 - d/scale)));
-      kart.classList.remove('warmup');
-      kart.style.left = posPct + '%';
-      if (estEl) estEl.textContent = usd(c.estimate);
-      kart.classList.toggle('win', !!c.isWinner);
-      if (car) car.textContent = c.isWinner ? '🏆' : '🏎️';
-    }
+    const ready = c.estimate != null;
+    kart.classList.toggle('grid', !ready);     // on the start grid (idle) until its agent finishes
+    kart.classList.toggle('ready', ready && !c.isWinner);
+    kart.classList.toggle('win', !!c.isWinner);
+    if (estEl) estEl.textContent = ready ? usd(c.estimate) : '…';
+    if (car) car.textContent = c.isWinner ? '🏆' : '🏎️';
   }
 }
+
+// The race: progress = (time elapsed) × (relative standing). The current leader rides the pace line
+// (reaches the finish exactly at the timer end); others trail by how far their estimate is from the
+// live real move. Standings (and thus the lead) shift as the move unfolds → real overtakes.
+const RACE_LEFT = 4, RACE_RIGHT = 94;
+function raceTick(){
+  const r = latest && latest.round;
+  if (r && r.competitors && r.competitors.length){
+    const racing = (r.phase === 'betting' || r.phase === 'settled') && r.competitors.some(c=>c.estimate!=null);
+    if (racing){
+      const truth = r.amplitude!=null ? r.amplitude : (r.liveAmplitude||0);
+      const ests = r.competitors.map(c=>c.estimate).filter(v=>v!=null);
+      const scale = Math.max(3, truth, ...(ests.length?ests:[0])) * 1.15;
+      let maxQ = 0; const q = {};
+      for (const c of r.competitors){
+        const qi = c.estimate==null ? 0 : Math.max(0, 1 - Math.abs(c.estimate - truth)/scale);
+        q[c.id] = qi; if (qi > maxQ) maxQ = qi;
+      }
+      const timeFrac = r.phase==='settled' ? 1
+        : Math.max(0, Math.min(1, (Date.now() - (r.raceStartMs||0)) / ((r.settleAtMs - r.raceStartMs) || 60000)));
+      for (const c of r.competitors){
+        const kart = $('kart-'+c.id); if (!kart) continue;
+        const qn = maxQ>0 ? q[c.id]/maxQ : 0;
+        const left = RACE_LEFT + timeFrac * qn * (RACE_RIGHT - RACE_LEFT);
+        kart.style.left = left.toFixed(2) + '%';
+        kart.classList.toggle('lead', qn>=0.999 && r.phase==='betting');
+      }
+    } else {
+      for (const c of r.competitors){ const kart = $('kart-'+c.id); if (kart) kart.style.left = RACE_LEFT+'%'; }
+    }
+  }
+  requestAnimationFrame(raceTick);
+}
+requestAnimationFrame(raceTick);
 
 function renderOU(r){
   const over=$('ouOver'), under=$('ouUnder');
