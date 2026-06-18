@@ -37,6 +37,13 @@ interface RoundView {
   settleAtMs?: number;
   competitors: CompetitorView[];
 }
+interface HistoryEdge {
+  competitor: string;
+  label: string;
+  ours: boolean;
+  payTxHash: string;
+  clearTxHash: string;
+}
 interface HistoryItem {
   id: string;
   openPrice: number;
@@ -45,6 +52,9 @@ interface HistoryItem {
   line: number;
   winners: string[];
   settledAt: string;
+  /** Final standings + the on-chain A2A edges, so a fresh visit can replay a populated, verifiable round. */
+  competitors: CompetitorView[];
+  edges: HistoryEdge[];
 }
 interface FeedItem {
   ts: number;
@@ -120,15 +130,38 @@ function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Rec
   state.leaderboard.sort((a, b) => a.avgError - b.avgError || b.wins - a.wins);
 }
 
+const SEED_FILE = process.env.ARENA_SEED_FILE ?? 'arena-seed.json';
+
 function loadHistory(): void {
-  if (existsSync(HISTORY_FILE)) {
+  // Runtime history first (this instance's rounds); else the committed seed so a FRESH deploy still
+  // shows a populated, verifiable world (real past rounds + on-chain tx) — never a dead arena.
+  const file = existsSync(HISTORY_FILE) ? HISTORY_FILE : existsSync(SEED_FILE) ? SEED_FILE : null;
+  if (file) {
     try {
-      const data = JSON.parse(readFileSync(HISTORY_FILE, 'utf8')) as { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] };
+      const data = JSON.parse(readFileSync(file, 'utf8')) as { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] };
       state.history = data.history ?? [];
       state.leaderboard = data.leaderboard ?? [];
     } catch {
       /* ignore corrupt history */
     }
+  }
+  // Replay the last settled round so the track + feed are populated on every visit (not "no rounds yet").
+  const last = state.history[0];
+  if (last) {
+    state.round = {
+      id: last.id,
+      phase: 'settled',
+      openPrice: last.openPrice,
+      closePrice: last.closePrice,
+      amplitude: last.amplitude,
+      line: last.line,
+      settleAtMs: Date.parse(last.settledAt) || Date.now(),
+      competitors: last.competitors ?? [],
+    };
+    for (const e of (last.edges ?? []).slice().reverse()) {
+      pushFeed(`${e.label} hired — round settled`, BASESCAN + e.payTxHash);
+    }
+    pushFeed(`Last round: amplitude $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)} — winner(s): ${last.winners.map((w) => personaMeta(w).label).join(', ')}`);
   }
 }
 
@@ -181,7 +214,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         state.round.liveAmplitude = liveAmplitude;
         broadcast();
       },
-      onSettled: ({ round, line }) => {
+      onSettled: ({ round, line, edges }) => {
         const o = round.outcome!;
         if (state.round) {
           state.round.phase = 'settled';
@@ -201,6 +234,15 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           line,
           winners: o.winners,
           settledAt: o.settledAt,
+          competitors: round.forecasts.map((f) => ({
+            id: f.competitor,
+            ...personaMeta(f.competitor),
+            estimate: f.prediction,
+            rationale: f.rationale,
+            error: o.errors[f.competitor],
+            isWinner: o.winners.includes(f.competitor),
+          })),
+          edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash })),
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
