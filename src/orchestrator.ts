@@ -1,4 +1,4 @@
-import { AgentClient, EventType } from '@croo-network/sdk';
+import { AgentClient } from '@croo-network/sdk';
 import { EventBus } from './events.js';
 import { pickForCapability, getRoster, type RosterEntry } from './roster.js';
 
@@ -49,23 +49,15 @@ export class Orchestrator {
     const negotiationId = neg.negotiationId;
     console.log(`[axion] negotiated ${subtask.capability} -> ${service.label} (neg ${negotiationId})`);
 
-    const created = await this.bus.wait(
-      (e) => e.type === EventType.OrderCreated && e.negotiation_id === negotiationId,
-      CREATE_TIMEOUT_MS,
-      `OrderCreated(${subtask.capability})`,
-    );
-    const orderId = created.order_id;
-    if (!orderId) throw new Error(`OrderCreated had no order_id for ${subtask.capability}`);
+    // POLL for the order instead of relying on the OrderCreated WS event (CROO WS event delivery is
+    // unreliable — the order is created on-chain but the event often never arrives). Robust path.
+    const orderId = await this.waitForOrder(negotiationId, CREATE_TIMEOUT_MS, subtask.capability);
 
-    // Escrow LOCK. Throws InsufficientBalanceError if Axion's AA wallet lacks order.price USDC.
+    // Escrow LOCK. Throws InsufficientBalanceError if the AA wallet lacks order.price USDC.
     const pay = await this.client.payOrder(orderId);
     console.log(`[axion] paid order ${orderId} (tx ${pay.txHash})`);
 
-    await this.bus.wait(
-      (e) => e.type === EventType.OrderCompleted && e.order_id === orderId,
-      COMPLETE_TIMEOUT_MS,
-      `OrderCompleted(${subtask.capability})`,
-    );
+    await this.waitForCompletion(orderId, COMPLETE_TIMEOUT_MS, subtask.capability);
 
     const [delivery, order] = await Promise.all([
       this.client.getDelivery(orderId),
@@ -81,6 +73,42 @@ export class Orchestrator {
       // Many agents deliver structured data in deliverableSchema (type=schema), not text.
       deliverable: delivery.deliverableText || delivery.deliverableSchema || '',
     };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /** Poll for the order created from a negotiation (WS OrderCreated events are unreliable). */
+  private async waitForOrder(negotiationId: string, timeoutMs: number, label: string): Promise<string> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        const orders = await this.client.listOrders({ role: 'buyer', page: 1, pageSize: 25 });
+        const o = orders.find((x) => x.negotiationId === negotiationId);
+        if (o) {
+          if (o.status === 'create_failed') throw new Error(`order create_failed (${label})`);
+          if (o.orderId && o.status !== 'creating') return o.orderId;
+        }
+      } catch (err) {
+        if ((err as Error).message.includes('create_failed')) throw err; // terminal; otherwise retry
+      }
+      await this.sleep(2500);
+    }
+    throw new Error(`timed out waiting for order creation (${label}) after ${timeoutMs}ms`);
+  }
+
+  /** Poll an order until it CLEARs (WS OrderCompleted events are unreliable). */
+  private async waitForCompletion(orderId: string, timeoutMs: number, label: string): Promise<void> {
+    const terminal = ['rejected', 'expired', 'create_failed', 'pay_failed', 'deliver_failed'];
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const o = await this.client.getOrder(orderId);
+      if (o.status === 'completed') return;
+      if (terminal.includes(o.status)) throw new Error(`order ${orderId} ended '${o.status}' (${label})`);
+      await this.sleep(2500);
+    }
+    throw new Error(`timed out waiting for completion (${label}) after ${timeoutMs}ms`);
   }
 
   /** Run a full goal -> composed deliverable as a 2-stage DAG. */
