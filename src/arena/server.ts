@@ -59,7 +59,7 @@ interface ArenaState {
   priceSeries: number[];
   round?: RoundView;
   history: HistoryItem[];
-  leaderboard: { id: string; label: string; wins: number; rounds: number }[];
+  leaderboard: { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }[];
   feed: FeedItem[];
 }
 
@@ -103,17 +103,20 @@ function broadcast(): void {
   for (const res of clients) res.write(payload);
 }
 
-function bumpLeaderboard(competitorIds: string[], winners: string[]): void {
+function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Record<string, number>): void {
   for (const id of competitorIds) {
     let row = state.leaderboard.find((r) => r.id === id);
     if (!row) {
-      row = { id, label: personaMeta(id).label, wins: 0, rounds: 0 };
+      row = { id, label: personaMeta(id).label, wins: 0, rounds: 0, sumError: 0, avgError: 0 };
       state.leaderboard.push(row);
     }
     row.rounds += 1;
     if (winners.includes(id)) row.wins += 1;
+    row.sumError = (row.sumError || 0) + Number(errors[id] ?? 0);
+    row.avgError = row.sumError / row.rounds;
   }
-  state.leaderboard.sort((a, b) => b.wins - a.wins || a.rounds - b.rounds);
+  // Rank by ACCURACY (lowest average error) — rewards genuine calibration, not a constant bias.
+  state.leaderboard.sort((a, b) => a.avgError - b.avgError || b.wins - a.wins);
 }
 
 function loadHistory(): void {
@@ -200,7 +203,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
-        bumpLeaderboard(round.forecasts.map((f) => f.competitor), o.winners);
+        bumpLeaderboard(round.forecasts.map((f) => f.competitor), o.winners, o.errors);
         const side = o.actual > line ? 'over' : o.actual < line ? 'under' : 'push';
         pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner(s): ${o.winners.map((w) => personaMeta(w).label).join(', ')}`);
         saveHistory();

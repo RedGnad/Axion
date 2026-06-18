@@ -35,7 +35,7 @@ export const PERSONALITIES: Personality[] = [
     label: 'Slicer',
     blurb: 'Momentum hunter. Buys smart-money flow + market sentiment, rides the trend.',
     capabilities: ['smart-money', 'sentiment'],
-    volMultiplier: 1.7,
+    volMultiplier: 1.3,
     systemPrompt:
       'You are Slicer, a momentum trader who smells action: crowded smart-money and greedy/fearful ' +
       'sentiment precede BIG moves. You are the HIGH-volatility competitor — you expect the next ' +
@@ -48,7 +48,7 @@ export const PERSONALITIES: Personality[] = [
     label: 'Tanker',
     blurb: 'Contrarian value bear. Buys valuation + DCA signal, fades froth.',
     capabilities: ['valuation', 'dca-signal'],
-    volMultiplier: 0.6,
+    volMultiplier: 0.8,
     systemPrompt:
       'You are Tanker, a calm value bear: most minutes are quiet and the tape reverts. You are the ' +
       'LOW-volatility competitor — you expect the next move to be SMALLER than the recent norm, so ' +

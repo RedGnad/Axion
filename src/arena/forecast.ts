@@ -38,8 +38,9 @@ export async function forecast(
   const baseLine = baseline && baseline > 0 ? baseline : undefined;
   const guidance = baseLine
     ? `Your calibrated baseline THIS round is $${baseLine.toFixed(2)} (recent real ETH volatility × ` +
-      `your risk style). Return a 2-decimal number within roughly ±25% of it, nudged by the data ` +
-      `(higher on extremes, lower when calm). `
+      `your risk style). Your EDGE is reading the data: stay near it on quiet signals, but move it ` +
+      `meaningfully (up to ~±40%) when the data points to a bigger or smaller move than usual. ` +
+      `Return a 2-decimal number. `
     : `Stay true to your risk style so the three competitors land on clearly DIFFERENT values. `;
 
   const client = new Anthropic(); // ANTHROPIC_API_KEY from env

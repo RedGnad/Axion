@@ -170,8 +170,8 @@
 
     <div>
       <div class="panel">
-        <h2>Leaderboard</h2>
-        <table><thead><tr><th>Agent</th><th>Wins</th><th>Rounds</th></tr></thead><tbody id="lb"><tr><td colspan="3" class="empty">no rounds yet</td></tr></tbody></table>
+        <h2>Leaderboard · ranked by accuracy</h2>
+        <table><thead><tr><th>Agent</th><th>Avg err</th><th>Wins</th><th>Rds</th></tr></thead><tbody id="lb"><tr><td colspan="4" class="empty">no rounds yet</td></tr></tbody></table>
       </div>
       <div class="panel" style="margin-top:18px">
         <h2>On-chain feed</h2>
@@ -323,8 +323,8 @@ function renderPrice(s){
 function renderLeaderboard(lb){
   const sig = JSON.stringify(lb); if (sig===lastLbSig) return; lastLbSig=sig; // avoid flicker on price ticks
   const el = $('lb');
-  if (!lb.length){ el.innerHTML = '<tr><td colspan="3" class="empty">no rounds yet</td></tr>'; return; }
-  el.innerHTML = lb.map(r=>`<tr><td>${r.label}</td><td class="w">${r.wins}</td><td>${r.rounds}</td></tr>`).join('');
+  if (!lb.length){ el.innerHTML = '<tr><td colspan="4" class="empty">no rounds yet</td></tr>'; return; }
+  el.innerHTML = lb.map((r,i)=>`<tr><td>${i===0?'★ ':''}${r.label}</td><td class="w">${r.avgError!=null?'$'+r.avgError.toFixed(2):'—'}</td><td>${r.wins}</td><td>${r.rounds}</td></tr>`).join('');
 }
 
 function renderFeed(feed){
