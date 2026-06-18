@@ -4,6 +4,7 @@ import { AgentClient, EventType, DeliverableType, type Event } from '@croo-netwo
 import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, type Competitor } from './loop.js';
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
+import { loadState, saveState, storeEnabled } from './store.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -133,17 +134,24 @@ function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Rec
 
 const SEED_FILE = process.env.ARENA_SEED_FILE ?? 'arena-seed.json';
 
-function loadHistory(): void {
-  // Runtime history first (this instance's rounds); else the committed seed so a FRESH deploy still
-  // shows a populated, verifiable world (real past rounds + on-chain tx) — never a dead arena.
-  const file = existsSync(HISTORY_FILE) ? HISTORY_FILE : existsSync(SEED_FILE) ? SEED_FILE : null;
-  if (file) {
-    try {
-      const data = JSON.parse(readFileSync(file, 'utf8')) as { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] };
-      state.history = data.history ?? [];
-      state.leaderboard = data.leaderboard ?? [];
-    } catch {
-      /* ignore corrupt history */
+async function loadHistory(): Promise<void> {
+  // Durable Upstash store first (survives restarts, free); else runtime file; else committed seed so
+  // a FRESH deploy still shows a populated, verifiable world (real past rounds) — never a dead arena.
+  const fromStore = await loadState<{ history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] }>();
+  if (fromStore) {
+    state.history = fromStore.history ?? [];
+    state.leaderboard = fromStore.leaderboard ?? [];
+    console.log(`[arena-server] loaded durable state (Upstash): ${state.history.length} rounds`);
+  } else {
+    const file = existsSync(HISTORY_FILE) ? HISTORY_FILE : existsSync(SEED_FILE) ? SEED_FILE : null;
+    if (file) {
+      try {
+        const data = JSON.parse(readFileSync(file, 'utf8')) as { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] };
+        state.history = data.history ?? [];
+        state.leaderboard = data.leaderboard ?? [];
+      } catch {
+        /* ignore corrupt history */
+      }
     }
   }
   // Replay the last settled round so the track + feed are populated on every visit (not "no rounds yet").
@@ -167,11 +175,13 @@ function loadHistory(): void {
 }
 
 function saveHistory(): void {
+  const blob = { history: state.history, leaderboard: state.leaderboard };
   try {
-    writeFileSync(HISTORY_FILE, JSON.stringify({ history: state.history, leaderboard: state.leaderboard }, null, 2));
+    writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
   } catch {
     /* best-effort persistence */
   }
+  void saveState(blob); // durable (Upstash) — survives Render restarts
 }
 
 /** Keep Axion live & hireable from the SAME service (no extra Render instance, no USDC). WS connection
@@ -292,7 +302,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
 }
 
 async function main(): Promise<void> {
-  loadHistory();
+  await loadHistory();
+  console.log(`[arena-server] durable store: ${storeEnabled() ? 'Upstash (on)' : 'off (seed/file fallback)'}`);
 
   const cfg = {
     baseURL: process.env.CROO_API_URL ?? '',
@@ -396,6 +407,15 @@ async function main(): Promise<void> {
   }).listen(PORT, () => console.log(`[arena-server] http://localhost:${PORT}  (status: ${state.status})`));
 
   if (process.env.ARENA_AUTORUN === '1') void runOneRound(cfg);
+
+  // Sparse-but-sustained cadence: one real round every ARENA_AUTO_ROUND_MS (off unless set). Lets a
+  // real, diverse A2A order graph accumulate over the window WITHOUT 24/7 burn — you pick the budget
+  // (e.g. 86400000 = 1/day ≈ 0.6 USDC/day). Skips if a round is already running or no competitors.
+  const autoMs = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0');
+  if (autoMs >= 60_000 && competitors.length) {
+    console.log(`[arena-server] sparse cadence: one round every ${Math.round(autoMs / 60000)}min`);
+    setInterval(() => { if (!running) void runOneRound(cfg); }, autoMs);
+  }
 }
 
 main().catch((err) => {
