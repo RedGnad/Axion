@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { AgentClient, EventType, DeliverableType, type Event } from '@croo-network/sdk';
 import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, type Competitor } from './loop.js';
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
@@ -173,6 +174,33 @@ function saveHistory(): void {
   }
 }
 
+/** Keep Axion live & hireable from the SAME service (no extra Render instance, no USDC). WS connection
+ *  = "online" in the store; accept/deliver via POLLING (CROO WS events are unreliable). On hire it
+ *  delivers a real arena brief (no sub-hires). Needs CROO_SDK_KEY + AXION_SERVICE_ID in env. */
+async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Promise<void> {
+  const key = process.env.CROO_SDK_KEY;
+  const serviceId = process.env.AXION_SERVICE_ID;
+  if (!key || !serviceId) return;
+  const client = new AgentClient({ baseURL: cfg.baseURL, wsURL: cfg.wsURL }, key);
+  try { await client.connectWebSocket(); } catch { /* WS just keeps "online" status */ }
+  console.log(`[axion] provider online (arena brief) on service ${serviceId}`);
+  const brief = (): string => {
+    const last = state.history[0];
+    return `Axion Arena live brief — ETH/USD $${(state.livePrice ?? 0).toFixed(2)}.` +
+      (last ? ` Last round: realized move $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)}, winner ${last.winners.join(', ')}.` : '') +
+      ` Top agent: ${state.leaderboard[0]?.label ?? 'n/a'}. Live: https://axion-arena.onrender.com`;
+  };
+  const tick = async (): Promise<void> => {
+    try {
+      const negs = await client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 20 });
+      for (const n of negs) if (n.serviceId === serviceId) { try { await client.acceptNegotiation(n.negotiationId); console.log(`[axion] accepted hire ${n.negotiationId}`); } catch { /* retry next tick */ } }
+      const orders = await client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 20 });
+      for (const o of orders) if (o.serviceId === serviceId) { try { await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: brief() }); console.log(`[axion] delivered brief ${o.orderId}`); } catch { /* retry next tick */ } }
+    } catch { /* transient */ }
+  };
+  setInterval(() => void tick(), 6000);
+}
+
 async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }): Promise<void> {
   if (running || competitors.length === 0) return;
   running = true;
@@ -266,6 +294,12 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
 async function main(): Promise<void> {
   loadHistory();
 
+  const cfg = {
+    baseURL: process.env.CROO_API_URL ?? '',
+    wsURL: process.env.CROO_WS_URL ?? '',
+    rpcURL: process.env.BASE_RPC_URL,
+  };
+
   // Always-on live ETH price stream (real Pyth, every 2s) → the screen is never static.
   setInterval(() => {
     void (async () => {
@@ -281,11 +315,9 @@ async function main(): Promise<void> {
     })();
   }, 2000);
 
-  const cfg = {
-    baseURL: process.env.CROO_API_URL ?? '',
-    wsURL: process.env.CROO_WS_URL ?? '',
-    rpcURL: process.env.BASE_RPC_URL,
-  };
+  // Keep Axion live & hireable from this same service (free; only runs if its env keys are set).
+  void startAxionProvider(cfg);
+
   // Try to wire live competitors; if none are configured, serve in view-only mode (history + UI).
   try {
     competitors = await loadCompetitors(cfg);
