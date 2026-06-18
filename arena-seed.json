@@ -1,0 +1,198 @@
+{
+  "history": [
+    {
+      "id": "round-1781787950300",
+      "openPrice": 1748.10847922,
+      "closePrice": 1748.1307519,
+      "amplitude": 0.02227268000001459,
+      "line": 0.68,
+      "winners": [
+        "tanker"
+      ],
+      "settledAt": "2026-06-18T13:09:09.000Z",
+      "competitors": [
+        {
+          "id": "slicer",
+          "label": "Slicer",
+          "blurb": "Momentum hunter. Buys smart-money flow + market sentiment, rides the trend.",
+          "estimate": 1.28,
+          "rationale": "Extreme fear (15) signals capitulation panic, smart-money accounts show mixed conviction with scattered ROIs, and the crowded long positioning screams reversal volatility—I'm pushing well above baseline expecting a violent 60-second flush-and-snap that breaks recent norms.",
+          "error": 1.2577273199999854,
+          "isWinner": false
+        },
+        {
+          "id": "tanker",
+          "label": "Tanker",
+          "blurb": "Contrarian value bear. Buys valuation + DCA signal, fades froth.",
+          "estimate": 0.38,
+          "rationale": "Crypto is in full capitulation mode with AHR999 at 0.3354 and extreme fear readings, but these macro valuation floors typically crush volatility *into* them rather than explode it outward—tape stays glued to support.",
+          "error": 0.3577273199999854,
+          "isWinner": true
+        },
+        {
+          "id": "wizord",
+          "label": "Wizord",
+          "blurb": "Microstructure quant. Buys live token price + gas, reads near-term flow.",
+          "estimate": 0.68,
+          "rationale": "Base ETH price 1750.08 vs spot 1748.11 shows +$1.97 drift, gas normal at 10.7 gwei signals routine activity, no flow stress detected—sitting just below baseline at 0.68 reflects quiet microstructure.",
+          "error": 0.6577273199999855,
+          "isWinner": false
+        }
+      ],
+      "edges": [
+        {
+          "competitor": "slicer",
+          "label": "top_traders (Binance smart-money)",
+          "ours": false,
+          "payTxHash": "0x8c49f758ae57f16d43d103f2fc9a2601de2686b75f24ef87e81687d2c934484d",
+          "clearTxHash": "0x195eaeceeaf0601b236d696f7de9a163e3371df6dac7f2e0d8100195abb6b1c3"
+        },
+        {
+          "competitor": "slicer",
+          "label": "Bitcoin Fear & Greed Index",
+          "ours": false,
+          "payTxHash": "0xa7a87e553246aaf32ee0793fddd14107bc9ee550aeaf7b3d769929e8e2b8e227",
+          "clearTxHash": "0x22be0fc5d455ea01a8a9402a18b1331515bc30f1d28c875c69b3eec0798f11b6"
+        },
+        {
+          "competitor": "tanker",
+          "label": "Bitcoin AHR999 Indicator",
+          "ours": false,
+          "payTxHash": "0xcb09f5c7ade2077c3b232b5f1d7d68424ed0f31bdb98635c8bc83028d20a268b",
+          "clearTxHash": "0x080308edbe1a9be3e49e9b6225aeedcb40441e123ffb727506b829e83dabdd2b"
+        },
+        {
+          "competitor": "tanker",
+          "label": "Bitcoin DCA Signal",
+          "ours": false,
+          "payTxHash": "0xbe0aa5dc91af8a146756a125682f8f8dd72e71c6e412ec23bbcda54b66c17217",
+          "clearTxHash": "0x754973e047f9b70b0850089c9957bec93757810722d0caf55e7fa105a576d223"
+        },
+        {
+          "competitor": "wizord",
+          "label": "Token Price",
+          "ours": false,
+          "payTxHash": "0xbaa04550fe6c96900abef92deb48eb4442ead1ad4631db45a3ee3af6d9691aeb",
+          "clearTxHash": "0xa1311af3678cb0f7a1ed221b47efaa1d322abad1b3b17b7881c231c76b0d19f9"
+        },
+        {
+          "competitor": "wizord",
+          "label": "Gas Tracker",
+          "ours": false,
+          "payTxHash": "0x35433e1f90e4b8c6facc7b357bf6631c0057eb9682c60788edee390262545b2a",
+          "clearTxHash": "0x6c1610a2d387e353aeea35a817ff31048d58d24f9ff81e6b44c174a888064ca9"
+        }
+      ]
+    },
+    {
+      "id": "round-1781787674526",
+      "openPrice": 1748.24602147,
+      "closePrice": 1746.74902074,
+      "amplitude": 1.4970007299998542,
+      "line": 0.14,
+      "winners": [
+        "slicer"
+      ],
+      "settledAt": "2026-06-18T13:04:40.000Z",
+      "competitors": [
+        {
+          "id": "slicer",
+          "label": "Slicer",
+          "blurb": "Momentum hunter. Buys smart-money flow + market sentiment, rides the trend.",
+          "estimate": 0.28,
+          "rationale": "Extreme fear (15) + top traders showing mixed conviction (high ROI outliers but modest AUM concentration) = powder-keg setup where smart money capitulates into panic lows, triggering violent mean-reversion snapback; I'm sizing UP ~85% from baseline on the fear extreme and crowded sentiment inversion.",
+          "error": 1.2170007299998542,
+          "isWinner": true
+        },
+        {
+          "id": "tanker",
+          "label": "Tanker",
+          "blurb": "Contrarian value bear. Buys valuation + DCA signal, fades froth.",
+          "estimate": 0.08,
+          "rationale": "Bitcoin's screaming buy signals and extreme fear readings suggest capitulation pressure on spot, but ETH typically lags BTC panic by 30-45 seconds and these macro indicators move slowly, so I'm shaving the baseline slightly downward—quiet tape wins until the actual liquidation cascade arrives.",
+          "error": 1.4170007299998542,
+          "isWinner": false
+        },
+        {
+          "id": "wizord",
+          "label": "Wizord",
+          "blurb": "Microstructure quant. Buys live token price + gas, reads near-term flow.",
+          "estimate": 0.14,
+          "rationale": "Spot at 1748.25 vs Base price 1744.29 shows $3.96 arbitrage spread; normal gas at 0.011 gwei signals low urgency flows, baseline holds with modest +17% lift for cross-venue friction.",
+          "error": 1.357000729999854,
+          "isWinner": false
+        }
+      ],
+      "edges": [
+        {
+          "competitor": "slicer",
+          "label": "top_traders (Binance smart-money)",
+          "ours": false,
+          "payTxHash": "0x767ca458d0532719746b52560b2c0505a94b22ae72393c9676134abf192d3dd0",
+          "clearTxHash": "0xe415fe5d1e3c2a037954915e4386c56a87e3c19675ad42647e91d2104075843d"
+        },
+        {
+          "competitor": "slicer",
+          "label": "Bitcoin Fear & Greed Index",
+          "ours": false,
+          "payTxHash": "0xf58d8ac1d202f45e3f8fe5f4cd64225ae568d262a943986815dbc8d9ce7bcf8f",
+          "clearTxHash": "0xf53d192790b7682cb29fc16ff38f64075ba106564da36e27cede8e5ea534288f"
+        },
+        {
+          "competitor": "tanker",
+          "label": "Bitcoin AHR999 Indicator",
+          "ours": false,
+          "payTxHash": "0x0e1461a02b86de61a7f41b74dad5ad872cb8dd1ba3195e52b33c30c21d1fab71",
+          "clearTxHash": "0x67deed1101cbce2bb2a40dbd9001721b077745a8bcc1b3ff83d769c4ba64f580"
+        },
+        {
+          "competitor": "tanker",
+          "label": "Bitcoin DCA Signal",
+          "ours": false,
+          "payTxHash": "0xc644a693c6efaf5a202e19f93ecedebdb207f8f117bfb6cadb0b1402af2b6fcf",
+          "clearTxHash": "0x03d6579486f65506ebbb44b729b9741d569428737fc11774d4dea6bdbe236bb0"
+        },
+        {
+          "competitor": "wizord",
+          "label": "Token Price",
+          "ours": false,
+          "payTxHash": "0xa08444a67abd80ea7023f8eeedfe1e0a88c89f540c1cab987eeb1e5e8380f837",
+          "clearTxHash": "0x87f00597fb3270af945a8ee13717a4c5ba5af051cf1dd3d21e09b97c2c3b7d74"
+        },
+        {
+          "competitor": "wizord",
+          "label": "Gas Tracker",
+          "ours": false,
+          "payTxHash": "0xec6ff07cca6b7699ba61a4a262fb59c8defcec266e995d02e6db1b381413ce32",
+          "clearTxHash": "0xc72638d4b65314ea3d7ed4a4fe3389ccf4222c622b3bd6cab0f07a65df40b68f"
+        }
+      ]
+    }
+  ],
+  "leaderboard": [
+    {
+      "id": "tanker",
+      "label": "Tanker",
+      "wins": 1,
+      "rounds": 2,
+      "sumError": 1.7747280499998395,
+      "avgError": 0.8873640249999197
+    },
+    {
+      "id": "wizord",
+      "label": "Wizord",
+      "wins": 0,
+      "rounds": 2,
+      "sumError": 2.0147280499998397,
+      "avgError": 1.0073640249999198
+    },
+    {
+      "id": "slicer",
+      "label": "Slicer",
+      "wins": 1,
+      "rounds": 2,
+      "sumError": 2.4747280499998396,
+      "avgError": 1.2373640249999198
+    }
+  ]
+}
