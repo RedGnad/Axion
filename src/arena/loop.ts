@@ -66,10 +66,25 @@ export interface RoundHooks {
   onSettled?: (result: RoundResult) => void;
 }
 
-interface ClientCfg {
+export interface ClientCfg {
   baseURL: string;
   wsURL: string;
   rpcURL?: string;
+}
+
+/** Create the Arena's buyer orchestrator for hiring REMOTE (community) competitor services. */
+export async function createRemoteBuyer(cfg: ClientCfg): Promise<Orchestrator> {
+  const arenaKey = process.env.ARENA_SDK_KEY ?? process.env.CROO_SDK_KEY;
+  if (!arenaKey) throw new Error('no ARENA_SDK_KEY/CROO_SDK_KEY to hire remote competitors');
+  const clientCfg = { baseURL: cfg.baseURL, wsURL: cfg.wsURL, ...(cfg.rpcURL ? { rpcURL: cfg.rpcURL } : {}) };
+  const client = new AgentClient(clientCfg, arenaKey);
+  const ws = await client.connectWebSocket();
+  return new Orchestrator(client, new EventBus(ws));
+}
+
+/** Build a remote (community) competitor that the Arena hires each round. */
+export function makeRemoteCompetitor(orchestrator: Orchestrator, serviceId: string, label: string): Competitor {
+  return { kind: 'remote', id: label, label, serviceId, ours: false, orchestrator };
 }
 
 /** Env var holding a persona's SDK-Key, keyed by archetype (keys are issued per archetype). */

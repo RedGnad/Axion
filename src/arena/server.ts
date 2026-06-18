@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { loadCompetitors, runRound, type Competitor } from './loop.js';
+import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, type Competitor } from './loop.js';
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 
@@ -78,6 +78,7 @@ const clients = new Set<import('node:http').ServerResponse>();
 let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
 let running = false;
+let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 function personaMeta(id: string): { label: string; blurb: string } {
   return metaById.get(id) ?? { label: id, blurb: '' };
@@ -287,6 +288,33 @@ async function main(): Promise<void> {
       res.writeHead(running ? 409 : 202, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ started: !running, running }));
       if (!running) void runOneRound(cfg);
+      return;
+    }
+    if (req.method === 'POST' && url === '/api/competitor') {
+      const reply = (code: number, obj: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      if (process.env.ALLOW_AGENT_SUBMIT !== '1') return reply(403, { error: 'agent submission disabled (set ALLOW_AGENT_SUBMIT=1)' });
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 4000) req.destroy(); });
+      req.on('end', () => {
+        void (async () => {
+          try {
+            const { serviceId, label } = JSON.parse(body || '{}') as { serviceId?: string; label?: string };
+            if (!serviceId || !/^[0-9a-f-]{36}$/i.test(serviceId)) return reply(400, { error: 'valid serviceId (uuid) required' });
+            if (competitors.some((c) => c.kind === 'remote' && c.serviceId === serviceId)) return reply(409, { error: 'agent already in the arena' });
+            if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
+            let name = (label || `agent-${serviceId.slice(0, 4)}`).replace(/[^\w -]/g, '').slice(0, 24) || `agent-${serviceId.slice(0, 4)}`;
+            while (metaById.has(name)) name += '*';
+            competitors.push(makeRemoteCompetitor(remoteBuyer, serviceId, name));
+            metaById.set(name, { label: name, blurb: 'community agent' });
+            if (state.status === 'view-only') state.status = 'idle';
+            pushFeed(`New competitor joined the arena: ${name}`);
+            broadcast();
+            reply(202, { ok: true, name, racingNextRound: true });
+          } catch (e) {
+            reply(400, { error: (e as Error).message });
+          }
+        })();
+      });
       return;
     }
     res.writeHead(404);
