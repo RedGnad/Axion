@@ -59,9 +59,9 @@ export function settle(forecasts: Forecast[], actual: number, settledAt = new Da
 }
 
 /**
- * Pari-mutuel payout split: winners (bettors who backed the winning competitor) share the whole
- * pool pro-rata to their stake. Returns smallest-unit USDC amounts per bettor (floored), and the
- * dust left over from flooring (kept by the bookmaker, disclosed). Pure math — the actual payout
+ * Pari-mutuel payout split with a bookmaker RAKE (the real economic loop): the house keeps
+ * `rakeBps` (basis points) of the pool; winners share the rest pro-rata to their stake. The rake +
+ * flooring dust stay in the bookmaker's wallet = its revenue. Pure math — the actual on-chain payout
  * is a CAP order bookmaker->bettor in bookmaker.ts.
  */
 export interface Stake {
@@ -73,21 +73,24 @@ export interface Stake {
 export function payouts(
   stakes: Stake[],
   winner: string,
-): { payouts: Record<string, number>; pool: number; dust: number } {
+  rakeBps = 0,
+): { payouts: Record<string, number>; pool: number; rake: number; dust: number } {
   const pool = stakes.reduce((s, b) => s + b.amount, 0);
   const winners = stakes.filter((b) => b.backed === winner);
   const winningStake = winners.reduce((s, b) => s + b.amount, 0);
 
   const result: Record<string, number> = {};
   if (winningStake === 0) {
-    // No one backed the winner → nobody to pay; whole pool is undistributed.
-    return { payouts: result, pool, dust: pool };
+    // No one backed the winner → nobody to pay; no rake taken; whole pool undistributed.
+    return { payouts: result, pool, rake: 0, dust: pool };
   }
+  const rake = Math.floor((pool * rakeBps) / 10_000); // house cut → sustainability
+  const distributable = pool - rake;
   let paid = 0;
   for (const b of winners) {
-    const share = Math.floor((b.amount * pool) / winningStake);
+    const share = Math.floor((b.amount * distributable) / winningStake);
     result[b.bettor] = (result[b.bettor] ?? 0) + share;
     paid += share;
   }
-  return { payouts: result, pool, dust: pool - paid };
+  return { payouts: result, pool, rake, dust: distributable - paid };
 }

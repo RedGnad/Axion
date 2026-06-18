@@ -26,6 +26,8 @@ export interface BookmakerConfig {
   fundAddress: string;
   /** Shared buyer event bus on the bookmaker's WS (for the payout leg). */
   bus: EventBus;
+  /** House rake in basis points (e.g. 300 = 3%) kept from each pool → the real economic loop. */
+  rakeBps?: number;
 }
 
 export class Bookmaker {
@@ -105,24 +107,25 @@ export class Bookmaker {
     roundId: string,
     line: number,
     actualAmplitude: number,
-  ): Promise<{ side: string; paid: PayoutRecord[]; pool: number; dust: number }> {
+  ): Promise<{ side: string; paid: PayoutRecord[]; pool: number; rake: number; dust: number }> {
     const bets = this.betsFor(roundId);
     const side = volOutcome(actualAmplitude, line);
     const pool = bets.reduce((s, b) => s + b.amount, 0);
     const claimByBettor = new Map(bets.map((b) => [b.bettor, b.claimServiceId]));
     const paid: PayoutRecord[] = [];
 
-    // Push → refund every bettor their own stake.
+    // Push → refund every bettor their own stake (no rake on a void).
     if (side === 'push') {
       for (const b of bets) {
         const rec = await this.payWinner(b.claimServiceId, b.amount, roundId);
         paid.push({ bettor: b.bettor, amount: b.amount, orderId: rec.orderId, payTxHash: rec.payTxHash });
       }
-      return { side, paid, pool, dust: 0 };
+      return { side, paid, pool, rake: 0, dust: 0 };
     }
 
+    const rakeBps = this.cfg.rakeBps ?? 0;
     const stakes: Stake[] = bets.map((b) => ({ bettor: b.bettor, backed: b.backed, amount: b.amount }));
-    const { payouts: due, dust } = payouts(stakes, side);
+    const { payouts: due, rake, dust } = payouts(stakes, side, rakeBps);
     for (const [bettor, amount] of Object.entries(due)) {
       const claimServiceId = claimByBettor.get(bettor);
       if (!claimServiceId || amount <= 0) continue;
@@ -130,8 +133,9 @@ export class Bookmaker {
       paid.push({ bettor, amount, orderId: rec.orderId, payTxHash: rec.payTxHash });
       console.log(`[bookmaker] paid ${amount} to ${bettor} (order ${rec.orderId})`);
     }
-    console.log(`[bookmaker] round ${roundId} settled: amplitude ${actualAmplitude.toFixed(2)} vs line ${line.toFixed(2)} → '${side}'`);
-    return { side, paid, pool, dust };
+    // rake + dust stay in the bookmaker's wallet (it received all stakes, paid out only the shares).
+    console.log(`[bookmaker] round ${roundId} settled → '${side}' | pool ${pool} | rake ${rake} (${(rakeBps / 100).toFixed(1)}%) kept by house`);
+    return { side, paid, pool, rake, dust };
   }
 
   /** Pay one winner via a CAP fund-transfer order (bookmaker = requester). */

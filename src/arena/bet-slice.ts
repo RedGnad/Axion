@@ -93,6 +93,7 @@ async function main(): Promise<void> {
     serviceId: requireEnv('BOOKMAKER_SERVICE_ID'),
     fundAddress: requireEnv('BOOKMAKER_FUND_ADDRESS'),
     bus: bmBus,
+    rakeBps: Number(process.env.BOOKMAKER_RAKE_BPS ?? '300'), // 3% house rake — the real economic loop
   });
   bm.attach(bmWs);
 
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
   const amplitude = Number(process.env.BET_AMPLITUDE ?? '10');
   const result = await bm.settleRound(roundId, line, amplitude);
 
-  console.log(`\n===== bet settled: '${result.side}' won | pool ${result.pool} | dust ${result.dust} =====`);
+  console.log(`\n===== bet settled: '${result.side}' won | pool ${result.pool} | RAKE ${result.rake} (house revenue, kept on-chain) | dust ${result.dust} =====`);
   for (const p of result.paid) {
     console.log(`- payout ${p.amount} to ${p.bettor} | order ${p.orderId}`);
     console.log(`    pay https://basescan.org/tx/${p.payTxHash}`);
