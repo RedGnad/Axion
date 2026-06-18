@@ -106,6 +106,13 @@
   .ou .side small{display:block; color:var(--dim); font-size:10px; margin-top:3px}
   .ou .side.won{box-shadow:0 0 0 1px currentColor, 0 0 16px rgba(255,255,255,.12)}
   .ou .over.won{color:var(--over)} .ou .under.won{color:var(--under)}
+  .ou .side.live{cursor:pointer}
+  .ou .side.live:hover{border-color:var(--ink)}
+  .ou .side.picked{border-color:#fff; box-shadow:0 0 0 1px #fff inset}
+  .predict{font-size:11px; color:var(--dim); margin-top:8px}
+  .predict b{color:var(--ink)}
+  #record{color:var(--lime)}
+  .predict .ok{color:var(--lime)} .predict .ko{color:var(--over)}
 
   /* leaderboard */
   table{width:100%; border-collapse:collapse; font-size:12px}
@@ -161,10 +168,11 @@
         <div class="axis"><span>off the mark ⟵ closeness to the real move ⟶ exact (finish)</span><span id="axisMax">—</span></div>
 
         <div class="ou">
-          <div class="side over" id="ouOver"><div class="t">OVER</div><small>amplitude &gt; line</small></div>
-          <div class="side under" id="ouUnder"><div class="t">UNDER</div><small>amplitude &lt; line</small></div>
+          <div class="side over" id="ouOver"><div class="t">OVER</div><small>move &gt; line</small></div>
+          <div class="side under" id="ouUnder"><div class="t">UNDER</div><small>move &lt; line</small></div>
         </div>
-        <div class="note">Bets settle on-chain via the CAP bookmaker (pari-mutuel, over/under the line). The agents' estimates set the line; the outcome is the Pyth ETH/USD move — exogenous, nobody controls it.</div>
+        <div class="predict"><span id="predictMsg">Tap <b>OVER</b> / <b>UNDER</b> while betting is open to call it (free).</span> <span id="record"></span></div>
+        <div class="note">Free prediction in-browser. Real USDC betting settles on-chain via the CAP bookmaker (pari-mutuel, over/under the line) for agent wallets. The line is set by the agents' estimates; the outcome is the Pyth ETH/USD move — exogenous, nobody controls it.</div>
       </div>
     </div>
 
@@ -218,6 +226,7 @@ function render(s){
 
   ensureLanes(r);
   renderOU(r);
+  predictRender();
   renderLeaderboard(s.leaderboard||[]);
   renderFeed(s.feed||[]);
 }
@@ -304,6 +313,34 @@ function renderOU(r){
     else if (r.amplitude < r.line) under.classList.add('won');
   }
 }
+
+// Free in-browser prediction (no money; the real on-chain market is the CAP bookmaker).
+let myPick = null; // {roundId, side, resolved}
+function loadRecord(){ try{ return JSON.parse(localStorage.getItem('axion_predict')||'{"c":0,"t":0}'); }catch(e){ return {c:0,t:0}; } }
+function saveRecord(r){ try{ localStorage.setItem('axion_predict', JSON.stringify(r)); }catch(e){} }
+function showRecord(){ const r=loadRecord(); $('record').textContent = r.t ? `· your calls ${r.c}/${r.t} (${Math.round(100*r.c/r.t)}%)` : ''; }
+function pick(side){ const r=latest&&latest.round; if(!r||r.phase!=='betting')return; if(myPick&&myPick.roundId===r.id)return; myPick={roundId:r.id,side,resolved:false}; predictRender(); }
+$('ouOver').addEventListener('click', ()=>pick('over'));
+$('ouUnder').addEventListener('click', ()=>pick('under'));
+function predictRender(){
+  const r=latest&&latest.round, over=$('ouOver'), under=$('ouUnder'), msg=$('predictMsg');
+  over.classList.remove('live','picked'); under.classList.remove('live','picked');
+  if (r && r.phase==='betting'){ over.classList.add('live'); under.classList.add('live'); }
+  const mine = myPick && r && myPick.roundId===r.id;
+  if (mine){ (myPick.side==='over'?over:under).classList.add('picked'); }
+  // resolve at settle (once)
+  if (mine && r.phase==='settled' && !myPick.resolved && r.amplitude!=null && r.line!=null){
+    const actual = r.amplitude>r.line?'over':r.amplitude<r.line?'under':'push';
+    if (actual!=='push'){ const rec=loadRecord(); rec.t++; if(actual===myPick.side)rec.c++; saveRecord(rec); }
+    myPick.resolved=true; myPick.correct = actual===myPick.side; myPick.push = actual==='push';
+    showRecord();
+  }
+  if (mine && myPick.resolved){ msg.innerHTML = myPick.push?'Push — your call voided.':(myPick.correct?'<span class="ok">✓ you called it right!</span>':'<span class="ko">✗ wrong call.</span>'); }
+  else if (mine){ msg.innerHTML = `You called <b>${myPick.side.toUpperCase()}</b> — waiting for settle…`; }
+  else if (r && r.phase==='betting'){ msg.innerHTML = 'Betting open — tap <b>OVER</b> / <b>UNDER</b> to call it (free).'; }
+  else { msg.innerHTML = 'Tap <b>OVER</b> / <b>UNDER</b> while betting is open to call it (free).'; }
+}
+showRecord();
 
 function renderPrice(s){
   const px = s.livePrice;
