@@ -1,89 +1,68 @@
-import { AgentClient, EventType, DeliverableType, type Event, type EventStream } from '@croo-network/sdk';
+import { AgentClient, DeliverableType } from '@croo-network/sdk';
 import { EventBus } from '../events.js';
+import { Orchestrator } from '../orchestrator.js';
 import { payouts, volOutcome, type Stake } from './settle.js';
 import { USDC_BASE, type Bet, type BetRequest, type PayoutRecord } from './bet.js';
 
 /**
- * CAP-native bookmaker (mechanism #1, fund-transfer). Dual-role on one WebSocket:
- *  - PROVIDER of the bet service: accepts bet negotiations (declaring its fund address), records
- *    the staked fundAmount on pay, delivers a receipt.
- *  - REQUESTER at settlement: hires each winning bettor's claim service with fundAmount = winnings.
+ * CAP-native bookmaker (mechanism #1, fund-transfer). Dual-role:
+ *  - PROVIDER of the bet service: accepts bet negotiations (declaring its fund address), records the
+ *    staked fundAmount on pay, delivers a receipt.
+ *  - REQUESTER at settlement: hires each winning bettor's claim service with fundAmount = winnings,
+ *    keeping a house RAKE (the real economic loop).
  *
- * PROVEN ON-CHAIN 2026-06-15 via `npm run bet-slice` (mechanism #1, fund-transfer): a 0.05 USDC bet
- * staked to the bookmaker fund address and a 0.05 USDC payout to the winner's fund address both
- * settled on Base. #2 (direct AA transfer) / #3 (EOA) were not needed.
+ * All flows POLL (listNegotiations/listOrders) instead of WS events — CROO WS event delivery is
+ * unreliable (orders settle on-chain but events often never arrive). Proven on-chain via bet-slice.
  */
-
-const CREATE_TIMEOUT_MS = 60_000;
-const COMPLETE_TIMEOUT_MS = 180_000;
-
 export interface BookmakerConfig {
-  /** Bookmaker agent SDK client (its own funded AA wallet). */
   client: AgentClient;
-  /** The bookmaker's bet service id (require_fund_transfer=true). */
   serviceId: string;
   /** Address that receives staked USDC (the bookmaker's fund/AA address). */
   fundAddress: string;
-  /** Shared buyer event bus on the bookmaker's WS (for the payout leg). */
-  bus: EventBus;
-  /** House rake in basis points (e.g. 300 = 3%) kept from each pool → the real economic loop. */
+  /** Optional event bus (unused; hireService polls). Kept for back-compat. */
+  bus?: EventBus;
+  /** House rake in basis points (e.g. 300 = 3%) kept from each pool → sustainability. */
   rakeBps?: number;
 }
 
 export class Bookmaker {
-  /** roundId -> recorded paid bets. */
   private readonly book = new Map<string, Bet[]>();
+  private readonly recorded = new Set<string>(); // bet orderIds already booked
+  private readonly orch: Orchestrator;
 
-  constructor(private readonly cfg: BookmakerConfig) {}
+  constructor(private readonly cfg: BookmakerConfig) {
+    this.orch = new Orchestrator(cfg.client, cfg.bus);
+  }
 
-  /** Attach provider handlers to the bookmaker's WS: accept bets + record stakes. */
-  /** Attach provider handlers (accept bets + record stakes) to the bookmaker's SHARED WS.
-   *  One WS per SDK-Key is enforced by CROO, so the caller passes the same stream its EventBus uses. */
-  attach(ws: EventStream): void {
-    ws.on(EventType.NegotiationCreated, (e: Event) => {
-      void (async () => {
-        if (e.service_id !== this.cfg.serviceId || !e.negotiation_id) return; // only bets on us
-        try {
-          await this.cfg.client.acceptNegotiationWithFundAddress(e.negotiation_id, this.cfg.fundAddress);
-          console.log(`[bookmaker] accepted bet negotiation ${e.negotiation_id}`);
-        } catch (err) {
-          console.error('[bookmaker] accept failed:', (err as Error).message);
+  /** Start the provider: a live WS connection marks it "accepting orders" (CROO gates negotiation on
+   *  this), while a polling loop does the actual accept/record/deliver (WS events are unreliable). */
+  async start(): Promise<void> {
+    try { await this.cfg.client.connectWebSocket(); } catch { /* connection = "accepting"; events unused */ }
+    const tick = async (): Promise<void> => {
+      try {
+        const negs = await this.cfg.client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 25 });
+        for (const n of negs) {
+          if (n.serviceId !== this.cfg.serviceId) continue;
+          try { await this.cfg.client.acceptNegotiationWithFundAddress(n.negotiationId, this.cfg.fundAddress); console.log(`[bookmaker] accepted bet ${n.negotiationId}`); } catch { /* already accepted / retry */ }
         }
-      })();
-    });
-
-    ws.on(EventType.OrderPaid, (e: Event) => {
-      void (async () => {
-        if (!e.order_id) return;
-        const order = await this.cfg.client.getOrder(e.order_id);
-        if (order.serviceId !== this.cfg.serviceId) return; // ignore our own payout orders
-        try {
-          const neg = await this.cfg.client.getNegotiation(order.negotiationId);
-          const req = JSON.parse(neg.requirements ?? '{}') as Partial<BetRequest>;
-          if (!req.round_id || (req.side !== 'over' && req.side !== 'under') || !req.claim_service_id) {
-            throw new Error("bet requirements missing round_id / side('over'|'under') / claim_service_id");
-          }
-          const bet: Bet = {
-            bettor: order.requesterAgentId,
-            backed: req.side,
-            amount: Number(order.fundAmount ?? '0'),
-            claimServiceId: req.claim_service_id,
-            orderId: order.orderId,
-            payTxHash: order.payTxHash,
-          };
-          this.record(req.round_id, bet);
-          await this.cfg.client.deliverOrder(e.order_id, {
-            deliverableType: DeliverableType.Text,
-            deliverableText: JSON.stringify({ receipt: 'bet-accepted', round: req.round_id, side: req.side, amount: bet.amount }),
-          });
-          console.log(`[bookmaker] booked ${bet.amount} on '${bet.backed}' (round ${req.round_id}) from ${bet.bettor}`);
-        } catch (err) {
-          console.error('[bookmaker] record/deliver bet failed:', (err as Error).message);
+        const orders = await this.cfg.client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 25 });
+        for (const o of orders) {
+          if (o.serviceId !== this.cfg.serviceId || this.recorded.has(o.orderId)) continue;
+          try {
+            const neg = await this.cfg.client.getNegotiation(o.negotiationId);
+            const req = JSON.parse(neg.requirements ?? '{}') as Partial<BetRequest>;
+            if (!req.round_id || (req.side !== 'over' && req.side !== 'under') || !req.claim_service_id) throw new Error('bad bet requirements');
+            const bet: Bet = { bettor: o.requesterAgentId, backed: req.side, amount: Number(o.fundAmount ?? '0'), claimServiceId: req.claim_service_id, orderId: o.orderId, payTxHash: o.payTxHash };
+            this.record(req.round_id, bet);
+            this.recorded.add(o.orderId);
+            await this.cfg.client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ receipt: 'bet-accepted', round: req.round_id, side: req.side, amount: bet.amount }) });
+            console.log(`[bookmaker] booked ${bet.amount} on '${bet.backed}' (round ${req.round_id})`);
+          } catch (err) { console.error('[bookmaker] book/deliver failed:', (err as Error).message); }
         }
-      })();
-    });
-
-    console.log(`[bookmaker] live on service ${this.cfg.serviceId}, fund address ${this.cfg.fundAddress}`);
+      } catch { /* transient */ }
+    };
+    setInterval(() => void tick(), 4000);
+    console.log(`[bookmaker] live (polling) on service ${this.cfg.serviceId}, fund ${this.cfg.fundAddress}`);
   }
 
   private record(roundId: string, bet: Bet): void {
@@ -92,16 +71,13 @@ export class Bookmaker {
     this.book.set(roundId, list);
   }
 
-  /** Bets recorded for a round (empty if none). */
   betsFor(roundId: string): Bet[] {
     return this.book.get(roundId) ?? [];
   }
 
   /**
-   * Settle a round on the VOL OUTCOME: realized amplitude vs the agents' consensus `line`.
-   * Pari-mutuel split of the pool to bettors on the winning side, paid as CAP fund-transfer orders.
-   * On a 'push' (amplitude exactly == line, rare) every bettor is refunded their own stake.
-   * Returns executed payouts + leftover dust (kept by the bookmaker, disclosed).
+   * Settle on the VOL OUTCOME (realized amplitude vs the agents' consensus `line`). Pari-mutuel: the
+   * house keeps `rakeBps`, winners split the rest, paid as CAP fund-transfer orders. Push → refund.
    */
   async settleRound(
     roundId: string,
@@ -114,7 +90,6 @@ export class Bookmaker {
     const claimByBettor = new Map(bets.map((b) => [b.bettor, b.claimServiceId]));
     const paid: PayoutRecord[] = [];
 
-    // Push → refund every bettor their own stake (no rake on a void).
     if (side === 'push') {
       for (const b of bets) {
         const rec = await this.payWinner(b.claimServiceId, b.amount, roundId);
@@ -133,31 +108,18 @@ export class Bookmaker {
       paid.push({ bettor, amount, orderId: rec.orderId, payTxHash: rec.payTxHash });
       console.log(`[bookmaker] paid ${amount} to ${bettor} (order ${rec.orderId})`);
     }
-    // rake + dust stay in the bookmaker's wallet (it received all stakes, paid out only the shares).
-    console.log(`[bookmaker] round ${roundId} settled → '${side}' | pool ${pool} | rake ${rake} (${(rakeBps / 100).toFixed(1)}%) kept by house`);
+    // rake + dust stay in the bookmaker's wallet (received all stakes, paid out only the shares).
+    console.log(`[bookmaker] round ${roundId} → '${side}' | pool ${pool} | rake ${rake} (${(rakeBps / 100).toFixed(1)}%) kept by house`);
     return { side, paid, pool, rake, dust };
   }
 
-  /** Pay one winner via a CAP fund-transfer order (bookmaker = requester). */
+  /** Pay one winner via a CAP fund-transfer hire (polling under the hood). */
   private async payWinner(claimServiceId: string, amount: number, roundId: string): Promise<{ orderId: string; payTxHash: string }> {
-    const neg = await this.cfg.client.negotiateOrder({
-      serviceId: claimServiceId,
-      requirements: JSON.stringify({ payout: true, round_id: roundId }),
-      fundAmount: String(amount),
-      fundToken: USDC_BASE,
-    });
-    const created = await this.cfg.bus.wait(
-      (ev) => ev.type === EventType.OrderCreated && ev.negotiation_id === neg.negotiationId,
-      CREATE_TIMEOUT_MS,
-      'OrderCreated(payout)',
+    const hire = await this.orch.hireService(
+      { capability: 'claim', serviceId: claimServiceId, label: 'claim', ours: false },
+      JSON.stringify({ payout: true, round_id: roundId }),
+      { fundAmount: String(amount), fundToken: USDC_BASE },
     );
-    if (!created.order_id) throw new Error('payout OrderCreated had no order_id');
-    const pay = await this.cfg.client.payOrder(created.order_id);
-    await this.cfg.bus.wait(
-      (ev) => ev.type === EventType.OrderCompleted && ev.order_id === created.order_id,
-      COMPLETE_TIMEOUT_MS,
-      'OrderCompleted(payout)',
-    );
-    return { orderId: created.order_id, payTxHash: pay.txHash };
+    return { orderId: hire.orderId, payTxHash: hire.payTxHash };
   }
 }

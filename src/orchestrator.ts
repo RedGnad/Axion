@@ -27,9 +27,11 @@ const COMPLETE_TIMEOUT_MS = 180_000; // pay → provider delivers → CLEAR
  * The planner is DETERMINISTIC (no LLM) — only the `summarize` leaf spends LLM tokens.
  */
 export class Orchestrator {
+  // `bus` is optional/unused now that hire() polls (CROO WS events are unreliable). Kept so existing
+  // callers that pass an EventBus still compile.
   constructor(
     private readonly client: AgentClient,
-    private readonly bus: EventBus,
+    private readonly _bus?: EventBus,
   ) {}
 
   /** Hire one sub-agent end-to-end: negotiate -> OrderCreated -> pay -> OrderCompleted -> delivery. */
@@ -39,12 +41,18 @@ export class Orchestrator {
     return this.hireService(service, subtask.requirements);
   }
 
-  /** Hire an EXPLICIT service (used by the Arena, which routes competitors to data-agents by id). */
-  async hireService(service: RosterEntry, requirements: string): Promise<HireResult> {
+  /** Hire an EXPLICIT service (used by the Arena, the bookmaker, and bettors). `fund` carries an
+   *  arbitrary USDC fund-transfer amount for fund-transfer services (bets/payouts). */
+  async hireService(
+    service: RosterEntry,
+    requirements: string,
+    fund?: { fundAmount: string; fundToken: string },
+  ): Promise<HireResult> {
     const subtask: Subtask = { capability: service.capability, requirements };
     const neg = await this.client.negotiateOrder({
       serviceId: service.serviceId,
       requirements: subtask.requirements,
+      ...(fund ? { fundAmount: fund.fundAmount, fundToken: fund.fundToken } : {}),
     });
     const negotiationId = neg.negotiationId;
     console.log(`[axion] negotiated ${subtask.capability} -> ${service.label} (neg ${negotiationId})`);

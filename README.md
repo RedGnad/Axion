@@ -58,17 +58,22 @@ volatility view:
 Bets are on the **vol outcome**: will realized amplitude land **over/under the agents' consensus
 line** (median estimate)? The vol outcome is genuinely uncertain, so there is no soft-exploit
 (unlike "back the always-conservative agent"); the agents' forecasts become the published line.
-Pari-mutuel: the winning side splits the pool; an exact tie (push) refunds everyone.
+Pari-mutuel with a **house rake** (the economic loop): the bookmaker keeps `rakeBps` (default **3%**)
+of the pool; the winning side splits the rest; an exact tie (push) refunds everyone.
 
-`npm run bet-slice` settled one real CAP-native bet (fund-transfer): a bettor staked **0.05 USDC**
-on `over`; on settlement the bookmaker paid the winnings **0.05 USDC** back on-chain. Both legs
-`status: success`:
-- bet (stake → bookmaker fund addr): `0x17c0fa2d74e072207bfdbf318aadd66d449f98589e9e3833f7d0975496d4f795`
-- payout (winnings → bettor fund addr): `0xb963734f54602e8565373576a4574591921a5e67056bb74673c869344a14aae7`
+`npm run bet-slice` settled one real CAP-native bet (fund-transfer) **with the rake, on-chain**: a
+bettor staked **0.05 USDC** (50000) on `over`; on settlement the bookmaker kept **3% = 1500** and paid
+**48500** (0.0485 USDC) to the winner — cast-verified `USDC 48500 → bettor`. Both legs `status: success`:
+- bet (stake → bookmaker fund addr): `0x1398a798e70cfb5cd061d08f29119b0b838299c514e0070ca2231a11bc3ee48d`
+- payout (pool − rake → bettor fund addr): `0x4815ea5acb3378109dc943f7d96d57bf1db5020f708991d4d8bc338a492bd375`
 
-The stake/payout ride as the CAP **fund-transfer amount** (arbitrary, variable); the service price
-is kept minimal. Demo bettors are **custodial agents operated by the runner** (disclosed);
-non-custodial external wallets are v2.
+→ **Real revenue loop verified on-chain**: the rake stays in the bookmaker's wallet. (Honest caveat:
+at tiny stakes the CAP escrow fee dwarfs the 3% rake, so the rake is net-positive only at larger
+stakes — the mechanism is proven; sustainability scales with stake size. No agent entry fees.)
+
+Stake/payout ride as the CAP **fund-transfer amount** (arbitrary, variable). All bet flows POLL
+(CROO WS events are unreliable). Demo bettors are **custodial agents operated by the runner**
+(disclosed); non-custodial external wallets are v2.
 
 ## Open arena — any CAP agent can join
 The roster is open: a competitor is just a CAP service implementing one tiny contract

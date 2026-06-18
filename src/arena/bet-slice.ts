@@ -1,15 +1,15 @@
-import { AgentClient, EventType, DeliverableType, type Event, type EventStream } from '@croo-network/sdk';
-import { EventBus } from '../events.js';
+import { AgentClient, DeliverableType } from '@croo-network/sdk';
+import { Orchestrator } from '../orchestrator.js';
 import { Bookmaker } from './bookmaker.js';
 import { USDC_BASE, type BetRequest } from './bet.js';
 
 /**
- * Jalon 2 proof: one real CAP-native bet + payout on Base (fund-transfer mechanism #1).
+ * Proof: one real CAP-native bet + payout on Base with a house RAKE (the economic loop).
  *
- * Flow: the bettor (requester) hires the bookmaker's fund-transfer service with fundAmount = stake
- * (USDC moves to the bookmaker's fund address). We then settle the vol bet against a line and have
- * the bookmaker pay the winning side by hiring the bettor's claim service with fundAmount = winnings.
- * Both legs are real on-chain orders. Spends real (tiny) USDC.
+ * Bettor (requester) hires the bookmaker's fund-transfer service with fundAmount = stake (USDC → the
+ * bookmaker fund address). On settlement the bookmaker keeps the rake and pays the winning side by
+ * hiring the bettor's claim service with fundAmount = winnings. Both legs are real on-chain orders;
+ * the rake stays in the bookmaker's wallet = verifiable revenue. ALL flows POLL (CROO WS unreliable).
  */
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -17,120 +17,71 @@ function requireEnv(name: string): string {
   return v;
 }
 
-const CREATE_TIMEOUT_MS = 60_000;
-const COMPLETE_TIMEOUT_MS = 180_000;
-
-/** Provider runtime for the bettor's claim service: accept payout (with fund address) + deliver. */
-function attachClaimProvider(client: AgentClient, ws: EventStream, claimServiceId: string, fundAddress: string): void {
-  ws.on(EventType.NegotiationCreated, (e: Event) => {
-    void (async () => {
-      if (e.service_id !== claimServiceId || !e.negotiation_id) return;
-      try {
-        await client.acceptNegotiationWithFundAddress(e.negotiation_id, fundAddress);
-        console.log(`[bettor] accepted payout negotiation ${e.negotiation_id}`);
-      } catch (err) {
-        console.error('[bettor] accept payout failed:', (err as Error).message);
+/** Bettor's claim-service provider: WS connection = "accepting orders"; polling does accept+deliver. */
+async function startClaimProvider(client: AgentClient, claimServiceId: string, fundAddress: string): Promise<void> {
+  try { await client.connectWebSocket(); } catch { /* connection = "accepting"; events unused */ }
+  const delivered = new Set<string>();
+  const tick = async (): Promise<void> => {
+    try {
+      const negs = await client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 25 });
+      for (const n of negs) if (n.serviceId === claimServiceId) { try { await client.acceptNegotiationWithFundAddress(n.negotiationId, fundAddress); console.log(`[bettor] accepted payout ${n.negotiationId}`); } catch { /* retry */ } }
+      const orders = await client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 25 });
+      for (const o of orders) if (o.serviceId === claimServiceId && !delivered.has(o.orderId)) {
+        try { await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ receipt: 'payout-received', amount: o.fundAmount }) }); delivered.add(o.orderId); console.log(`[bettor] received payout ${o.orderId} (fund ${o.fundAmount})`); } catch { /* retry */ }
       }
-    })();
-  });
-  ws.on(EventType.OrderPaid, (e: Event) => {
-    void (async () => {
-      if (!e.order_id) return;
-      const order = await client.getOrder(e.order_id);
-      if (order.serviceId !== claimServiceId) return;
-      try {
-        await client.deliverOrder(e.order_id, {
-          deliverableType: DeliverableType.Text,
-          deliverableText: JSON.stringify({ receipt: 'payout-received', amount: order.fundAmount }),
-        });
-        console.log(`[bettor] received payout order ${e.order_id} (fund ${order.fundAmount})`);
-      } catch (err) {
-        console.error('[bettor] deliver payout receipt failed:', (err as Error).message);
-      }
-    })();
-  });
-}
-
-/** Bettor places one fund-transfer bet (requester side). Returns the on-chain order. */
-async function placeBet(
-  client: AgentClient,
-  bus: EventBus,
-  bookmakerServiceId: string,
-  stake: number,
-  req: BetRequest,
-): Promise<{ orderId: string; payTxHash: string }> {
-  const neg = await client.negotiateOrder({
-    serviceId: bookmakerServiceId,
-    requirements: JSON.stringify(req),
-    fundAmount: String(stake),
-    fundToken: USDC_BASE,
-  });
-  const created = await bus.wait(
-    (e) => e.type === EventType.OrderCreated && e.negotiation_id === neg.negotiationId,
-    CREATE_TIMEOUT_MS,
-    'OrderCreated(bet)',
-  );
-  if (!created.order_id) throw new Error('bet OrderCreated had no order_id');
-  const pay = await client.payOrder(created.order_id);
-  console.log(`[bettor] placed bet, paid order ${created.order_id} (tx ${pay.txHash})`);
-  await bus.wait(
-    (e) => e.type === EventType.OrderCompleted && e.order_id === created.order_id,
-    COMPLETE_TIMEOUT_MS,
-    'OrderCompleted(bet)',
-  );
-  return { orderId: created.order_id, payTxHash: pay.txHash };
+    } catch { /* transient */ }
+  };
+  setInterval(() => void tick(), 4000);
 }
 
 async function main(): Promise<void> {
   const cfg = { baseURL: requireEnv('CROO_API_URL'), wsURL: requireEnv('CROO_WS_URL') };
 
-  // Bookmaker: one WS, one bus (payout buyer), provider handlers attached to the same WS.
+  // Bookmaker (provider of the bet service + payer) — polling, no WS.
   const bmClient = new AgentClient(cfg, requireEnv('BOOKMAKER_SDK_KEY'));
-  const bmWs = await bmClient.connectWebSocket();
-  const bmBus = new EventBus(bmWs);
+  const bookmakerServiceId = requireEnv('BOOKMAKER_SERVICE_ID');
   const bm = new Bookmaker({
     client: bmClient,
-    serviceId: requireEnv('BOOKMAKER_SERVICE_ID'),
+    serviceId: bookmakerServiceId,
     fundAddress: requireEnv('BOOKMAKER_FUND_ADDRESS'),
-    bus: bmBus,
     rakeBps: Number(process.env.BOOKMAKER_RAKE_BPS ?? '300'), // 3% house rake — the real economic loop
   });
-  bm.attach(bmWs);
+  await bm.start();
 
-  // Bettor: one WS, one bus (bet buyer), claim provider on the same WS.
+  // Bettor (places the bet as requester + provides the claim service to receive the payout).
   const betClient = new AgentClient(cfg, requireEnv('BETTOR_SDK_KEY'));
-  const betWs = await betClient.connectWebSocket();
-  const betBus = new EventBus(betWs);
   const claimServiceId = requireEnv('BETTOR_CLAIM_SERVICE_ID');
-  attachClaimProvider(betClient, betWs, claimServiceId, requireEnv('BETTOR_FUND_ADDRESS'));
+  await startClaimProvider(betClient, claimServiceId, requireEnv('BETTOR_FUND_ADDRESS'));
+  const bettorOrch = new Orchestrator(betClient);
+  // Give the providers' WS a moment to register as "accepting" before placing the bet.
+  await new Promise((r) => setTimeout(r, 3000));
 
   const roundId = `bet-test-${Date.now()}`;
   const stake = Number(process.env.BET_STAKE ?? '50000'); // 0.05 USDC (6 decimals)
+  const req: BetRequest = { round_id: roundId, side: 'over', claim_service_id: claimServiceId };
   console.log(`\n[bet-slice] round ${roundId}: bettor stakes ${stake} on 'over'\n`);
 
-  // 1. Place the bet (fund-transfer stake → bookmaker fund address).
-  await placeBet(betClient, betBus, requireEnv('BOOKMAKER_SERVICE_ID'), stake, {
-    round_id: roundId,
-    side: 'over',
-    claim_service_id: claimServiceId,
-  });
+  // 1. Place the bet (fund-transfer stake → bookmaker fund address), via the polling Orchestrator.
+  const betHire = await bettorOrch.hireService(
+    { capability: 'bet', serviceId: bookmakerServiceId, label: 'bookmaker', ours: false },
+    JSON.stringify(req),
+    { fundAmount: String(stake), fundToken: USDC_BASE },
+  );
+  console.log(`[bet-slice] bet placed on-chain — order ${betHire.orderId} pay https://basescan.org/tx/${betHire.payTxHash}`);
 
-  // Wait for the bookmaker to have recorded the bet (it records on OrderPaid).
-  for (let i = 0; i < 20 && bm.betsFor(roundId).length === 0; i++) await new Promise((r) => setTimeout(r, 500));
+  // 2. Wait for the bookmaker to have recorded the bet (its provider loop books it).
+  for (let i = 0; i < 30 && bm.betsFor(roundId).length === 0; i++) await new Promise((r) => setTimeout(r, 1000));
   const booked = bm.betsFor(roundId);
   if (booked.length === 0) throw new Error('bookmaker did not record the bet');
   console.log(`[bet-slice] bookmaker booked ${booked.length} bet(s); pool ${booked.reduce((s, b) => s + b.amount, 0)}`);
 
-  // 2. Settle the vol bet: line 1.0, realized amplitude 10.0 → 'over' wins → bettor takes the pool.
+  // 3. Settle: 'over' wins → winners split (pool − rake); the house keeps the rake on-chain.
   const line = Number(process.env.BET_LINE ?? '1');
   const amplitude = Number(process.env.BET_AMPLITUDE ?? '10');
   const result = await bm.settleRound(roundId, line, amplitude);
 
-  console.log(`\n===== bet settled: '${result.side}' won | pool ${result.pool} | RAKE ${result.rake} (house revenue, kept on-chain) | dust ${result.dust} =====`);
-  for (const p of result.paid) {
-    console.log(`- payout ${p.amount} to ${p.bettor} | order ${p.orderId}`);
-    console.log(`    pay https://basescan.org/tx/${p.payTxHash}`);
-  }
+  console.log(`\n===== settled: '${result.side}' | pool ${result.pool} | RAKE ${result.rake} (house revenue, kept on-chain) | dust ${result.dust} =====`);
+  for (const p of result.paid) console.log(`- payout ${p.amount} to ${p.bettor} | pay https://basescan.org/tx/${p.payTxHash}`);
   console.log('\nresult (json): ' + JSON.stringify(result));
   process.exit(0);
 }
