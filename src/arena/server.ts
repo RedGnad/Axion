@@ -345,6 +345,11 @@ async function main(): Promise<void> {
 
   createServer((req, res) => {
     const url = req.url ?? '/';
+    // CORS so the Vercel frontend can call this runner cross-origin (state/round/competitor).
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     if (req.method === 'GET' && (url === '/' || url.startsWith('/?'))) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
