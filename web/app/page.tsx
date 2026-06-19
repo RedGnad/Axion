@@ -91,20 +91,30 @@ function Sparkline({ series, up }: { series: number[]; up: boolean }) {
   );
 }
 
+function mmss(ms: number) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
 function Phase({ state }: { state: ArenaState | null }) {
   const r = state?.round;
-  const [left, setLeft] = useState<number | null>(null);
-  useEffect(() => {
-    if (!r || r.phase !== 'betting' || !r.settleAtMs) { setLeft(null); return; }
-    const tick = () => setLeft(Math.max(0, Math.round((r.settleAtMs! - Date.now()) / 1000)));
-    tick();
-    const id = setInterval(tick, 250);
-    return () => clearInterval(id);
-  }, [r?.id, r?.phase, r?.settleAtMs]);
-  const label = r ? ({ open: 'agents estimating', betting: 'betting open', settled: 'settled' } as const)[r.phase] : 'idle';
+  const active = state?.status === 'running' && r && r.phase !== 'settled';
+  const nextAt = state?.nextRoundAtMs;
+  const [, force] = useState(0);
+  useEffect(() => { const id = setInterval(() => force((n) => n + 1), 250); return () => clearInterval(id); }, []);
+
+  const startNow = async () => { try { await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' }); } catch {} };
+
+  if (active && r) {
+    const label = ({ open: 'agents estimating', betting: 'betting open' } as const)[r.phase as 'open' | 'betting'] ?? r.phase;
+    const left = r.phase === 'betting' && r.settleAtMs ? Math.max(0, Math.round((r.settleAtMs - Date.now()) / 1000)) : null;
+    return <span className="font-mono text-[11px] uppercase tracking-wider text-dim">{label}{left != null ? <b className="ml-2 text-amber tnum">{left}s</b> : null}</span>;
+  }
+  // Idle: show the heartbeat countdown + an instant "start now" (demand trigger, cooldown-gated).
   return (
-    <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
-      {label}{left != null ? <b className="ml-2 text-amber tnum">{left}s</b> : null}
+    <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-dim">
+      {nextAt && nextAt > Date.now() ? <span>next race in <b className="text-amber tnum">{mmss(nextAt - Date.now())}</b></span> : <span>idle</span>}
+      <button onClick={startNow} className="rounded border border-line px-2 py-1 uppercase tracking-wider text-ink hover:border-amber/60">start now</button>
     </span>
   );
 }

@@ -61,6 +61,7 @@ export interface ArenaState {
   asset: string;
   livePrice?: number;
   priceSeries: number[];
+  nextRoundAtMs?: number;
   round?: RoundView;
   history: HistoryItem[];
   leaderboard: LeaderRow[];

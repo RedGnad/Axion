@@ -69,6 +69,8 @@ interface ArenaState {
   /** Live ETH/USD from Pyth, streamed every ~2s so the screen is never static. */
   livePrice?: number;
   priceSeries: number[];
+  /** When the next scheduled round is due (the heartbeat) → the UI shows a "next race in MM:SS". */
+  nextRoundAtMs?: number;
   round?: RoundView;
   history: HistoryItem[];
   leaderboard: { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }[];
@@ -83,6 +85,9 @@ process.on('unhandledRejection', (e) => console.error('[arena-server] unhandledR
 const PORT = Number(process.env.PORT ?? '8787');
 const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
+const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
+// Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
+const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
 const BASESCAN = 'https://basescan.org/tx/';
 
 const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [] };
@@ -90,6 +95,7 @@ const clients = new Set<import('node:http').ServerResponse>();
 let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
 let running = false;
+let lastRoundStartMs = 0;
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 function personaMeta(id: string): { label: string; blurb: string } {
@@ -211,9 +217,21 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   setInterval(() => void tick(), 6000);
 }
 
+/** Trigger a round respecting the cost ceiling (cooldown) + the running guard. Returns why/when. */
+function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, reason: string): { started: boolean; nextAtMs?: number } {
+  if (running) return { started: false, nextAtMs: state.nextRoundAtMs };
+  const since = Date.now() - lastRoundStartMs;
+  if (lastRoundStartMs && since < MIN_ROUND_MS) return { started: false, nextAtMs: lastRoundStartMs + MIN_ROUND_MS };
+  console.log(`[arena-server] round trigger: ${reason}`);
+  void runOneRound(cfg);
+  return { started: true };
+}
+
 async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }): Promise<void> {
   if (running || competitors.length === 0) return;
   running = true;
+  lastRoundStartMs = Date.now();
+  if (AUTO_MS) state.nextRoundAtMs = lastRoundStartMs + AUTO_MS; // next heartbeat after this round
   state.status = 'running';
   try {
     await runRound(competitors, cfg, WINDOW, {
@@ -375,9 +393,10 @@ async function main(): Promise<void> {
       return;
     }
     if (req.method === 'POST' && url === '/api/round') {
-      res.writeHead(running ? 409 : 202, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ started: !running, running }));
-      if (!running) void runOneRound(cfg);
+      // Demand trigger (a user predicts/bets) — cooldown-gated so it can't spam-burn USDC.
+      const t = tryRunRound(cfg, 'demand');
+      res.writeHead(t.started ? 202 : 409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(t));
       return;
     }
     if (req.method === 'POST' && url === '/api/competitor') {
@@ -399,7 +418,8 @@ async function main(): Promise<void> {
             if (state.status === 'view-only') state.status = 'idle';
             pushFeed(`New competitor joined the arena: ${name}`);
             broadcast();
-            reply(202, { ok: true, name, racingNextRound: true });
+            const wr = tryRunRound(cfg, `welcome:${name}`); // demand trigger: a new agent → a welcome round
+            reply(202, { ok: true, name, welcomeRound: wr.started, nextAtMs: wr.nextAtMs });
           } catch (e) {
             reply(400, { error: (e as Error).message });
           }
@@ -413,13 +433,13 @@ async function main(): Promise<void> {
 
   if (process.env.ARENA_AUTORUN === '1') void runOneRound(cfg);
 
-  // Sparse-but-sustained cadence: one real round every ARENA_AUTO_ROUND_MS (off unless set). Lets a
-  // real, diverse A2A order graph accumulate over the window WITHOUT 24/7 burn — you pick the budget
-  // (e.g. 86400000 = 1/day ≈ 0.6 USDC/day). Skips if a round is already running or no competitors.
-  const autoMs = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0');
-  if (autoMs >= 60_000 && competitors.length) {
-    console.log(`[arena-server] sparse cadence: one round every ${Math.round(autoMs / 60000)}min`);
-    setInterval(() => { if (!running) void runOneRound(cfg); }, autoMs);
+  // Heartbeat: a scheduled round every AUTO_MS gives a predictable "next race in MM:SS" countdown
+  // (UI shows nextRoundAtMs). Cost is bounded by the cadence + the cooldown; demand (predict/bet,
+  // new agent) can advance it via tryRunRound. Off unless ARENA_AUTO_ROUND_MS is set.
+  if (AUTO_MS >= 60_000 && competitors.length) {
+    state.nextRoundAtMs = Date.now() + AUTO_MS;
+    console.log(`[arena-server] heartbeat: a round every ${Math.round(AUTO_MS / 60000)}min (cooldown ${Math.round(MIN_ROUND_MS / 60000)}min)`);
+    setInterval(() => tryRunRound(cfg, 'heartbeat'), AUTO_MS);
   }
 }
 
