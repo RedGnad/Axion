@@ -11,7 +11,7 @@ export default function Page() {
       <Header state={state} online={online} />
       <Telemetry state={state} />
       <section className="reveal mt-5 rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '120ms' }}>
-        <SectionTitle index="01" title="The grid" right={<Phase state={state} />} />
+        <SectionTitle index="01" title="The grid" right={<Phase state={state} online={online} />} />
         <div className="mt-5"><Race round={state?.round ?? null} /></div>
         <ToteBoard state={state} />
       </section>
@@ -96,25 +96,49 @@ function mmss(ms: number) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function Phase({ state }: { state: ArenaState | null }) {
+function Phase({ state, online }: { state: ArenaState | null; online: boolean }) {
   const r = state?.round;
   const active = state?.status === 'running' && r && r.phase !== 'settled';
   const nextAt = state?.nextRoundAtMs;
+  const [busy, setBusy] = useState(false);
   const [, force] = useState(0);
   useEffect(() => { const id = setInterval(() => force((n) => n + 1), 250); return () => clearInterval(id); }, []);
 
-  const startNow = async () => { try { await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' }); } catch {} };
+  const startNow = async () => {
+    setBusy(true);
+    try { await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' }); } catch {}
+    setTimeout(() => setBusy(false), 2500);
+  };
+
+  // Runner unreachable → say so explicitly (never a silent "idle").
+  if (!online) {
+    return <span className="font-mono text-[11px] uppercase tracking-wider text-over">⚠ runner offline</span>;
+  }
 
   if (active && r) {
     const label = ({ open: 'agents estimating', betting: 'betting open' } as const)[r.phase as 'open' | 'betting'] ?? r.phase;
     const left = r.phase === 'betting' && r.settleAtMs ? Math.max(0, Math.round((r.settleAtMs - Date.now()) / 1000)) : null;
     return <span className="font-mono text-[11px] uppercase tracking-wider text-dim">{label}{left != null ? <b className="ml-2 text-amber tnum">{left}s</b> : null}</span>;
   }
-  // Idle: show the heartbeat countdown + an instant "start now" (demand trigger, cooldown-gated).
+
+  // Idle. Short delay (<60min) → live countdown. Long/none → just the scheduled time; the hero is the button.
+  const delta = nextAt ? nextAt - Date.now() : 0;
   return (
     <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-dim">
-      {nextAt && nextAt > Date.now() ? <span>next race in <b className="text-amber tnum">{mmss(nextAt - Date.now())}</b></span> : <span>idle</span>}
-      <button onClick={startNow} className="rounded border border-line px-2 py-1 uppercase tracking-wider text-ink hover:border-amber/60">start now</button>
+      {nextAt && delta > 0 && delta <= 3_600_000 ? (
+        <span>next race in <b className="text-amber tnum">{mmss(delta)}</b></span>
+      ) : nextAt && delta > 0 ? (
+        <span>next scheduled <b className="text-ink tnum">{new Date(nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>
+      ) : (
+        <span>idle</span>
+      )}
+      <button
+        onClick={startNow}
+        disabled={busy}
+        className="rounded-md bg-amber px-3 py-1.5 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b] disabled:opacity-50"
+      >
+        {busy ? 'starting…' : '▶ start a race'}
+      </button>
     </span>
   );
 }

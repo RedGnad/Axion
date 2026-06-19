@@ -82,8 +82,9 @@ export function useArena(intervalMs = 2000): { state: ArenaState | null; online:
         if (!r.ok) throw new Error(String(r.status));
         const s = (await r.json()) as ArenaState;
         if (alive) { setState(s); setOnline(true); }
-      } catch {
+      } catch (err) {
         if (alive) setOnline(false);
+        console.error('[arena] poll failed:', RUNNER_URL, err); // temp diagnostic: surfaces silent fetch/CORS errors
       }
     };
     poll();
