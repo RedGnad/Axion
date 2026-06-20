@@ -25,6 +25,10 @@ interface CompetitorView {
   rationale?: string;
   error?: number;
   isWinner?: boolean;
+  /** When this agent's estimate landed (its data hires finished) — drives the staggered launch. */
+  launchAtMs?: number;
+  /** Latency from round open to estimate ready (ms) — fast-data head-start + ⚡ + tie-break. */
+  dataMs?: number;
 }
 interface RoundView {
   id: string;
@@ -100,7 +104,7 @@ process.on('unhandledRejection', (e) => console.error('[arena-server] unhandledR
 const PORT = Number(process.env.PORT ?? '8787');
 const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
-const HIRING_ETA_MS = 66_000; // observed ~incompressible time to hire the round's data-agents (for the open-phase countdown)
+let HIRING_ETA_MS = 90_000; // estimated hiring time; AUTO-CALIBRATED from each round's real open→betting duration
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
@@ -112,6 +116,7 @@ let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
 let running = false;
 let lastRoundStartMs = 0;
+let roundOpenMs = 0; // when the current round opened (for per-agent data latency + ETA calibration)
 // Free guest predictions, kept server-side so the usage counter is real (not localStorage-only).
 const predictVisitors = new Set<string>();                       // unique visitor ids seen this instance
 const predictPending = new Map<string, { side: 'over' | 'under' }[]>(); // roundId → unresolved guesses
@@ -276,13 +281,14 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
   try {
     await runRound(competitors, cfg, WINDOW, {
       onOpen: ({ id, openPrice }) => {
+        roundOpenMs = Date.now();
         state.round = {
           id,
           phase: 'open',
           openPrice,
-          // Hiring N data-agents is ~incompressible (~66s) → estimate the settle so the UI counts down
-          // from open; the exact settleAtMs overrides this when betting opens.
-          etaSettleMs: Date.now() + HIRING_ETA_MS + WINDOW * 1000,
+          // Hiring N data-agents is ~incompressible → estimate the settle (calibrated from past rounds)
+          // so the UI counts down from open; the exact settleAtMs overrides this when betting opens.
+          etaSettleMs: roundOpenMs + HIRING_ETA_MS + WINDOW * 1000,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
         pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring data & estimating…`);
@@ -291,7 +297,13 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
       onEstimate: ({ forecast, edges }) => {
         if (!state.round) return;
         const c = state.round.competitors.find((x) => x.id === forecast.competitor);
-        if (c) { c.estimate = forecast.prediction; c.rationale = forecast.rationale; }
+        if (c) {
+          c.estimate = forecast.prediction;
+          c.rationale = forecast.rationale;
+          // This agent's data is in → it launches NOW; record its latency (fast = head-start + ⚡).
+          c.launchAtMs = Date.now();
+          c.dataMs = roundOpenMs ? Date.now() - roundOpenMs : undefined;
+        }
         for (const e of edges) {
           pushFeed(`${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`, BASESCAN + e.payTxHash);
         }
@@ -300,6 +312,12 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
       },
       onEstimates: ({ line, settleAtMs }) => {
         if (!state.round) return;
+        // Auto-calibrate the hiring ETA from this round's real open→betting duration (EMA) so the
+        // next round's countdown is honest and doesn't sit on "any moment…".
+        if (roundOpenMs) {
+          const hiringMs = Date.now() - roundOpenMs;
+          HIRING_ETA_MS = Math.round(HIRING_ETA_MS * 0.5 + hiringMs * 0.5);
+        }
         state.round.phase = 'betting';
         state.round.line = line;
         state.round.settleAtMs = settleAtMs;
@@ -315,6 +333,13 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
       },
       onSettled: ({ round, line, edges }) => {
         const o = round.outcome!;
+        // Accuracy decides the win; SPEED only breaks exact ties — among co-winners, the agent whose
+        // data landed first takes it (legitimate edge for choosing fast data-providers).
+        let winners = o.winners;
+        if (winners.length > 1) {
+          const dataMsById = new Map((state.round?.competitors ?? []).map((c) => [c.id, c.dataMs ?? Infinity]));
+          winners = [[...winners].sort((a, b) => (dataMsById.get(a) ?? Infinity) - (dataMsById.get(b) ?? Infinity))[0]];
+        }
         if (state.round) {
           state.round.phase = 'settled';
           state.round.closePrice = round.closePrice;
@@ -322,7 +347,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           state.round.competitors = state.round.competitors.map((c) => ({
             ...c,
             error: o.errors[c.id],
-            isWinner: o.winners.includes(c.id),
+            isWinner: winners.includes(c.id),
           }));
         }
         const item: HistoryItem = {
@@ -331,7 +356,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           closePrice: round.closePrice ?? round.openPrice,
           amplitude: o.actual,
           line,
-          winners: o.winners,
+          winners,
           settledAt: o.settledAt,
           competitors: round.forecasts.map((f) => ({
             id: f.competitor,
@@ -339,13 +364,13 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             estimate: f.prediction,
             rationale: f.rationale,
             error: o.errors[f.competitor],
-            isWinner: o.winners.includes(f.competitor),
+            isWinner: winners.includes(f.competitor),
           })),
           edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash })),
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
-        bumpLeaderboard(round.forecasts.map((f) => f.competitor), o.winners, o.errors);
+        bumpLeaderboard(round.forecasts.map((f) => f.competitor), winners, o.errors);
         const side = o.actual > line ? 'over' : o.actual < line ? 'under' : 'push';
         // Resolve free guest predictions for this round (push = void, doesn't count against accuracy).
         const guesses = predictPending.get(round.id);
@@ -353,7 +378,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           for (const g of guesses) if (g.side === side) state.predictStats.correct++;
         }
         predictPending.delete(round.id);
-        pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner(s): ${o.winners.map((w) => personaMeta(w).label).join(', ')}`);
+        pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
         saveHistory();
         // Reflect the providers actually wired this round into the live data-market panel.
         void refreshDataMarket(item.edges.map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));

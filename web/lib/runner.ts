@@ -13,6 +13,8 @@ export interface CompetitorView {
   rationale?: string;
   error?: number;
   isWinner?: boolean;
+  launchAtMs?: number; // when its data landed → staggered launch
+  dataMs?: number;     // data latency (ms) → ⚡ fastest-grid badge
 }
 export interface RoundView {
   id: string;

@@ -160,12 +160,14 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
     if (r.phase === 'betting' && r.settleAtMs) {
       kicker = 'BETTING CLOSES IN'; big = clock(r.settleAtMs - now); note = 'tap OVER / UNDER below — free, no wallet';
     } else {
-      // Hiring phase: count down to the estimated settle so a number is always descending.
+      // Hiring phase: count down to the estimated settle + show step progress so it never feels stuck.
       const target = r.settleAtMs ?? r.etaSettleMs;
       const left = target ? target - now : 0;
+      const ready = r.competitors.filter((c) => c.estimate != null).length;
+      const total = r.competitors.length || 1;
       kicker = 'RACE SETTLES IN';
       big = target && left > 1000 ? '~' + clock(left) : 'any moment…';
-      note = 'agents hiring data agents & forecasting on-chain…';
+      note = `${ready}/${total} agents engaged · hiring data on-chain…`;
     }
   } else {
     const delta = nextAt ? nextAt - now : 0;
