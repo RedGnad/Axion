@@ -9,21 +9,37 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-[1180px] px-5 pb-24 pt-6">
       <Header state={state} online={online} />
+      <HowItWorks />
+
+      {/* ── LIVE ─────────────────────────────────────────── */}
+      <ZoneLabel step="①" title="The live race" blurb="real ETH price · the countdown · agents on the grid" />
       <Telemetry state={state} />
       <RaceControl state={state} online={online} />
       <section className="reveal mt-5 rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '120ms' }}>
-        <SectionTitle index="01" title="The grid" right={<PhaseTag state={state} online={online} />} />
+        <SectionTitle title="The grid" right={<PhaseTag state={state} online={online} />} />
         <div className="mt-5"><Race round={state?.round ?? null} /></div>
+      </section>
+
+      {/* ── YOUR MOVE ────────────────────────────────────── */}
+      <ZoneLabel step="②" title="Your move" blurb="call the line — free, no wallet, one tap" />
+      <section className="reveal rounded-xl border border-volt/25 bg-panel/70 p-5">
         <ToteBoard state={state} />
       </section>
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
+
+      {/* ── PROOF ────────────────────────────────────────── */}
+      <ZoneLabel step="③" title="Proof it's real" blurb="every order on Base · ranked by accuracy" />
+      <div className="grid gap-5 lg:grid-cols-2">
         <Ledger state={state} />
-        <div className="flex flex-col gap-5">
-          <Leaderboard state={state} />
-          <DataMarket state={state} />
-          <Join />
-        </div>
+        <Leaderboard state={state} />
       </div>
+
+      {/* ── BUILDERS ─────────────────────────────────────── */}
+      <ZoneLabel step="④" title="For builders & the curious" blurb="the open data market · bring your own agent" />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <DataMarket state={state} />
+        <Join />
+      </div>
+
       <Footer />
     </main>
   );
@@ -38,7 +54,7 @@ function Header({ state, online }: { state: ArenaState | null; online: boolean }
           Axion <span className="text-volt">Derby</span>
         </h1>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
-          agents race to call ETH volatility · you bet the line · settled on-chain
+          agents race to call ETH volatility · you predict the line · settled on-chain
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -213,7 +229,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const live = r?.phase === 'betting';
 
   return (
-    <div className="mt-6">
+    <div>
       {/* Guest mode — the no-wallet on-ramp, made the loud thing. */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-volt/30 bg-volt/[0.04] px-4 py-3">
         <div>
@@ -272,7 +288,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
   const feed = state?.feed ?? [];
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '180ms' }}>
-      <SectionTitle index="02" title="On-chain ledger" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">Base · verifiable</span>} />
+      <SectionTitle title="On-chain ledger" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">Base · verifiable</span>} />
       <div className="mt-4 max-h-[380px] space-y-0 overflow-auto">
         {feed.length === 0 ? <div className="py-8 text-center font-mono text-sm text-dim">waiting…</div> : feed.map((f, i) => (
           <div key={i} className="flex items-start gap-3 border-b border-white/5 py-2.5 text-[12px]">
@@ -292,7 +308,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   const lb = state?.leaderboard ?? [];
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '220ms' }}>
-      <SectionTitle index="03" title="Standings" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">by accuracy</span>} />
+      <SectionTitle title="Standings" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">by accuracy</span>} />
       <div className="mt-4 space-y-1.5">
         {lb.length === 0 ? <div className="py-6 text-center font-mono text-sm text-dim">no rounds yet</div> : lb.map((r, i) => (
           <div key={r.id} className="flex items-center gap-3 rounded-md border border-line px-3 py-2">
@@ -312,7 +328,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '240ms' }}>
-      <SectionTitle index="04" title="Store data market" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">auto-discovered</span>} />
+      <SectionTitle title="Store data market" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">auto-discovered</span>} />
       {dm ? (
         <>
           <div className="mt-4 flex items-baseline gap-2">
@@ -372,7 +388,7 @@ function Join() {
   };
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
-      <SectionTitle index="05" title="Enter a runner" />
+      <SectionTitle title="Add your agent" />
       <p className="mt-3 text-[11px] leading-relaxed text-dim">
         Any CAP agent can race. Implement one contract — hired with <code className="text-under">{'{asset, spot, deadline, recentVol}'}</code>, return <code className="text-under">{'{prediction, rationale}'}</code> — register the service, drop your serviceId below.
       </p>
@@ -386,15 +402,49 @@ function Join() {
   );
 }
 
-function SectionTitle({ index, title, right }: { index: string; title: string; right?: React.ReactNode }) {
+function SectionTitle({ index, title, right }: { index?: string; title: string; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between">
       <h2 className="flex items-baseline gap-2">
-        <span className="font-mono text-[10px] text-volt">{index}</span>
+        {index ? <span className="font-mono text-[10px] text-volt">{index}</span> : null}
         <span className="font-display text-lg uppercase tracking-wide">{title}</span>
       </h2>
       {right}
     </div>
+  );
+}
+
+/** A numbered narrative zone header — gives a first-time visitor a clear top-to-bottom flow. */
+function ZoneLabel({ step, title, blurb }: { step: string; title: string; blurb?: string }) {
+  return (
+    <div className="mt-12 mb-4 flex items-baseline gap-3 border-b border-line/60 pb-2.5">
+      <span className="font-display text-3xl leading-none text-volt">{step}</span>
+      <div>
+        <h2 className="font-display text-xl uppercase leading-none tracking-wide">{title}</h2>
+        {blurb ? <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-dim">{blurb}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/** Three-step explainer so a first-time visitor immediately gets what's going on. */
+function HowItWorks() {
+  const steps = [
+    { n: '01', t: 'Agents race', d: 'AI agents forecast the size of the next ETH move — they must buy real data on-chain to compete.' },
+    { n: '02', t: 'You call the line', d: 'Predict over / under their consensus line. Free, no wallet, one tap.' },
+    { n: '03', t: 'Settled on-chain', d: 'The Pyth ETH/USD move decides it — exogenous, verifiable, every order on Base.' },
+  ];
+  return (
+    <section className="reveal mt-6 grid gap-3 sm:grid-cols-3" style={{ animationDelay: '40ms' }}>
+      {steps.map((s, i) => (
+        <div key={s.n} className="relative rounded-xl border border-line bg-panel/40 p-4">
+          <div className="font-mono text-[10px] tracking-widest text-volt">STEP {s.n}</div>
+          <div className="mt-1 font-display text-lg uppercase tracking-wide">{s.t}</div>
+          <p className="mt-1 text-[12px] leading-relaxed text-dim">{s.d}</p>
+          {i < 2 ? <span className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 font-display text-lg text-volt sm:block">→</span> : null}
+        </div>
+      ))}
+    </section>
   );
 }
 
