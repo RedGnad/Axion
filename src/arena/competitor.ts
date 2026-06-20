@@ -122,7 +122,7 @@ async function main(): Promise<void> {
     } catch { /* transient list error — next tick retries */ }
   };
 
-  setInterval(() => void tick(), 6000);
+  setInterval(() => void tick(), 2500); // poll fast: accept/deliver latency is what the arena waits on
   console.log(`[${persona.id}] competitor LIVE & hireable on service ${serviceId} (persona: ${persona.label}) — polling for work`);
 }
 

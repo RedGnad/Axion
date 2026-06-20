@@ -156,20 +156,19 @@ async function playLocal(
   c: Extract<Competitor, { kind: 'local' }>,
   ctx: PlayCtx,
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
-  // Hire the persona's data-agents IN PARALLEL (sequential was ~60s each → ~2min/round).
+  // Hire the persona's data-agents SEQUENTIALLY within this competitor: CROO forbids concurrent
+  // payOrder from the SAME agent wallet (nonce collision → failures/retries). The 3 competitors
+  // still run in parallel (distinct wallets), which is where the real speed-up comes from.
   const services = c.persona.capabilities.map((cap) => getDataAgent(cap)).filter((s): s is NonNullable<typeof s> => !!s);
-  const results = await Promise.all(
-    services.map(async (service) => {
-      try {
-        return await c.orchestrator.hireService(service, buildRequirements(service.capability));
-      } catch (err) {
-        // A third-party provider may be offline despite "online" — degrade, don't crash the round.
-        console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${(err as Error).message}`);
-        return null;
-      }
-    }),
-  );
-  const hires: HireResult[] = results.filter((h): h is HireResult => h !== null);
+  const hires: HireResult[] = [];
+  for (const service of services) {
+    try {
+      hires.push(await c.orchestrator.hireService(service, buildRequirements(service.capability)));
+    } catch (err) {
+      // A third-party provider may be offline despite "online" — degrade, don't crash the round.
+      console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${(err as Error).message}`);
+    }
+  }
 
   const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
   const baseline = ctx.recentVol * c.persona.volMultiplier; // calibrated, persona-distinct

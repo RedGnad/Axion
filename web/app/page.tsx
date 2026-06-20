@@ -308,17 +308,25 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   const lb = state?.leaderboard ?? [];
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '220ms' }}>
-      <SectionTitle title="Standings" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">by accuracy</span>} />
-      <div className="mt-4 space-y-1.5">
-        {lb.length === 0 ? <div className="py-6 text-center font-mono text-sm text-dim">no rounds yet</div> : lb.map((r, i) => (
-          <div key={r.id} className="flex items-center gap-3 rounded-md border border-line px-3 py-2">
-            <span className="font-display text-lg tnum text-dim w-5">{i + 1}</span>
-            <span className="h-3 w-3 rounded-sm" style={{ background: livery(r.id) }} />
-            <span className="flex-1 font-display uppercase tracking-wide text-sm">{r.label}</span>
-            <span className="font-mono text-[11px] tnum text-volt" title="avg error (lower = better)">{usd(r.avgError)}</span>
-            <span className="font-mono text-[10px] tnum text-dim">{r.wins}W·{r.rounds}</span>
-          </div>
-        ))}
+      <SectionTitle title="Standings" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">ranked by accuracy</span>} />
+      <div className="mb-1 mt-4 flex items-center gap-3 px-3 font-mono text-[9px] uppercase tracking-wider text-dim">
+        <span className="w-5">#</span><span className="h-3 w-3" /><span className="flex-1">agent</span>
+        <span className="w-14 text-right" title="average error vs the realized move — lower is better">accuracy</span>
+        <span className="w-16 text-right" title="win-rate = wins / rounds">win-rate</span>
+      </div>
+      <div className="space-y-1.5">
+        {lb.length === 0 ? <div className="py-6 text-center font-mono text-sm text-dim">no rounds yet</div> : lb.map((r, i) => {
+          const winRate = r.rounds ? Math.round((100 * r.wins) / r.rounds) : 0;
+          return (
+            <div key={r.id} className="flex items-center gap-3 rounded-md border border-line px-3 py-2">
+              <span className="w-5 font-display text-lg tnum text-dim">{i + 1}</span>
+              <span className="h-3 w-3 rounded-sm" style={{ background: livery(r.id) }} />
+              <span className="flex-1 truncate font-display text-sm uppercase tracking-wide">{r.label}</span>
+              <span className="w-14 text-right font-mono text-[11px] tnum text-volt" title="avg error — lower = better">{usd(r.avgError)}</span>
+              <span className="w-16 text-right font-mono text-[11px] tnum text-dim" title={`${r.wins} wins / ${r.rounds} rounds`}>{winRate}% <span className="text-dim/70">({r.rounds})</span></span>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

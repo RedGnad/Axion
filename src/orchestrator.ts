@@ -101,7 +101,7 @@ export class Orchestrator {
       } catch (err) {
         if ((err as Error).message.includes('create_failed')) throw err; // terminal; otherwise retry
       }
-      await this.sleep(2500);
+      await this.sleep(1200);
     }
     throw new Error(`timed out waiting for order creation (${label}) after ${timeoutMs}ms`);
   }
@@ -114,7 +114,7 @@ export class Orchestrator {
       const o = await this.client.getOrder(orderId);
       if (o.status === 'completed') return;
       if (terminal.includes(o.status)) throw new Error(`order ${orderId} ended '${o.status}' (${label})`);
-      await this.sleep(2500);
+      await this.sleep(1200);
     }
     throw new Error(`timed out waiting for completion (${label}) after ${timeoutMs}ms`);
   }
