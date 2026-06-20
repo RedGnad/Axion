@@ -48,7 +48,9 @@ export default function Race({ round }: { round: RoundView | null }) {
             targets[c.id] = RACE_L + t * standing * (RACE_R - RACE_L);
           }
         } else {
-          const base = A0 + (RACE_L - 1 - A0) * (1 - Math.exp(-(Date.now() - openMs) / 22000));
+          // Formation lap settles a few % BEHIND the start line (with oscillation) so it's clear the
+          // scored race hasn't begun yet during agent evaluation.
+          const base = A0 + (RACE_L - 3 - A0) * (1 - Math.exp(-(Date.now() - openMs) / 22000));
           r.competitors.forEach((c, i) => (targets[c.id] = base + Math.sin(Date.now() / 600 + i * 2.1) * 1.1));
         }
         // Position model = the kart's NOSE (front/right edge). We center the DOM node on `left` via
@@ -104,6 +106,9 @@ export default function Race({ round }: { round: RoundView | null }) {
           </div>
         );
       })}
+      {/* start line — where the scored race begins; karts idle just behind it during agent evaluation */}
+      <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_L}%`, marginLeft: -1, width: 2, background: 'repeating-linear-gradient(180deg, var(--color-dim) 0 5px, transparent 5px 10px)', opacity: 0.8 }} />
+      <div className="absolute -top-1 z-0 font-mono text-[9px] uppercase tracking-[0.15em] text-dim" style={{ left: `${RACE_L}%`, transform: 'translateX(-50%)' }}>start</div>
       {/* finish line — anchored to RACE_R% so the leader's kart lands exactly on it */}
       <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_R}%`, marginLeft: -1.5, width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
       <div className="absolute -top-1 z-0 text-[15px]" style={{ left: `${RACE_R}%`, transform: 'translateX(-50%)' }}>🏁</div>
