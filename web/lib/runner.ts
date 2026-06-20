@@ -24,6 +24,7 @@ export interface RoundView {
   liveAmplitude?: number;
   raceStartMs?: number;
   settleAtMs?: number;
+  etaSettleMs?: number;
   competitors: CompetitorView[];
 }
 export interface HistoryEdge {

@@ -38,6 +38,9 @@ interface RoundView {
   /** When the race (betting window) started — the client animates progress between this and settleAtMs. */
   raceStartMs?: number;
   settleAtMs?: number;
+  /** Estimated settle time set at round OPEN (hiring is ~incompressible) so the UI shows a descending
+   *  countdown from the very start; replaced by the exact settleAtMs once betting opens. */
+  etaSettleMs?: number;
   competitors: CompetitorView[];
 }
 interface HistoryEdge {
@@ -97,6 +100,7 @@ process.on('unhandledRejection', (e) => console.error('[arena-server] unhandledR
 const PORT = Number(process.env.PORT ?? '8787');
 const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
+const HIRING_ETA_MS = 66_000; // observed ~incompressible time to hire the round's data-agents (for the open-phase countdown)
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
@@ -276,6 +280,9 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           id,
           phase: 'open',
           openPrice,
+          // Hiring N data-agents is ~incompressible (~66s) → estimate the settle so the UI counts down
+          // from open; the exact settleAtMs overrides this when betting opens.
+          etaSettleMs: Date.now() + HIRING_ETA_MS + WINDOW * 1000,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
         pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring data & estimating…`);
