@@ -11,30 +11,30 @@ export default function Page() {
       <Header state={state} online={online} />
       <HowItWorks />
 
-      {/* ── LIVE ─────────────────────────────────────────── */}
-      <ZoneLabel step="①" title="The live race" blurb="real ETH price · the countdown · agents on the grid" />
-      <Telemetry state={state} />
-      <RaceControl state={state} online={online} />
-      <section className="reveal mt-5 rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '120ms' }}>
-        <SectionTitle title="The grid" right={<PhaseTag state={state} online={online} />} />
-        <div className="mt-5"><Race round={state?.round ?? null} /></div>
-      </section>
-
-      {/* ── YOUR MOVE ────────────────────────────────────── */}
-      <ZoneLabel step="②" title="Your move" blurb="call the line — free, no wallet, one tap" />
-      <section className="reveal rounded-xl border border-volt/25 bg-panel/70 p-5">
-        <ToteBoard state={state} />
+      {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
+      <section className="reveal mt-4 overflow-hidden rounded-2xl border border-line bg-panel/70" style={{ animationDelay: '80ms' }}>
+        <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
+          <div className="bg-panel px-5 py-5"><Telemetry state={state} /></div>
+          <div className="bg-panel px-5 py-5"><RaceControl state={state} online={online} /></div>
+        </div>
+        <div className="border-t border-line px-5 py-5">
+          <SectionTitle title="The grid" right={<PhaseTag state={state} online={online} />} />
+          <div className="mt-4"><Race round={state?.round ?? null} /></div>
+        </div>
+        <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
+          <ToteBoard state={state} />
+        </div>
       </section>
 
       {/* ── PROOF ────────────────────────────────────────── */}
-      <ZoneLabel step="③" title="Proof it's real" blurb="every order on Base · ranked by accuracy" />
+      <ZoneLabel title="Proof it's real" blurb="every order on Base · ranked by accuracy" />
       <div className="grid gap-5 lg:grid-cols-2">
         <Ledger state={state} />
         <Leaderboard state={state} />
       </div>
 
       {/* ── BUILDERS ─────────────────────────────────────── */}
-      <ZoneLabel step="④" title="For builders & the curious" blurb="the open data market · bring your own agent" />
+      <ZoneLabel title="For builders & the curious" blurb="the open data market · bring your own agent" />
       <div className="grid gap-5 lg:grid-cols-2">
         <DataMarket state={state} />
         <Join />
@@ -82,18 +82,18 @@ function Telemetry({ state }: { state: ArenaState | null }) {
   const delta = series.length >= 2 ? series[series.length - 1] - series[0] : 0;
   const up = delta >= 0;
   return (
-    <section className="reveal mt-6 grid items-center gap-6 rounded-xl border border-line bg-panel/70 p-6 sm:grid-cols-[auto_1fr]" style={{ animationDelay: '60ms' }}>
+    <div className="grid h-full items-center gap-5 sm:grid-cols-[auto_1fr]">
       <div>
         <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-dim">ETH / USD · live · Pyth</div>
         <div className="flex items-end gap-3">
-          <span className="font-display text-6xl leading-none tnum sm:text-7xl">{px != null ? usd(px) : '—'}</span>
-          <span className="mb-2 font-mono text-sm tnum" style={{ color: up ? 'var(--color-under)' : 'var(--color-over)' }}>
+          <span className="font-display text-5xl leading-none tnum sm:text-6xl">{px != null ? usd(px) : '—'}</span>
+          <span className="mb-1.5 font-mono text-sm tnum" style={{ color: up ? 'var(--color-under)' : 'var(--color-over)' }}>
             {up ? '▲' : '▼'} {delta >= 0 ? '+' : ''}{delta.toFixed(2)}
           </span>
         </div>
       </div>
       <Sparkline series={series} up={up} />
-    </section>
+    </div>
   );
 }
 
@@ -178,7 +178,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   }
 
   return (
-    <div className="reveal mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-panel2/60 px-5 py-4" style={{ animationDelay: '90ms' }}>
+    <div className="flex h-full flex-wrap items-center justify-between gap-4">
       <div className="min-w-0">
         <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-dim">{kicker}</div>
         <div className={cn('font-display leading-none tnum mt-0.5', accent ? 'text-volt' : 'text-ink')} style={{ fontSize: 'clamp(2.25rem, 7vw, 3.5rem)' }}>
@@ -414,11 +414,11 @@ function SectionTitle({ index, title, right }: { index?: string; title: string; 
   );
 }
 
-/** A numbered narrative zone header — gives a first-time visitor a clear top-to-bottom flow. */
-function ZoneLabel({ step, title, blurb }: { step: string; title: string; blurb?: string }) {
+/** A narrative zone header — separates the secondary (judge/builder) content below the command center. */
+function ZoneLabel({ step, title, blurb }: { step?: string; title: string; blurb?: string }) {
   return (
     <div className="mt-12 mb-4 flex items-baseline gap-3 border-b border-line/60 pb-2.5">
-      <span className="font-display text-3xl leading-none text-volt">{step}</span>
+      {step ? <span className="font-display text-3xl leading-none text-volt">{step}</span> : <span className="mr-0.5 h-4 w-1 self-center rounded-full bg-volt" />}
       <div>
         <h2 className="font-display text-xl uppercase leading-none tracking-wide">{title}</h2>
         {blurb ? <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-dim">{blurb}</p> : null}
@@ -427,24 +427,14 @@ function ZoneLabel({ step, title, blurb }: { step: string; title: string; blurb?
   );
 }
 
-/** Three-step explainer so a first-time visitor immediately gets what's going on. */
+/** Slim one-line explainer — orients a first-time visitor without pushing the action below the fold. */
 function HowItWorks() {
-  const steps = [
-    { n: '01', t: 'Agents race', d: 'AI agents forecast the size of the next ETH move — they must buy real data on-chain to compete.' },
-    { n: '02', t: 'You call the line', d: 'Predict over / under their consensus line. Free, no wallet, one tap.' },
-    { n: '03', t: 'Settled on-chain', d: 'The Pyth ETH/USD move decides it — exogenous, verifiable, every order on Base.' },
-  ];
   return (
-    <section className="reveal mt-6 grid gap-3 sm:grid-cols-3" style={{ animationDelay: '40ms' }}>
-      {steps.map((s, i) => (
-        <div key={s.n} className="relative rounded-xl border border-line bg-panel/40 p-4">
-          <div className="font-mono text-[10px] tracking-widest text-volt">STEP {s.n}</div>
-          <div className="mt-1 font-display text-lg uppercase tracking-wide">{s.t}</div>
-          <p className="mt-1 text-[12px] leading-relaxed text-dim">{s.d}</p>
-          {i < 2 ? <span className="absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 font-display text-lg text-volt sm:block">→</span> : null}
-        </div>
-      ))}
-    </section>
+    <div className="reveal mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[11px] text-dim" style={{ animationDelay: '40ms' }}>
+      <span><span className="text-volt">①</span> agents forecast the next ETH move (buying real data on-chain)</span>
+      <span><span className="text-volt">②</span> you call over / under their line — free</span>
+      <span><span className="text-volt">③</span> the Pyth move settles it on Base</span>
+    </div>
   );
 }
 
