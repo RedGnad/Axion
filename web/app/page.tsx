@@ -10,8 +10,9 @@ export default function Page() {
     <main className="mx-auto max-w-[1180px] px-5 pb-24 pt-6">
       <Header state={state} online={online} />
       <Telemetry state={state} />
+      <RaceControl state={state} online={online} />
       <section className="reveal mt-5 rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '120ms' }}>
-        <SectionTitle index="01" title="The grid" right={<Phase state={state} online={online} />} />
+        <SectionTitle index="01" title="The grid" right={<PhaseTag state={state} online={online} />} />
         <div className="mt-5"><Race round={state?.round ?? null} /></div>
         <ToteBoard state={state} />
       </section>
@@ -92,55 +93,88 @@ function Sparkline({ series, up }: { series: number[]; up: boolean }) {
   );
 }
 
-function mmss(ms: number) {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+/** Ticking duration: H:MM:SS when ≥1h (so long auto-cadences still read as a real countdown),
+ *  else M:SS. This is a COUNTDOWN (a duration that moves), never a wall-clock time. */
+function clock(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
 }
 
-function Phase({ state, online }: { state: ArenaState | null; online: boolean }) {
+/** Small phase tag for the section header (the big countdown lives in RaceControl). */
+function PhaseTag({ state, online }: { state: ArenaState | null; online: boolean }) {
+  const r = state?.round;
+  const active = state?.status === 'running' && r && r.phase !== 'settled';
+  const text = !online ? 'offline' : active ? (r!.phase === 'betting' ? 'betting open' : 'estimating') : 'between races';
+  const col = !online ? 'var(--color-over)' : active ? 'var(--color-volt)' : 'var(--color-dim)';
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider" style={{ color: col }}>
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: col, animation: active ? 'pulse-dot 1.3s infinite' : 'none' }} />
+      {text}
+    </span>
+  );
+}
+
+/** The hero, most-present control: a big SECOND-BY-SECOND countdown + the always-available start button. */
+function RaceControl({ state, online }: { state: ArenaState | null; online: boolean }) {
   const r = state?.round;
   const active = state?.status === 'running' && r && r.phase !== 'settled';
   const nextAt = state?.nextRoundAtMs;
   const [busy, setBusy] = useState(false);
-  const [, force] = useState(0);
-  useEffect(() => { const id = setInterval(() => force((n) => n + 1), 250); return () => clearInterval(id); }, []);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   const startNow = async () => {
     setBusy(true);
     try { await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' }); } catch {}
-    setTimeout(() => setBusy(false), 2500);
+    setTimeout(() => setBusy(false), 3000);
   };
 
-  // Runner unreachable → say so explicitly (never a silent "idle").
+  let kicker = 'NEXT RACE IN';
+  let big = '';
+  let accent = true;     // lime number vs neutral
+  let showStart = true;  // judge can always trigger a real round
+  let note = '';
+
   if (!online) {
-    return <span className="font-mono text-[11px] uppercase tracking-wider text-over">⚠ runner offline</span>;
+    kicker = 'STATUS'; big = 'offline'; accent = false; showStart = false; note = 'runner unreachable — retrying every 2s';
+  } else if (active && r) {
+    showStart = false;
+    if (r.phase === 'betting' && r.settleAtMs) {
+      kicker = 'BETTING CLOSES IN'; big = clock(r.settleAtMs - now); note = 'tap OVER / UNDER below — free, no wallet';
+    } else {
+      kicker = r.phase === 'open' ? 'AGENTS ON THE GRID' : 'RACE LIVE'; big = '● live'; note = 'hiring data agents & forecasting on-chain…';
+    }
+  } else {
+    const delta = nextAt ? nextAt - now : 0;
+    if (nextAt && delta > 0) {
+      kicker = 'NEXT RACE IN'; big = clock(delta);
+      note = `auto-scheduled · or don't wait —`;
+    } else {
+      kicker = 'ARENA READY'; big = 'on the line'; accent = false; note = 'one click runs a real on-chain round';
+    }
   }
 
-  if (active && r) {
-    const label = ({ open: 'agents estimating', betting: 'betting open' } as const)[r.phase as 'open' | 'betting'] ?? r.phase;
-    const left = r.phase === 'betting' && r.settleAtMs ? Math.max(0, Math.round((r.settleAtMs - Date.now()) / 1000)) : null;
-    return <span className="font-mono text-[11px] uppercase tracking-wider text-dim">{label}{left != null ? <b className="ml-2 text-volt tnum">{left}s</b> : null}</span>;
-  }
-
-  // Idle. Short delay (<60min) → live countdown. Long/none → just the scheduled time; the hero is the button.
-  const delta = nextAt ? nextAt - Date.now() : 0;
   return (
-    <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-dim">
-      {nextAt && delta > 0 && delta <= 3_600_000 ? (
-        <span>next race in <b className="text-volt tnum">{mmss(delta)}</b></span>
-      ) : nextAt && delta > 0 ? (
-        <span>next scheduled <b className="text-ink tnum">{new Date(nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>
-      ) : (
-        <span>idle</span>
-      )}
-      <button
-        onClick={startNow}
-        disabled={busy}
-        className="rounded-md bg-volt px-3 py-1.5 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b] disabled:opacity-50"
-      >
-        {busy ? 'starting…' : '▶ start a race'}
-      </button>
-    </span>
+    <div className="reveal mt-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-panel2/60 px-5 py-4" style={{ animationDelay: '90ms' }}>
+      <div className="min-w-0">
+        <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-dim">{kicker}</div>
+        <div className={cn('font-display leading-none tnum mt-0.5', accent ? 'text-volt' : 'text-ink')} style={{ fontSize: 'clamp(2.25rem, 7vw, 3.5rem)' }}>
+          {big}
+        </div>
+        {note ? <div className="mt-1.5 font-mono text-[11px] text-dim">{note}</div> : null}
+      </div>
+      {showStart ? (
+        <button
+          onClick={startNow}
+          disabled={busy}
+          className="shrink-0 rounded-lg bg-volt px-7 py-4 font-display text-base uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50"
+        >
+          {busy ? 'starting…' : '▶ start a race'}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
