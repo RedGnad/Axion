@@ -40,8 +40,13 @@ export default function Race({ round }: { round: RoundView | null }) {
             const qi = c.estimate == null ? 0 : Math.max(0, 1 - Math.abs(c.estimate - truth) / scale);
             q[c.id] = qi; if (qi > maxQ) maxQ = qi;
           }
-          const t = r.phase === 'settled' ? 1 : Math.max(0, Math.min(1, (Date.now() - (r.raceStartMs || 0)) / ((r.settleAtMs! - r.raceStartMs!) || 60000)));
-          for (const c of r.competitors) targets[c.id] = RACE_L + t * (maxQ > 0 ? q[c.id] / maxQ : 0) * (RACE_R - RACE_L);
+          const settled = r.phase === 'settled';
+          const t = settled ? 1 : Math.max(0, Math.min(1, (Date.now() - (r.raceStartMs || 0)) / ((r.settleAtMs! - r.raceStartMs!) || 60000)));
+          for (const c of r.competitors) {
+            // Standing 0..1; the winner always finishes ON the line (standing 1), regardless of edge cases.
+            const standing = settled && c.isWinner ? 1 : maxQ > 0 ? q[c.id] / maxQ : 0;
+            targets[c.id] = RACE_L + t * standing * (RACE_R - RACE_L);
+          }
         } else {
           const base = A0 + (RACE_L - 1 - A0) * (1 - Math.exp(-(Date.now() - openMs) / 22000));
           r.competitors.forEach((c, i) => (targets[c.id] = base + Math.sin(Date.now() / 600 + i * 2.1) * 1.1));
@@ -50,7 +55,9 @@ export default function Race({ round }: { round: RoundView | null }) {
           const el = root.querySelector<HTMLElement>(`[data-kart="${c.id}"]`);
           if (!el) continue;
           if (pos.current[c.id] == null) pos.current[c.id] = A0;
-          pos.current[c.id] += (targets[c.id] - pos.current[c.id]) * 0.12;
+          // Race over → snap to the final standings (so the winner sits exactly on the line, no lerp drift).
+          if (r.phase === 'settled') pos.current[c.id] = targets[c.id];
+          else pos.current[c.id] += (targets[c.id] - pos.current[c.id]) * 0.12;
           el.style.left = pos.current[c.id].toFixed(2) + '%';
         }
       }
