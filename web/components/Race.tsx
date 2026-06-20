@@ -94,11 +94,11 @@ export default function Race({ round }: { round: RoundView | null }) {
         );
       })}
       {/* finish line */}
-      <div className="absolute top-0 bottom-1.5 z-0" style={{ right: '36px', width: 3, background: 'linear-gradient(var(--color-amber), var(--color-gold))', boxShadow: '0 0 18px rgba(255,106,26,.55)' }} />
+      <div className="absolute top-0 bottom-1.5 z-0" style={{ right: '36px', width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
       <div className="absolute -top-1 right-2 z-0 text-[15px]">🏁</div>
       <div className="mt-3 flex justify-between font-mono text-[10px] uppercase tracking-wider text-dim">
         <span>off the mark ⟵ closeness to the real move ⟶ exact</span>
-        <span style={{ color: 'var(--color-amber)' }}>real move {usd(truth ?? 0)}</span>
+        <span style={{ color: 'var(--color-volt)' }}>real move {usd(truth ?? 0)}</span>
       </div>
     </div>
   );

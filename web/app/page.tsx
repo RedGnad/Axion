@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useArena, RUNNER_URL, type ArenaState } from '@/lib/runner';
+import { useArena, postPredict, RUNNER_URL, type ArenaState } from '@/lib/runner';
 import { cn, livery, usd } from '@/lib/utils';
 import Race from '@/components/Race';
 
@@ -33,7 +33,7 @@ function Header({ state, online }: { state: ArenaState | null; online: boolean }
     <header className="reveal flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
       <div>
         <h1 className="font-display text-4xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
-          Axion <span className="text-amber">Derby</span>
+          Axion <span className="text-volt">Derby</span>
         </h1>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
           agents race to call ETH volatility · you bet the line · settled on-chain
@@ -42,7 +42,7 @@ function Header({ state, online }: { state: ArenaState | null; online: boolean }
       <div className="flex items-center gap-2">
         <Chip label="asset" value={state?.asset ?? 'ETH'} />
         <span className={cn('inline-flex items-center gap-2 rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider', online ? 'text-ink' : 'text-dim')}>
-          <span className="h-2 w-2 rounded-full" style={{ background: online ? 'var(--color-amber)' : '#555', boxShadow: online ? '0 0 8px var(--color-amber)' : 'none', animation: online ? 'pulse-dot 1.3s infinite' : 'none' }} />
+          <span className="h-2 w-2 rounded-full" style={{ background: online ? 'var(--color-volt)' : '#555', boxShadow: online ? '0 0 8px var(--color-volt)' : 'none', animation: online ? 'pulse-dot 1.3s infinite' : 'none' }} />
           {status}
         </span>
       </div>
@@ -118,7 +118,7 @@ function Phase({ state, online }: { state: ArenaState | null; online: boolean })
   if (active && r) {
     const label = ({ open: 'agents estimating', betting: 'betting open' } as const)[r.phase as 'open' | 'betting'] ?? r.phase;
     const left = r.phase === 'betting' && r.settleAtMs ? Math.max(0, Math.round((r.settleAtMs - Date.now()) / 1000)) : null;
-    return <span className="font-mono text-[11px] uppercase tracking-wider text-dim">{label}{left != null ? <b className="ml-2 text-amber tnum">{left}s</b> : null}</span>;
+    return <span className="font-mono text-[11px] uppercase tracking-wider text-dim">{label}{left != null ? <b className="ml-2 text-volt tnum">{left}s</b> : null}</span>;
   }
 
   // Idle. Short delay (<60min) → live countdown. Long/none → just the scheduled time; the hero is the button.
@@ -126,7 +126,7 @@ function Phase({ state, online }: { state: ArenaState | null; online: boolean })
   return (
     <span className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-dim">
       {nextAt && delta > 0 && delta <= 3_600_000 ? (
-        <span>next race in <b className="text-amber tnum">{mmss(delta)}</b></span>
+        <span>next race in <b className="text-volt tnum">{mmss(delta)}</b></span>
       ) : nextAt && delta > 0 ? (
         <span>next scheduled <b className="text-ink tnum">{new Date(nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>
       ) : (
@@ -135,7 +135,7 @@ function Phase({ state, online }: { state: ArenaState | null; online: boolean })
       <button
         onClick={startNow}
         disabled={busy}
-        className="rounded-md bg-amber px-3 py-1.5 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b] disabled:opacity-50"
+        className="rounded-md bg-volt px-3 py-1.5 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b] disabled:opacity-50"
       >
         {busy ? 'starting…' : '▶ start a race'}
       </button>
@@ -162,16 +162,38 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     setPick({ ...pick, resolved: true, correct: actual === pick.side });
   }, [r?.phase, r?.id, r?.amplitude, r?.line, pick, rec]);
 
-  const choose = (side: 'over' | 'under') => { if (r && r.phase === 'betting' && !(pick && pick.round === r.id)) setPick({ round: r.id, side }); };
+  const choose = (side: 'over' | 'under') => {
+    if (r && r.phase === 'betting' && !(pick && pick.round === r.id)) {
+      setPick({ round: r.id, side });
+      void postPredict(r.id, side); // count it toward the public usage tally (no wallet, no signup)
+    }
+  };
   const mine = pick && r && pick.round === r.id;
+  const ps = state?.predictStats;
+  const live = r?.phase === 'betting';
 
   return (
     <div className="mt-6">
-      <div className="grid grid-cols-2 gap-3">
+      {/* Guest mode — the no-wallet on-ramp, made the loud thing. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-volt/30 bg-volt/[0.04] px-4 py-3">
+        <div>
+          <div className="font-display text-lg uppercase tracking-wide text-volt">Call the line — free</div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+            no wallet · no signup · {live ? <b className="text-ink">betting open now</b> : 'one tap when a race is live'}
+          </div>
+        </div>
+        {ps && ps.total > 0 ? (
+          <div className="text-right font-mono text-[11px] text-dim">
+            <b className="text-ink tnum">{ps.total.toLocaleString()}</b> predictions ·{' '}
+            <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b> visitors ·{' '}
+            <b className="text-volt tnum">{ps.total ? Math.round((100 * ps.correct) / ps.total) : 0}%</b> called right
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3">
         {(['over', 'under'] as const).map((side) => {
           const won = side === 'over' ? overWon : underWon;
           const col = side === 'over' ? 'var(--color-over)' : 'var(--color-under)';
-          const live = r?.phase === 'betting';
           const picked = mine && pick!.side === side;
           return (
             <button
@@ -196,7 +218,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         ) : (
           <>tap OVER / UNDER while betting is open (free, in-browser)</>
         )}
-        {rec.t > 0 ? <span className="ml-1 text-amber">· your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
+        {rec.t > 0 ? <span className="ml-1 text-volt">· your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-dim">
         The line is the agents&apos; consensus estimate; the outcome is the Pyth ETH/USD move — exogenous, nobody controls it.
@@ -237,7 +259,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
             <span className="font-display text-lg tnum text-dim w-5">{i + 1}</span>
             <span className="h-3 w-3 rounded-sm" style={{ background: livery(r.id) }} />
             <span className="flex-1 font-display uppercase tracking-wide text-sm">{r.label}</span>
-            <span className="font-mono text-[11px] tnum text-amber" title="avg error (lower = better)">{usd(r.avgError)}</span>
+            <span className="font-mono text-[11px] tnum text-volt" title="avg error (lower = better)">{usd(r.avgError)}</span>
             <span className="font-mono text-[10px] tnum text-dim">{r.wins}W·{r.rounds}</span>
           </div>
         ))}
@@ -268,7 +290,7 @@ function Join() {
       <div className="mt-3 flex flex-wrap gap-2">
         <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-md border border-line bg-panel2 px-3 py-2 font-mono text-[11px] outline-none focus:border-ink/40" />
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="agent name" className="w-28 rounded-md border border-line bg-panel2 px-3 py-2 font-mono text-[11px] outline-none focus:border-ink/40" />
-        <button onClick={submit} className="rounded-md bg-amber px-4 py-2 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b]">Join</button>
+        <button onClick={submit} className="rounded-md bg-volt px-4 py-2 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b]">Join</button>
       </div>
       {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
     </section>
@@ -279,7 +301,7 @@ function SectionTitle({ index, title, right }: { index: string; title: string; r
   return (
     <div className="flex items-center justify-between">
       <h2 className="flex items-baseline gap-2">
-        <span className="font-mono text-[10px] text-amber">{index}</span>
+        <span className="font-mono text-[10px] text-volt">{index}</span>
         <span className="font-display text-lg uppercase tracking-wide">{title}</span>
       </h2>
       {right}

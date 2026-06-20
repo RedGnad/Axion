@@ -75,6 +75,8 @@ interface ArenaState {
   history: HistoryItem[];
   leaderboard: { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }[];
   feed: FeedItem[];
+  /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
+  predictStats: { total: number; correct: number; visitors: number };
 }
 
 // Long-running server: a stray WebSocket/async error must never take down the HTTP server.
@@ -90,12 +92,15 @@ const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled hea
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
 const BASESCAN = 'https://basescan.org/tx/';
 
-const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [] };
+const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [], predictStats: { total: 0, correct: 0, visitors: 0 } };
 const clients = new Set<import('node:http').ServerResponse>();
 let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
 let running = false;
 let lastRoundStartMs = 0;
+// Free guest predictions, kept server-side so the usage counter is real (not localStorage-only).
+const predictVisitors = new Set<string>();                       // unique visitor ids seen this instance
+const predictPending = new Map<string, { side: 'over' | 'under' }[]>(); // roundId → unresolved guesses
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 function personaMeta(id: string): { label: string; blurb: string } {
@@ -143,18 +148,21 @@ const SEED_FILE = process.env.ARENA_SEED_FILE ?? 'arena-seed.json';
 async function loadHistory(): Promise<void> {
   // Durable Upstash store first (survives restarts, free); else runtime file; else committed seed so
   // a FRESH deploy still shows a populated, verifiable world (real past rounds) — never a dead arena.
-  const fromStore = await loadState<{ history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] }>();
+  type Persisted = { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'] };
+  const fromStore = await loadState<Persisted>();
   if (fromStore) {
     state.history = fromStore.history ?? [];
     state.leaderboard = fromStore.leaderboard ?? [];
+    if (fromStore.predictStats) state.predictStats = fromStore.predictStats;
     console.log(`[arena-server] loaded durable state (Upstash): ${state.history.length} rounds`);
   } else {
     const file = existsSync(HISTORY_FILE) ? HISTORY_FILE : existsSync(SEED_FILE) ? SEED_FILE : null;
     if (file) {
       try {
-        const data = JSON.parse(readFileSync(file, 'utf8')) as { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard'] };
+        const data = JSON.parse(readFileSync(file, 'utf8')) as Persisted;
         state.history = data.history ?? [];
         state.leaderboard = data.leaderboard ?? [];
+        if (data.predictStats) state.predictStats = data.predictStats;
       } catch {
         /* ignore corrupt history */
       }
@@ -181,7 +189,7 @@ async function loadHistory(): Promise<void> {
 }
 
 function saveHistory(): void {
-  const blob = { history: state.history, leaderboard: state.leaderboard };
+  const blob = { history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
   } catch {
@@ -304,6 +312,12 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         state.history = state.history.slice(0, 50);
         bumpLeaderboard(round.forecasts.map((f) => f.competitor), o.winners, o.errors);
         const side = o.actual > line ? 'over' : o.actual < line ? 'under' : 'push';
+        // Resolve free guest predictions for this round (push = void, doesn't count against accuracy).
+        const guesses = predictPending.get(round.id);
+        if (guesses && side !== 'push') {
+          for (const g of guesses) if (g.side === side) state.predictStats.correct++;
+        }
+        predictPending.delete(round.id);
         pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner(s): ${o.winners.map((w) => personaMeta(w).label).join(', ')}`);
         saveHistory();
         broadcast();
@@ -359,7 +373,8 @@ async function main(): Promise<void> {
     console.warn(`[arena-server] view-only (no competitors configured): ${(err as Error).message}`);
   }
 
-  const html = readFileSync(new URL('./ui.html', import.meta.url), 'utf8');
+  // The runner is API-only now: ONE interface = the Vercel front. Redirect / there (no 2nd site).
+  const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';
 
   createServer((req, res) => {
     const url = req.url ?? '/';
@@ -369,8 +384,8 @@ async function main(): Promise<void> {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
     if (req.method === 'GET' && (url === '/' || url.startsWith('/?'))) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(html);
+      res.writeHead(302, { Location: FRONTEND_URL });
+      res.end();
       return;
     }
     if (req.method === 'GET' && url === '/api/state') {
@@ -424,6 +439,31 @@ async function main(): Promise<void> {
             reply(400, { error: (e as Error).message });
           }
         })();
+      });
+      return;
+    }
+    if (req.method === 'POST' && url === '/api/predict') {
+      // Free, no-wallet guest prediction. Counts toward the public usage tally; resolved at settle.
+      const reply = (code: number, obj: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 2000) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const { roundId, side, visitorId } = JSON.parse(body || '{}') as { roundId?: string; side?: string; visitorId?: string };
+          if (side !== 'over' && side !== 'under') return reply(400, { error: 'side must be over|under' });
+          if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 64) return reply(400, { error: 'visitorId required' });
+          if (!roundId || roundId !== state.round?.id) return reply(409, { error: 'no live round to predict on' });
+          const arr = predictPending.get(roundId) ?? [];
+          arr.push({ side });
+          predictPending.set(roundId, arr);
+          if (!predictVisitors.has(visitorId)) { predictVisitors.add(visitorId); state.predictStats.visitors++; }
+          state.predictStats.total++;
+          saveHistory(); // persist the tally (history blob carries predictStats)
+          broadcast();
+          reply(202, { ok: true, predictStats: state.predictStats });
+        } catch (e) {
+          reply(400, { error: (e as Error).message });
+        }
       });
       return;
     }

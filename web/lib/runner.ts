@@ -66,6 +66,29 @@ export interface ArenaState {
   history: HistoryItem[];
   leaderboard: LeaderRow[];
   feed: FeedItem[];
+  predictStats?: { total: number; correct: number; visitors: number };
+}
+
+/** Stable per-browser id so the runner can count UNIQUE guest visitors (no signup, no wallet). */
+export function visitorId(): string {
+  if (typeof window === 'undefined') return 'ssr';
+  let id = localStorage.getItem('axion_vid');
+  if (!id) { id = (crypto.randomUUID?.() ?? String(Math.random()).slice(2)); localStorage.setItem('axion_vid', id); }
+  return id;
+}
+
+/** Record a free guest prediction on the runner (counts toward the public usage tally). */
+export async function postPredict(roundId: string, side: 'over' | 'under'): Promise<boolean> {
+  try {
+    const r = await fetch(`${RUNNER_URL}/api/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roundId, side, visitorId: visitorId() }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 /** Poll the runner's live state (the runner is kept warm by a cron; WS-free, robust). */
