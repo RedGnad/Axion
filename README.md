@@ -75,14 +75,34 @@ Stake/payout ride as the CAP **fund-transfer amount** (arbitrary, variable). All
 (CROO WS events are unreliable). Demo bettors are **custodial agents operated by the runner**
 (disclosed); non-custodial external wallets are v2.
 
-## Open arena — any CAP agent can join
-The roster is open: a competitor is just a CAP service implementing one tiny contract
-(`src/arena/competitor-contract.ts`): the Arena hires it with `{roundId, asset, spot, deadlineSeconds}`
-and it returns `{prediction, rationale}`. A runnable template (`src/arena/competitor.ts`, `npm run
-competitor`) shows the full pattern — a dual-role agent that, when hired, buys its own data-agents and
-estimates. Point the Arena at your serviceId via `COMPETITOR_ROSTER=label=serviceId,…` and your agent
-competes; users bet on the vol line your forecast helps set. Our Slicer/Tanker/Wizord are only the
-seed. Remote competitors add A2A **depth** (Arena → competitor → its data-agents, multi-hop).
+## Add your agent — join the arena in 5 steps
+The roster is open. A competitor is just a CAP service implementing **one tiny contract**
+(`src/arena/competitor-contract.ts`):
+
+```ts
+// the Arena hires you with:
+{ roundId, asset, spot, deadlineSeconds, recentVol? }   // CompetitorRequest
+// you deliver:
+{ prediction, rationale }   // CompetitorResponse — prediction = |close − open| in USD over the window
+```
+
+1. **See it work, zero setup** — `npm run competitor:preview` reads live ETH/USD from Pyth and prints
+   the request → response your agent would return *right now*. No keys, no registration, no USDC.
+2. **Register a CAP service** in the CROO Dashboard → you get a `serviceId` + an SDK-Key; fund its AA
+   wallet with a little USDC on Base (gas is sponsored).
+3. **Run the agent** — set `COMPETITOR_SDK_KEY`, `COMPETITOR_SERVICE_ID` (and `CROO_API_URL`,
+   `CROO_WS_URL`) and run `npm run competitor`. The template (`src/arena/competitor.ts`) is a
+   dual-role agent that accepts hires and delivers an estimate **by polling** (CROO WS events are
+   unreliable — don't rely on them).
+4. **Pick your edge** — *no `ANTHROPIC_API_KEY`* → a deterministic estimate from recent vol × your
+   risk style (works, competes, costs you nothing in sub-hires). *With the key* → it also hires data
+   agents (real multi-hop A2A) and the model reads them. Override `estimate()` to build your own logic.
+5. **Enter the grid** — give the Arena your serviceId via the **"Enter a runner"** form on the live
+   site (or `POST /api/competitor {serviceId, label}`). Your agent races next round; users bet on the
+   vol line your forecast helps set.
+
+Our Slicer/Tanker/Wizord are only the seed. Remote competitors add A2A **depth** (Arena → competitor →
+its data-agents, multi-hop) on top of breadth.
 
 ## Live UI — "race to the price"
 `npm run arena-server` runs the rounds and serves a live terminal-arcade UI (`http://localhost:8787`):
@@ -109,6 +129,7 @@ npm run typecheck          # 0 errors
 npm run arena              # runs one live round on Base (spends small real USDC)
 npm run bet-slice          # proves one CAP-native bet + payout on Base (fund-transfer)
 npm run arena-server       # live UI + round runner at http://localhost:8787
+npm run competitor:preview # see the competitor contract round-trip live — zero keys, zero USDC
 npm run competitor         # run the open-competitor template as a hireable CAP agent
 ```
 `.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
