@@ -67,6 +67,13 @@ export interface ArenaState {
   leaderboard: LeaderRow[];
   feed: FeedItem[];
   predictStats?: { total: number; correct: number; visitors: number };
+  dataMarket?: {
+    discovered: number;
+    maxPriceUSDC: number;
+    censusAt: number;
+    top: { name: string; orders7d: number; priceUSDC: number }[];
+    wired: { label: string; serviceId: string; ours: boolean }[];
+  };
 }
 
 /** Stable per-browser id so the runner can count UNIQUE guest visitors (no signup, no wallet). */

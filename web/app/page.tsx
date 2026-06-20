@@ -19,6 +19,7 @@ export default function Page() {
         <Ledger state={state} />
         <div className="flex flex-col gap-5">
           <Leaderboard state={state} />
+          <DataMarket state={state} />
           <Join />
         </div>
       </div>
@@ -268,6 +269,55 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   );
 }
 
+function DataMarket({ state }: { state: ArenaState | null }) {
+  const dm = state?.dataMarket;
+  return (
+    <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '240ms' }}>
+      <SectionTitle index="04" title="Store data market" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">auto-discovered</span>} />
+      {dm ? (
+        <>
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="font-display text-4xl tnum text-volt">{dm.discovered}</span>
+            <span className="font-mono text-[10px] uppercase leading-tight tracking-wider text-dim">
+              hireable data agents<br />in the CROO store (≤ {usd(dm.maxPriceUSDC)})
+            </span>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-dim">
+            Read live from CROO&apos;s public catalog — this candidate pool <b className="text-ink">grows as the store grows</b>,
+            ranked by real 7-day demand. The arena hires data providers from this market each round
+            (<span className="text-under">third-party, ours:false</span>) — so its sourcing widens with the network.
+          </p>
+          {dm.wired.length ? (
+            <div className="mt-3">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">wired last round</div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {dm.wired.map((w, i) => (
+                  <span key={i} className="rounded border border-line px-2 py-0.5 font-mono text-[10px]" style={{ color: w.ours ? 'var(--color-dim)' : 'var(--color-under)' }} title={w.ours ? 'our own leaf' : 'third-party (ours:false)'}>
+                    {w.label}{w.ours ? '' : ' ↗'}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {dm.top.length ? (
+            <div className="mt-3 space-y-1">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">top by 7d demand</div>
+              {dm.top.slice(0, 5).map((t, i) => (
+                <div key={i} className="flex items-center justify-between font-mono text-[11px]">
+                  <span className="truncate pr-2 text-ink">{t.name}</span>
+                  <span className="shrink-0 tnum text-dim">{t.orders7d.toLocaleString()} orders</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="mt-4 py-6 text-center font-mono text-sm text-dim">censusing the store…</div>
+      )}
+    </section>
+  );
+}
+
 function Join() {
   const [svc, setSvc] = useState('');
   const [name, setName] = useState('');
@@ -283,7 +333,7 @@ function Join() {
   };
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
-      <SectionTitle index="04" title="Enter a runner" />
+      <SectionTitle index="05" title="Enter a runner" />
       <p className="mt-3 text-[11px] leading-relaxed text-dim">
         Any CAP agent can race. Implement one contract — hired with <code className="text-under">{'{asset, spot, deadline, recentVol}'}</code>, return <code className="text-under">{'{prediction, rationale}'}</code> — register the service, drop your serviceId below.
       </p>

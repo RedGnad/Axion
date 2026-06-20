@@ -5,6 +5,7 @@ import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, typ
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
+import { discoverProviders } from './discovery.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -42,6 +43,7 @@ interface RoundView {
 interface HistoryEdge {
   competitor: string;
   label: string;
+  serviceId?: string;
   ours: boolean;
   payTxHash: string;
   clearTxHash: string;
@@ -77,6 +79,14 @@ interface ArenaState {
   feed: FeedItem[];
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number };
+  /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
+  dataMarket?: {
+    discovered: number;
+    maxPriceUSDC: number;
+    censusAt: number;
+    top: { name: string; orders7d: number; priceUSDC: number }[];
+    wired: { label: string; serviceId: string; ours: boolean }[];
+  };
 }
 
 // Long-running server: a stray WebSocket/async error must never take down the HTTP server.
@@ -198,6 +208,24 @@ function saveHistory(): void {
   void saveState(blob); // durable (Upstash) — survives Render restarts
 }
 
+/** Refresh the live store data-market panel (free, read-only). `wired` = the providers actually
+ *  hired in the most recent round (from its edges) so the demo shows real A2A, not just the catalog. */
+async function refreshDataMarket(wired?: { label: string; serviceId: string; ours: boolean }[]): Promise<void> {
+  try {
+    const pool = await discoverProviders();
+    state.dataMarket = {
+      discovered: pool.length,
+      maxPriceUSDC: Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10,
+      censusAt: Date.now(),
+      top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
+      wired: wired ?? state.dataMarket?.wired ?? [],
+    };
+    broadcast();
+  } catch {
+    /* discovery is best-effort; the curated roster still drives real hires */
+  }
+}
+
 /** Keep Axion live & hireable from the SAME service (no extra Render instance, no USDC). WS connection
  *  = "online" in the store; accept/deliver via POLLING (CROO WS events are unreliable). On hire it
  *  delivers a real arena brief (no sub-hires). Needs CROO_SDK_KEY + AXION_SERVICE_ID in env. */
@@ -306,7 +334,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             error: o.errors[f.competitor],
             isWinner: o.winners.includes(f.competitor),
           })),
-          edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash })),
+          edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash })),
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
@@ -320,6 +348,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         predictPending.delete(round.id);
         pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner(s): ${o.winners.map((w) => personaMeta(w).label).join(', ')}`);
         saveHistory();
+        // Reflect the providers actually wired this round into the live data-market panel.
+        void refreshDataMarket(item.edges.map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));
         broadcast();
       },
     }, { recentVol: computeRecentVol() });
@@ -336,6 +366,11 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
 async function main(): Promise<void> {
   await loadHistory();
   console.log(`[arena-server] durable store: ${storeEnabled() ? 'Upstash (on)' : 'off (seed/file fallback)'}`);
+
+  // Live store data-market: census at boot (seed `wired` from the last replayed round) + every 10min.
+  const lastEdges = (state.history[0]?.edges ?? []).map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
+  void refreshDataMarket(lastEdges.length ? lastEdges : undefined);
+  setInterval(() => void refreshDataMarket(), 10 * 60_000);
 
   const cfg = {
     baseURL: process.env.CROO_API_URL ?? '',
