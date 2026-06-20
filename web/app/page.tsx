@@ -157,15 +157,17 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
     kicker = 'STATUS'; big = 'offline'; accent = false; showStart = false; note = 'runner unreachable — retrying every 2s';
   } else if (active && r) {
     showStart = false;
-    if (r.phase === 'betting' && r.settleAtMs) {
-      kicker = 'BETTING CLOSES IN'; big = clock(r.settleAtMs - now); note = 'tap OVER / UNDER below — free, no wallet';
+    if (r.phase === 'betting') {
+      // The race is LIVE → NO timer, keep the suspense of who reaches the line first (like a real race).
+      kicker = 'RACE LIVE'; big = '🏁 they’re off'; accent = false;
+      note = 'tap OVER / UNDER below — free · first to the line wins';
     } else {
-      // Hiring phase: count down to the estimated settle + show step progress so it never feels stuck.
-      const target = r.settleAtMs ?? r.etaSettleMs;
+      // Hiring phase: count down to when the RACE STARTS (hiring only, no betting window) + step progress.
+      const target = r.etaRaceStartMs;
       const left = target ? target - now : 0;
       const ready = r.competitors.filter((c) => c.estimate != null).length;
       const total = r.competitors.length || 1;
-      kicker = 'RACE SETTLES IN';
+      kicker = 'RACE STARTS IN';
       big = target && left > 1000 ? '~' + clock(left) : 'any moment…';
       note = `${ready}/${total} agents engaged · hiring data on-chain…`;
     }

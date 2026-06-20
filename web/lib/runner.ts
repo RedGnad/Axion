@@ -27,6 +27,7 @@ export interface RoundView {
   raceStartMs?: number;
   settleAtMs?: number;
   etaSettleMs?: number;
+  etaRaceStartMs?: number;
   competitors: CompetitorView[];
 }
 export interface HistoryEdge {

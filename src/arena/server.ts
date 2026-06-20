@@ -45,6 +45,9 @@ interface RoundView {
   /** Estimated settle time set at round OPEN (hiring is ~incompressible) so the UI shows a descending
    *  countdown from the very start; replaced by the exact settleAtMs once betting opens. */
   etaSettleMs?: number;
+  /** Estimated time the RACE starts (hiring done / betting opens). The UI counts down to THIS during
+   *  hiring (hiring only, no betting window) so the number is short + honest; no timer during the race. */
+  etaRaceStartMs?: number;
   competitors: CompetitorView[];
 }
 interface HistoryEdge {
@@ -286,8 +289,9 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           id,
           phase: 'open',
           openPrice,
-          // Hiring N data-agents is ~incompressible → estimate the settle (calibrated from past rounds)
-          // so the UI counts down from open; the exact settleAtMs overrides this when betting opens.
+          // Hiring N data-agents is ~incompressible → estimate when the RACE starts (hiring done),
+          // calibrated from past rounds, so the UI counts down to the START (no betting window in it).
+          etaRaceStartMs: roundOpenMs + HIRING_ETA_MS,
           etaSettleMs: roundOpenMs + HIRING_ETA_MS + WINDOW * 1000,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
@@ -316,7 +320,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         // next round's countdown is honest and doesn't sit on "any moment…".
         if (roundOpenMs) {
           const hiringMs = Date.now() - roundOpenMs;
-          HIRING_ETA_MS = Math.round(HIRING_ETA_MS * 0.5 + hiringMs * 0.5);
+          // EMA, but CLAMPED [45s,150s] so a pathological round (stuck provider) can't inflate the ETA.
+          HIRING_ETA_MS = Math.max(45_000, Math.min(150_000, Math.round(HIRING_ETA_MS * 0.5 + hiringMs * 0.5)));
         }
         state.round.phase = 'betting';
         state.round.line = line;
