@@ -12,7 +12,7 @@ import { livery, usd } from '@/lib/utils';
  */
 const A0 = 4;      // start grid %
 const RACE_L = 25; // scored race begins here
-const RACE_R = 93; // finish line %
+const RACE_R = 90; // finish line % — karts AND the line share this coordinate so the leader lands ON it
 
 export default function Race({ round }: { round: RoundView | null }) {
   const roundRef = useRef<RoundView | null>(round);
@@ -68,7 +68,7 @@ export default function Race({ round }: { round: RoundView | null }) {
   const truth = round.amplitude != null ? round.amplitude : round.liveAmplitude;
 
   return (
-    <div ref={wrap} className="relative pr-10">
+    <div ref={wrap} className="relative pr-2">
       {round.competitors.map((c) => {
         const col = livery(c.id);
         return (
@@ -93,9 +93,9 @@ export default function Race({ round }: { round: RoundView | null }) {
           </div>
         );
       })}
-      {/* finish line */}
-      <div className="absolute top-0 bottom-1.5 z-0" style={{ right: '36px', width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
-      <div className="absolute -top-1 right-2 z-0 text-[15px]">🏁</div>
+      {/* finish line — anchored to RACE_R% so the leader's kart lands exactly on it */}
+      <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_R}%`, marginLeft: -1.5, width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
+      <div className="absolute -top-1 z-0 text-[15px]" style={{ left: `${RACE_R}%`, transform: 'translateX(-50%)' }}>🏁</div>
       <div className="mt-3 flex justify-between font-mono text-[10px] uppercase tracking-wider text-dim">
         <span>off the mark ⟵ closeness to the real move ⟶ exact</span>
         <span style={{ color: 'var(--color-volt)' }}>real move {usd(truth ?? 0)}</span>
