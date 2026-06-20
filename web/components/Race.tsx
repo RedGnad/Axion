@@ -51,6 +51,10 @@ export default function Race({ round }: { round: RoundView | null }) {
           const base = A0 + (RACE_L - 1 - A0) * (1 - Math.exp(-(Date.now() - openMs) / 22000));
           r.competitors.forEach((c, i) => (targets[c.id] = base + Math.sin(Date.now() / 600 + i * 2.1) * 1.1));
         }
+        // Position model = the kart's NOSE (front/right edge). We center the DOM node on `left` via
+        // translateX(-50%), so shifting left by half the car width makes its nose sit on the standing
+        // position → the winner's nose lands exactly on the finish line at RACE_R.
+        const halfKartPct = root.offsetWidth ? (16 / root.offsetWidth) * 100 : 1.4; // car is w-8 = 32px
         for (const c of r.competitors) {
           const el = root.querySelector<HTMLElement>(`[data-kart="${c.id}"]`);
           if (!el) continue;
@@ -58,7 +62,7 @@ export default function Race({ round }: { round: RoundView | null }) {
           // Race over → snap to the final standings (so the winner sits exactly on the line, no lerp drift).
           if (r.phase === 'settled') pos.current[c.id] = targets[c.id];
           else pos.current[c.id] += (targets[c.id] - pos.current[c.id]) * 0.12;
-          el.style.left = pos.current[c.id].toFixed(2) + '%';
+          el.style.left = (pos.current[c.id] - halfKartPct).toFixed(2) + '%';
         }
       }
       raf = requestAnimationFrame(frame);
