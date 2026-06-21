@@ -48,7 +48,9 @@ interface RoundView {
   settleAtMs?: number;
   /** When betting closes (= settle, single window). */
   betCloseAtMs?: number;
-  /** DQ cutoff during hiring — the red bar fills toward this; slow agents are out when it passes. */
+  /** DQ grace window: starts when the FIRST agent delivers (dqFromMs) and ends at the cutoff (dqAtMs).
+   *  The red bar fills over [dqFromMs, dqAtMs]; stragglers not in by dqAtMs are cut. */
+  dqFromMs?: number;
   dqAtMs?: number;
   /** Estimated settle time set at round OPEN (hiring is ~incompressible) so the UI shows a descending
    *  countdown from the very start; replaced by the exact settleAtMs once betting opens. */
@@ -363,7 +365,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         broadcast();
       },
       onFirstEstimate: ({ dqAtMs }) => {
-        if (state.round) { state.round.dqAtMs = dqAtMs; broadcast(); }
+        // The DQ grace clock starts now (first agent in) — the red bar fills over [dqFromMs, dqAtMs].
+        if (state.round) { state.round.dqFromMs = Date.now(); state.round.dqAtMs = dqAtMs; broadcast(); }
       },
       onEstimates: ({ line, betCloseAtMs, dqIds }) => {
         if (!state.round) return;
@@ -458,8 +461,26 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
   } finally {
     running = false;
     state.status = competitors.length ? 'idle' : 'view-only';
+    // Never leave an orphaned non-settled round on screen (it would look like a frozen race when idle).
+    if (state.round && state.round.phase !== 'settled') showLastSettledRound();
     broadcast();
   }
+}
+
+/** Set state.round to the last SETTLED round (the "between races" view), or clear it if none. */
+function showLastSettledRound(): void {
+  const last = state.history[0];
+  if (!last) { state.round = undefined; return; }
+  state.round = {
+    id: last.id,
+    phase: 'settled',
+    openPrice: last.openPrice,
+    closePrice: last.closePrice,
+    amplitude: last.amplitude,
+    line: last.line,
+    settleAtMs: Date.parse(last.settledAt) || Date.now(),
+    competitors: last.competitors ?? [],
+  };
 }
 
 async function main(): Promise<void> {

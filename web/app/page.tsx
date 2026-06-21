@@ -205,16 +205,25 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       big = `×${mult.toFixed(2)}`;
       note = 'odds drop as the move reveals — call a side below';
     } else {
-      // Hiring: count down to RACE START + a RED bar toward the slow-agent DQ cutoff.
-      const openMs = Number((r.id || '').split('-')[1]) || now;
-      const target = r.dqAtMs ?? r.etaRaceStartMs;
-      const left = target ? target - now : 0;
+      // Hiring. Three sub-states so the wait always reads correctly:
       const ready = r.competitors.filter((c) => c.estimate != null).length;
       const total = r.competitors.length || 1;
-      if (target && left > 1000) { kicker = 'RACE STARTS IN'; big = '~' + clock(left); }
-      else { kicker = 'ALMOST OFF'; big = `${ready}/${total} in`; }
-      note = 'agents racing to deliver — slow ones are cut';
-      barPct = target && target > openMs ? Math.min(0.97, Math.max(0.04, (now - openMs) / (target - openMs))) : 0.5;
+      const grace = r.dqFromMs && r.dqAtMs && r.dqAtMs > r.dqFromMs;
+      if (ready >= total) {
+        kicker = 'LINING UP'; big = 'they’re off…'; accent = false; note = 'all agents in — race starting';
+      } else if (ready >= 1 && grace) {
+        // DQ grace: the RED bar fills over [first estimate → cutoff]; stragglers are cut when it fills.
+        const left = r.dqAtMs! - now;
+        kicker = 'STRAGGLERS CUT IN'; big = left > 1000 ? clock(left) : 'cutting…';
+        note = `${ready}/${total} agents in · slow ones get cut`;
+        barPct = Math.min(0.99, Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)));
+      } else {
+        // Nobody in yet — no DQ clock has started, so no bar (don't penalise from t=0).
+        const target = r.etaRaceStartMs;
+        const left = target ? target - now : 0;
+        kicker = 'AGENTS HIRING DATA'; big = target && left > 1000 ? '~' + clock(left) : 'almost…';
+        note = 'buying data on-chain to forecast';
+      }
     }
   } else {
     const delta = nextAt ? nextAt - now : 0;

@@ -28,6 +28,7 @@ export interface RoundView {
   raceStartMs?: number;
   settleAtMs?: number;
   betCloseAtMs?: number;
+  dqFromMs?: number;
   dqAtMs?: number;
   etaSettleMs?: number;
   etaRaceStartMs?: number;
