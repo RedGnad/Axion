@@ -59,11 +59,12 @@ export interface RoundResult {
 
 /** Live phase hooks so a UI/server can stream a round as it happens. */
 export interface RoundHooks {
-  onOpen?: (info: { id: string; openPrice: number }) => void;
+  /** Round opens. `dqAtMs` = backstop cutoff (refined to first-agent + grace once the fastest lands). */
+  onOpen?: (info: { id: string; openPrice: number; dqAtMs: number }) => void;
   /** Fires as EACH competitor finishes, so its kart takes position one-by-one (watchable hiring). */
   onEstimate?: (info: { forecast: Forecast; edges: ArenaEdge[] }) => void;
-  /** First estimate landed → the DQ cutoff is now known (slow agents are out when it passes). */
-  onFirstEstimate?: (info: { dqAtMs: number }) => void;
+  /** The FASTEST agent landed → the grace window opens: [dqFromMs, dqAtMs]. Stragglers cut at dqAtMs. */
+  onFirstEstimate?: (info: { dqFromMs: number; dqAtMs: number }) => void;
   /** Betting OPENS (commit window) — the outcome is NOT being measured yet, so a late bet can't cheat.
    *  `dqIds` = competitors disqualified this round for not delivering before the cutoff. */
   onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; betCloseAtMs: number; dqIds: string[] }) => void;
@@ -263,26 +264,30 @@ export async function runRound(
   const open = await fetchPythPrice();
   // Recent real volatility (typical move over the window). Falls back to ~0.05% of spot if unknown.
   const recentVol = opts.recentVol && opts.recentVol > 0 ? opts.recentVol : open.price * 0.0005;
-  console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); recentVol ~$${recentVol.toFixed(2)}; agents estimating…`);
-  hooks.onOpen?.({ id, openPrice: open.price });
 
-  // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
-  // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
-  const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
-  // Hiring with a DQ CUTOFF: an agent that doesn't deliver before the cutoff is OUT this round, so the
-  // race starts without waiting for the slowest (and nudges builders toward faster data providers).
-  // Cutoff = grace after the FIRST estimate lands (relative DQ). The hard ceiling is just a backstop for
-  // total provider failure — it MUST be longer than real hiring (~2-3min) or it kills normal rounds.
+  // DQ CUTOFF, RELATIVE to the fastest agent = first-estimate + grace. Anyone finishing within `grace`
+  // of the fastest is safe → healthy providers (which cluster together) are NEVER cut; only a real
+  // outlier (>grace slower than its peers) is. Hard ceiling = backstop for total provider failure.
   const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '45')) * 1000;
   const hardCap = Math.max(grace + 60_000, Number(process.env.ARENA_ESTIMATE_HARDCAP_SECONDS ?? '300') * 1000);
   const hiringStart = Date.now();
-  const done = new Map<string, { forecast: Forecast; edges: ArenaEdge[] }>();
   let firstAt = 0;
-  let dqAtMs = hiringStart + hardCap;
+  let dqAtMs = hiringStart + hardCap; // backstop until the fastest agent lands
+
+  console.log(`[arena] ${id} open — ETH/USD $${open.price.toFixed(2)} (Pyth ${open.publishTime}); recentVol ~$${recentVol.toFixed(2)}; agents estimating…`);
+  hooks.onOpen?.({ id, openPrice: open.price, dqAtMs });
+
+  // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
+  const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
+  const done = new Map<string, { forecast: Forecast; edges: ArenaEdge[] }>();
   const playP = competitors.map((c) =>
     play(c, ctx)
       .then((r) => {
-        if (!firstAt) { firstAt = Date.now(); dqAtMs = Math.min(hiringStart + hardCap, firstAt + grace); hooks.onFirstEstimate?.({ dqAtMs }); }
+        if (!firstAt) {
+          firstAt = Date.now();
+          dqAtMs = Math.min(hiringStart + hardCap, firstAt + grace); // grace relative to the fastest
+          hooks.onFirstEstimate?.({ dqFromMs: firstAt, dqAtMs });
+        }
         done.set(c.id, r);
         hooks.onEstimate?.({ forecast: r.forecast, edges: r.edges });
       })

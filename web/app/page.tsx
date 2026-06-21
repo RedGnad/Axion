@@ -205,24 +205,24 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       big = `×${mult.toFixed(2)}`;
       note = 'odds drop as the move reveals — call a side below';
     } else {
-      // Hiring. Three sub-states so the wait always reads correctly:
+      // Hiring. Descending countdown to the expected start; then a GRACE window (red bar) for stragglers.
       const ready = r.competitors.filter((c) => c.estimate != null).length;
       const total = r.competitors.length || 1;
-      const grace = r.dqFromMs && r.dqAtMs && r.dqAtMs > r.dqFromMs;
+      const graceOpen = r.dqFromMs != null && r.dqAtMs != null && r.dqAtMs > r.dqFromMs;
       if (ready >= total) {
         kicker = 'LINING UP'; big = 'they’re off…'; accent = false; note = 'all agents in — race starting';
-      } else if (ready >= 1 && grace) {
-        // DQ grace: the RED bar fills over [first estimate → cutoff]; stragglers are cut when it fills.
+      } else if (graceOpen && ready >= 1) {
+        // Fastest agent is in → GRACE window: red bar over [first agent → cutoff]; only outliers get cut.
         const left = r.dqAtMs! - now;
         kicker = 'STRAGGLERS CUT IN'; big = left > 1000 ? clock(left) : 'cutting…';
-        note = `${ready}/${total} agents in · slow ones get cut`;
+        note = `${ready}/${total} agents in · only the slow stragglers get cut`;
         barPct = Math.min(0.99, Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)));
       } else {
-        // Nobody in yet. We genuinely can't predict when slow third-party providers answer, so we show
-        // an HONEST elapsed count-UP (not a fake countdown that lies) until the first agent lands.
-        const openMs = Number((r.id || '').split('-')[1]) || now;
-        kicker = 'AGENTS HIRING DATA'; big = clock(now - openMs);
-        note = 'buying real data on-chain · usually ~2–3 min';
+        // Before the first agent: descending countdown to the calibrated expected start (approximate).
+        const eta = r.etaRaceStartMs;
+        const left = eta ? eta - now : 0;
+        kicker = 'RACE STARTS IN'; big = eta && left > 1000 ? '~' + clock(left) : 'any moment…';
+        note = 'buying real data on-chain to forecast';
       }
     }
   } else {

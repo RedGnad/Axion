@@ -48,8 +48,7 @@ interface RoundView {
   settleAtMs?: number;
   /** When betting closes (= settle, single window). */
   betCloseAtMs?: number;
-  /** DQ grace window: starts when the FIRST agent delivers (dqFromMs) and ends at the cutoff (dqAtMs).
-   *  The red bar fills over [dqFromMs, dqAtMs]; stragglers not in by dqAtMs are cut. */
+  /** DQ grace window = [dqFromMs (fastest agent landed) → dqAtMs (cutoff)]. Red bar fills over it. */
   dqFromMs?: number;
   dqAtMs?: number;
   /** Estimated settle time set at round OPEN (hiring is ~incompressible) so the UI shows a descending
@@ -353,20 +352,25 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
   state.status = 'running';
   try {
     await runRound(competitors, cfg, WINDOW, {
-      onOpen: ({ id, openPrice }) => {
+      onOpen: ({ id, openPrice, dqAtMs }) => {
         roundOpenMs = Date.now();
         state.round = {
           id,
           phase: 'open',
           openPrice,
-          // Hiring N data-agents is ~incompressible → estimate when the RACE starts (hiring done),
-          // calibrated from past rounds, so the UI counts down to the START (no betting window in it).
+          // Calibrated expected race start (descending countdown target), and the DQ cutoff = that + grace
+          // (known upfront, computed in loop) → the red grace bar fills over [etaRaceStartMs, dqAtMs].
           etaRaceStartMs: roundOpenMs + HIRING_ETA_MS,
           etaSettleMs: roundOpenMs + HIRING_ETA_MS + WINDOW * 1000,
+          dqAtMs,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
         pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring data & estimating…`);
         broadcast();
+      },
+      onFirstEstimate: ({ dqFromMs, dqAtMs }) => {
+        // Fastest agent landed → the grace window opens; the red bar fills over [dqFromMs, dqAtMs].
+        if (state.round) { state.round.dqFromMs = dqFromMs; state.round.dqAtMs = dqAtMs; broadcast(); }
       },
       onEstimate: ({ forecast, edges }) => {
         if (!state.round) return;
@@ -383,10 +387,6 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         }
         pushFeed(`${personaMeta(forecast.competitor).label} estimates $${forecast.prediction.toFixed(2)}`);
         broadcast();
-      },
-      onFirstEstimate: ({ dqAtMs }) => {
-        // The DQ grace clock starts now (first agent in) — the red bar fills over [dqFromMs, dqAtMs].
-        if (state.round) { state.round.dqFromMs = Date.now(); state.round.dqAtMs = dqAtMs; broadcast(); }
       },
       onEstimates: ({ line, betCloseAtMs, dqIds }) => {
         if (!state.round) return;
