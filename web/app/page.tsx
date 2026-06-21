@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useArena, postPredict, RUNNER_URL, type ArenaState } from '@/lib/runner';
 import { cn, livery, usd } from '@/lib/utils';
 import Race from '@/components/Race';
@@ -139,6 +139,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   const nextAt = state?.nextRoundAtMs;
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const settledRef = useRef<{ id: string; at: number } | null>(null);
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   const startNow = async () => {
@@ -146,6 +147,12 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
     try { await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' }); } catch {}
     setTimeout(() => setBusy(false), 3000);
   };
+
+  // Detect a FRESH settle → celebrate the winner for a few seconds before the next-race countdown.
+  if (r && r.phase === 'settled' && r.amplitude != null) {
+    if (settledRef.current?.id !== r.id) settledRef.current = { id: r.id, at: Date.now() };
+  }
+  const justSettled = !!(r && r.phase === 'settled' && settledRef.current?.id === r.id && now - settledRef.current.at < 7000);
 
   let kicker = 'NEXT RACE IN';
   let big = '';
@@ -155,6 +162,15 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
 
   if (!online) {
     kicker = 'STATUS'; big = 'offline'; accent = false; showStart = false; note = 'runner unreachable — retrying every 2s';
+  } else if (justSettled && r) {
+    // Win flash (a few seconds) right after the race, before the next-race countdown resumes.
+    const w = r.competitors.find((c) => c.isWinner);
+    showStart = false;
+    kicker = 'WINNER';
+    big = `🏆 ${w?.label ?? '—'}`;
+    note = r.amplitude != null && r.line != null
+      ? `called the move best — $${r.amplitude.toFixed(2)} vs line $${r.line.toFixed(2)}`
+      : 'race settled on-chain';
   } else if (active && r) {
     showStart = false;
     if (r.phase === 'betting') {
@@ -162,14 +178,14 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       kicker = 'RACE LIVE'; big = '🏁 they’re off'; accent = false;
       note = 'tap OVER / UNDER below — free · first to the line wins';
     } else {
-      // Hiring phase: count down to when the RACE STARTS (hiring only, no betting window) + step progress.
+      // Hiring phase: count down to RACE START; on overrun, show live step progress (never a dead "any moment").
       const target = r.etaRaceStartMs;
       const left = target ? target - now : 0;
       const ready = r.competitors.filter((c) => c.estimate != null).length;
       const total = r.competitors.length || 1;
-      kicker = 'RACE STARTS IN';
-      big = target && left > 1000 ? '~' + clock(left) : 'any moment…';
-      note = `${ready}/${total} agents engaged · hiring data on-chain…`;
+      if (target && left > 1000) { kicker = 'RACE STARTS IN'; big = '~' + clock(left); }
+      else { kicker = 'ALMOST OFF'; big = `${ready}/${total} ready`; }
+      note = 'agents hiring data on-chain…';
     }
   } else {
     const delta = nextAt ? nextAt - now : 0;
@@ -255,15 +271,30 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           const won = side === 'over' ? overWon : underWon;
           const col = side === 'over' ? 'var(--color-over)' : 'var(--color-under)';
           const picked = mine && pick!.side === side;
+          const bettable = live && !mine; // tappable right now
+          const boxShadow = won
+            ? `inset 0 0 0 1px ${col}, 0 0 20px ${col}22`
+            : picked
+            ? 'inset 0 0 0 2px #fff'
+            : bettable
+            ? `inset 0 0 0 2px ${col}, 0 0 22px ${col}55` // clear "you can tap this now" ring + glow
+            : 'none';
           return (
             <button
               key={side}
               onClick={() => choose(side)}
-              className={cn('rounded-lg border p-4 text-center transition', live ? 'cursor-pointer hover:border-ink/40' : 'cursor-default', picked ? 'border-white' : 'border-line')}
-              style={{ boxShadow: won ? `inset 0 0 0 1px ${col}, 0 0 20px ${col}22` : 'none' }}
+              disabled={!bettable && !picked}
+              className={cn(
+                'rounded-lg border p-4 text-center transition',
+                bettable ? 'cursor-pointer border-transparent hover:brightness-125' : 'cursor-default border-line',
+                !live && !won && !picked ? 'opacity-45' : '', // dim when not bettable so the live state pops
+              )}
+              style={{ boxShadow }}
             >
               <div className="font-display text-2xl uppercase tracking-wide" style={{ color: col }}>{side}</div>
-              <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">move {side === 'over' ? '>' : '<'} line {usd(r?.line)}</div>
+              <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                {bettable ? <span style={{ color: col }}>tap to call · </span> : null}move {side === 'over' ? '>' : '<'} line {usd(r?.line)}
+              </div>
             </button>
           );
         })}
