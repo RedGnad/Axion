@@ -148,18 +148,8 @@ export default function Race({ round }: { round: RoundView | null }) {
           outline: '1px solid rgba(255,255,255,.6)',
         }}
       />
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-3">
-        <span className="text-[11px] leading-snug text-dim">Each kart advances as its guess gets closer to the real ETH move.</span>
-        {(() => {
-          const p = round.phase;
-          const label = p === 'settled' ? 'final move' : p === 'racing' ? 'live move' : 'the line';
-          const val = p === 'settled' ? round.amplitude : p === 'racing' ? round.liveAmplitude : round.line;
-          return (
-            <span className="shrink-0 rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider tnum" style={{ borderColor: 'var(--color-volt)', color: 'var(--color-volt)' }}>
-              {label} {usd(val ?? 0)}
-            </span>
-          );
-        })()}
+      <div className="mt-5 border-t border-line/50 pt-3">
+        <span className="text-[11px] leading-snug text-dim">Each kart advances as its guess gets closer to the real ETH move — the closest one crosses the finish.</span>
       </div>
     </div>
   );

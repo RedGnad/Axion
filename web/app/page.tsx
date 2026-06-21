@@ -22,7 +22,7 @@ export default function Page() {
           <div className="bg-panel px-5 py-5"><RaceControl state={state} online={online} /></div>
         </div>
         <div className="border-t border-line px-5 py-5">
-          <SectionTitle title="The grid" right={<PhaseTag state={state} online={online} />} />
+          <SectionTitle title="The grid" right={<div className="flex items-center gap-3"><MoveBadge state={state} /><PhaseTag state={state} online={online} /></div>} />
           <div className="mt-4"><Race round={state?.round ?? null} /></div>
         </div>
         <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
@@ -120,6 +120,20 @@ function clock(ms: number) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
   const p = (n: number) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
+}
+
+/** The line / live move / final move — in the grid HEADER, away from the karts (no overlap at the finish). */
+function MoveBadge({ state }: { state: ArenaState | null }) {
+  const r = state?.round;
+  if (!r) return null;
+  const label = r.phase === 'settled' ? 'final move' : r.phase === 'racing' ? 'live move' : 'line';
+  const val = r.phase === 'settled' ? r.amplitude : r.phase === 'racing' ? r.liveAmplitude : r.line;
+  if (val == null) return null;
+  return (
+    <span className="rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider tnum" style={{ borderColor: 'color-mix(in srgb, var(--color-volt) 50%, transparent)', color: 'var(--color-volt)' }}>
+      {label} {usd(val)}
+    </span>
+  );
 }
 
 /** Small phase tag for the section header (the big countdown lives in RaceControl). */
