@@ -264,9 +264,10 @@ export async function runRound(
   const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
   // Hiring with a DQ CUTOFF: an agent that doesn't deliver before the cutoff is OUT this round, so the
   // race starts without waiting for the slowest (and nudges builders toward faster data providers).
-  // Cutoff = grace after the FIRST estimate lands, capped by a hard ceiling so it never hangs.
-  const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '30')) * 1000;
-  const hardCap = Math.max(grace, Number(process.env.ARENA_ESTIMATE_HARDCAP_SECONDS ?? '120') * 1000);
+  // Cutoff = grace after the FIRST estimate lands (relative DQ). The hard ceiling is just a backstop for
+  // total provider failure — it MUST be longer than real hiring (~2-3min) or it kills normal rounds.
+  const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '45')) * 1000;
+  const hardCap = Math.max(grace + 60_000, Number(process.env.ARENA_ESTIMATE_HARDCAP_SECONDS ?? '300') * 1000);
   const hiringStart = Date.now();
   const done = new Map<string, { forecast: Forecast; edges: ArenaEdge[] }>();
   let firstAt = 0;
