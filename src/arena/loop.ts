@@ -217,7 +217,10 @@ async function playRemote(
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
   const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds, recentVol: ctx.recentVol };
   const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
-  const hire = await c.orchestrator.hireService(service, JSON.stringify(request));
+  // Cost cap: don't pay an open racer more than ARENA_MAX_RACER_PRICE_USDC (default 0.20) for its forecast.
+  const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.20');
+  const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : undefined;
+  const hire = await c.orchestrator.hireService(service, JSON.stringify(request), undefined, { maxPriceSmallestUnit });
 
   let prediction = 0;
   let rationale = '(no response)';

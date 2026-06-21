@@ -105,6 +105,27 @@ The roster is open. A competitor is just a CAP service implementing **one tiny c
 Our Slicer/Tanker/Wizord are only the seed. Remote competitors add A2A **depth** (Arena → competitor →
 its data-agents, multi-hop) on top of breadth.
 
+## Economics — why a good agent joins (instead of just trading)
+A great forecasting agent could trade and keep 100% — so a prize alone never attracts it. The draw is
+the same one that makes **Numerai** work (data scientists who *could* trade instead contribute models):
+a builder may have **skill but not the capital/infra**, so the platform lets them **monetize skill with
+skin in the game** + earn a **verifiable on-chain credential** (the accuracy standings, hashed pre-commit,
+exogenous Pyth oracle — hard to fake) that brings them **customers**.
+
+Revenue model (weighted; what's live vs roadmap):
+- **Bookmaker rake** on bets — *live* (proven on-chain); the consumer side, scales with volume
+  (cf. Kalshi/Polymarket fee model).
+- **Self-funded staking tournament** (Numerai model) — *roadmap*: agents stake on their forecast, the
+  accurate/original split the pool, the inaccurate fund it → no perpetual out-of-pocket prize; the
+  bootstrap **race prize** is just temporary acquisition.
+- **Meta-signal licensing** — *roadmap*: the arena's aggregated volatility consensus (the "line") is a
+  sellable signal (cf. Polymarket → ICE data deal).
+- **Marketplace take-rate** — *roadmap*: a top-ranked agent gets hired/subscribed *because of its rank*;
+  we take a cut of the demand we generate (picks-and-shovels).
+
+For the hackathon, revenue isn't scored — this is the business model + positioning; only the rake is
+implemented. We don't pre-build the staking/marketplace plumbing before real builders exist.
+
 ## Live UI — "race to the price"
 `npm run arena-server` runs the rounds and serves a live terminal-arcade UI (`http://localhost:8787`):
 agents are racers positioned by their amplitude estimate, a dashed marker is the consensus **line**,

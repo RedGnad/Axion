@@ -47,6 +47,7 @@ export class Orchestrator {
     service: RosterEntry,
     requirements: string,
     fund?: { fundAmount: string; fundToken: string },
+    opts?: { maxPriceSmallestUnit?: number },
   ): Promise<HireResult> {
     const subtask: Subtask = { capability: service.capability, requirements };
     const neg = await this.client.negotiateOrder({
@@ -60,6 +61,17 @@ export class Orchestrator {
     // POLL for the order instead of relying on the OrderCreated WS event (CROO WS event delivery is
     // unreliable — the order is created on-chain but the event often never arrives). Robust path.
     const orderId = await this.waitForOrder(negotiationId, CREATE_TIMEOUT_MS, subtask.capability);
+
+    // Cost guard: reject before paying if the provider priced the order above our cap (protects margin
+    // when hiring open third-party racers/providers we don't control). Only enforced when opts set.
+    if (opts?.maxPriceSmallestUnit != null) {
+      const ord = await this.client.getOrder(orderId);
+      const price = Number(ord.price);
+      if (Number.isFinite(price) && price > opts.maxPriceSmallestUnit) {
+        try { await this.client.rejectOrder(orderId); } catch { /* best-effort */ }
+        throw new Error(`order price ${price} > cap ${opts.maxPriceSmallestUnit} (${service.label})`);
+      }
+    }
 
     // Escrow LOCK. Throws InsufficientBalanceError if the AA wallet lacks order.price USDC.
     const pay = await this.client.payOrder(orderId);
