@@ -273,55 +273,57 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           </div>
         ) : null}
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-4">
         {(['over', 'under'] as const).map((side) => {
           const won = side === 'over' ? overWon : underWon;
           const col = side === 'over' ? 'var(--color-over)' : 'var(--color-under)';
           const picked = mine && pick!.side === side;
           const bettable = live && !mine; // tappable right now
-          const boxShadow = won
-            ? `inset 0 0 0 1px ${col}, 0 0 20px ${col}22`
-            : picked
-            ? 'inset 0 0 0 2px #fff'
-            : bettable
-            ? `inset 0 0 0 2px ${col}, 0 0 22px ${col}55` // clear "you can tap this now" ring + glow
-            : 'none';
+          const emphasised = bettable || picked || won;
           return (
             <button
               key={side}
               onClick={() => choose(side)}
               disabled={!bettable && !picked}
               className={cn(
-                'rounded-lg border p-4 text-center transition',
-                bettable ? 'cursor-pointer border-transparent hover:brightness-125' : 'cursor-default border-line',
-                !live && !won && !picked ? 'opacity-45' : '', // dim when not bettable so the live state pops
+                'relative rounded-2xl border-2 px-4 py-6 text-center transition-transform',
+                bettable && 'cursor-pointer hover:-translate-y-0.5',
+                !bettable && !picked && 'cursor-default',
               )}
-              style={{ boxShadow }}
+              style={{
+                borderColor: picked ? '#fff' : col,
+                background: emphasised ? `color-mix(in srgb, ${col} 13%, transparent)` : 'transparent',
+                boxShadow: bettable ? `0 0 28px ${col}66` : won ? `0 0 22px ${col}33` : 'none',
+              }}
             >
-              <div className="font-display text-2xl uppercase tracking-wide" style={{ color: col }}>{side}</div>
-              <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-                {bettable ? <span style={{ color: col }}>tap to call · </span> : null}move {side === 'over' ? '>' : '<'} line {usd(r?.line)}
+              <div className="font-display text-4xl uppercase leading-none tracking-wide" style={{ color: col }}>
+                {side === 'over' ? '▲' : '▼'} {side}
+              </div>
+              <div className="mt-2 font-mono text-[11px] uppercase tracking-wider text-dim">
+                move {side === 'over' ? 'bigger than' : 'smaller than'} {usd(r?.line)}
+              </div>
+              <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: emphasised ? col : 'var(--color-dim)' }}>
+                {picked ? '✓ your call' : bettable ? '▸ tap to call' : 'opens next race'}
               </div>
             </button>
           );
         })}
       </div>
-      <div className="mt-2.5 font-mono text-[11px] text-dim">
+      <div className="mt-3 text-center font-mono text-[12px] text-dim">
         {mine && pick!.resolved ? (
-          <span style={{ color: pick!.correct ? 'var(--color-under)' : 'var(--color-over)' }}>{pick!.correct ? '✓ called it right' : '✗ wrong call'}</span>
+          <span className="text-base" style={{ color: pick!.correct ? 'var(--color-under)' : 'var(--color-over)' }}>{pick!.correct ? '✓ you called it right' : '✗ wrong call — try the next race'}</span>
         ) : mine ? (
-          <>you called <b className="text-ink">{pick!.side.toUpperCase()}</b> — waiting for settle…</>
-        ) : r?.phase === 'betting' ? (
-          <>betting open — tap <b className="text-ink">OVER / UNDER</b> to call it (free)</>
+          <>you called <b className="text-ink">{pick!.side.toUpperCase()}</b> — waiting for the move to settle…</>
+        ) : live ? (
+          <span className="text-ink">betting is open — pick a side, it&apos;s free</span>
         ) : (
-          <>tap OVER / UNDER while betting is open (free, in-browser)</>
+          <>the buttons light up when a race is live</>
         )}
-        {rec.t > 0 ? <span className="ml-1 text-volt">· your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
+        {rec.t > 0 ? <span className="ml-2 text-volt">· your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
       </div>
       <UsdcBet state={state} />
-      <p className="mt-3 text-[11px] leading-relaxed text-dim">
-        The line is the agents&apos; consensus estimate; the outcome is the Pyth ETH/USD move — exogenous, nobody controls it.
-        Browser predictions are free; real USDC bets settle on-chain.
+      <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
+        The <b className="text-ink">line</b> is the agents&apos; consensus guess. The outcome is the live Pyth ETH/USD move — nobody controls it.
       </p>
     </div>
   );
@@ -410,9 +412,9 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
         </div>
       )}
 
-      {msg ? <div className="mt-1.5 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
-      <p className="mt-2 font-mono text-[9px] leading-relaxed text-dim">
-        Custodial demo: your USDC goes to the house wallet on Base; winners are paid back at settle (pari-mutuel − 3% rake). Small stakes only. The free predict above needs no wallet.
+      {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
+      <p className="mt-2 text-[10px] leading-relaxed text-dim">
+        Custodial demo · small stakes · winners paid pari-mutuel (−3% rake) at settle. <span className="text-dim/70">The free predict above needs no wallet.</span>
       </p>
     </div>
   );

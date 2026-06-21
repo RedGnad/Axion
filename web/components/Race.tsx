@@ -133,7 +133,17 @@ export default function Race({ round }: { round: RoundView | null }) {
       <div className="absolute -top-1 z-0 font-mono text-[9px] uppercase tracking-[0.15em] text-dim" style={{ left: `${RACE_L}%`, transform: 'translateX(-50%)' }}>start</div>
       {/* finish line — anchored to RACE_R% so the leader's kart lands exactly on it */}
       <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_R}%`, marginLeft: -1.5, width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
-      <div className="absolute -top-1 z-0 text-[15px]" style={{ left: `${RACE_R}%`, transform: 'translateX(-50%)' }}>🏁</div>
+      {/* clean CSS checkered finish marker (no cheap emoji) */}
+      <div
+        className="absolute -top-2.5 z-10"
+        style={{
+          left: `${RACE_R}%`, transform: 'translateX(-50%)', width: 14, height: 10, borderRadius: 1,
+          backgroundColor: '#0a0a0b',
+          backgroundImage: 'conic-gradient(#fff 90deg, transparent 0 180deg, #fff 0 270deg, transparent 0)',
+          backgroundSize: '7px 5px',
+          outline: '1px solid rgba(255,255,255,.6)',
+        }}
+      />
       <div className="mt-3 flex justify-between font-mono text-[10px] uppercase tracking-wider text-dim">
         <span>off the mark ⟵ closeness to the real move ⟶ exact</span>
         <span style={{ color: 'var(--color-volt)' }}>real move {usd(truth ?? 0)}</span>
