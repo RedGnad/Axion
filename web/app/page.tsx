@@ -126,7 +126,7 @@ function clock(ms: number) {
 function PhaseTag({ state, online }: { state: ArenaState | null; online: boolean }) {
   const r = state?.round;
   const active = state?.status === 'running' && r && r.phase !== 'settled';
-  const text = !online ? 'offline' : active ? (r!.phase === 'betting' ? 'betting open' : 'estimating') : 'between races';
+  const text = !online ? 'offline' : !active ? 'between races' : r!.phase === 'betting' ? 'betting open' : r!.phase === 'racing' ? 'race live' : 'estimating';
   const col = !online ? 'var(--color-over)' : active ? 'var(--color-volt)' : 'var(--color-dim)';
   return (
     <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider" style={{ color: col }}>
@@ -166,6 +166,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   let accent = true;     // lime number vs neutral
   let showStart = true;  // judge can always trigger a real round
   let note = '';
+  let barPct: number | null = null; // hiring progress bar (sensory backup so the wait never feels frozen)
 
   if (!online) {
     kicker = 'STATUS'; big = 'offline'; accent = false; showStart = false; note = 'runner unreachable — retrying every 2s';
@@ -180,12 +181,18 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       : 'race settled on-chain';
   } else if (active && r) {
     showStart = false;
-    if (r.phase === 'betting') {
-      // The race is LIVE → NO timer, keep the suspense of who reaches the line first (like a real race).
+    if (r.phase === 'betting' && r.betCloseAtMs) {
+      // COMMIT window: the deadline that drives action (bets close BEFORE the race → no last-second cheat).
+      const left = r.betCloseAtMs - now;
+      kicker = 'BETTING CLOSES IN'; big = left > 1000 ? clock(left) : 'closing…';
+      note = 'pick OVER / UNDER below — free, no wallet';
+    } else if (r.phase === 'racing') {
+      // Reveal: NO timer, keep the suspense of who reaches the line first.
       kicker = 'RACE LIVE'; big = '🏁 they’re off'; accent = false;
-      note = 'tap OVER / UNDER below — free · first to the line wins';
+      note = 'betting closed · first kart to the line wins';
     } else {
-      // Hiring phase: count down to RACE START; on overrun, show live step progress (never a dead "any moment").
+      // Hiring: count down to RACE START + a progress bar so the wait always feels alive.
+      const openMs = Number((r.id || '').split('-')[1]) || now;
       const target = r.etaRaceStartMs;
       const left = target ? target - now : 0;
       const ready = r.competitors.filter((c) => c.estimate != null).length;
@@ -193,6 +200,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       if (target && left > 1000) { kicker = 'RACE STARTS IN'; big = '~' + clock(left); }
       else { kicker = 'ALMOST OFF'; big = `${ready}/${total} ready`; }
       note = 'agents hiring data on-chain…';
+      barPct = target && target > openMs ? Math.min(0.96, Math.max(0.04, (now - openMs) / (target - openMs))) : 0.5;
     }
   } else {
     const delta = nextAt ? nextAt - now : 0;
@@ -206,12 +214,17 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
 
   return (
     <div className="flex h-full flex-wrap items-center justify-between gap-4">
-      <div key={kicker} className="swapin min-w-0">
+      <div key={kicker} className="swapin min-w-0 flex-1">
         <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-dim">{kicker}</div>
         <div className={cn('font-display leading-none tnum mt-0.5', accent ? 'text-volt' : 'text-ink')} style={{ fontSize: 'clamp(2.25rem, 7vw, 3.5rem)' }}>
           {big}
         </div>
         {note ? <div className="mt-1.5 font-mono text-[11px] text-dim">{note}</div> : null}
+        {barPct != null ? (
+          <div className="mt-2.5 h-1 w-full max-w-[260px] overflow-hidden rounded-full bg-line">
+            <div className="h-full rounded-full bg-volt transition-[width] duration-1000 ease-linear" style={{ width: `${Math.round(barPct * 100)}%` }} />
+          </div>
+        ) : null}
       </div>
       {showStart ? (
         <button

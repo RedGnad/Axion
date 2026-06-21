@@ -18,7 +18,7 @@ export interface CompetitorView {
 }
 export interface RoundView {
   id: string;
-  phase: 'open' | 'betting' | 'settled';
+  phase: 'open' | 'betting' | 'racing' | 'settled';
   openPrice: number;
   closePrice?: number;
   line?: number;
@@ -26,6 +26,7 @@ export interface RoundView {
   liveAmplitude?: number;
   raceStartMs?: number;
   settleAtMs?: number;
+  betCloseAtMs?: number;
   etaSettleMs?: number;
   etaRaceStartMs?: number;
   competitors: CompetitorView[];

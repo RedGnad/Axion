@@ -33,16 +33,19 @@ interface CompetitorView {
 }
 interface RoundView {
   id: string;
-  phase: 'open' | 'betting' | 'settled';
+  // open = hiring · betting = COMMIT window (bets open, move not measured) · racing = reveal (bets CLOSED) · settled
+  phase: 'open' | 'betting' | 'racing' | 'settled';
   openPrice: number;
   closePrice?: number;
   line?: number;
   amplitude?: number;
-  /** Live realized amplitude from Pyth during the betting window (the moving "current move"). */
+  /** Live realized amplitude from Pyth during the reveal window (the moving "current move"). */
   liveAmplitude?: number;
-  /** When the race (betting window) started — the client animates progress between this and settleAtMs. */
+  /** When the race (reveal window) started — the client animates progress between this and settleAtMs. */
   raceStartMs?: number;
   settleAtMs?: number;
+  /** When betting closes (end of the commit window) — the UI counts down to this. */
+  betCloseAtMs?: number;
   /** Estimated settle time set at round OPEN (hiring is ~incompressible) so the UI shows a descending
    *  countdown from the very start; replaced by the exact settleAtMs once betting opens. */
   etaSettleMs?: number;
@@ -343,7 +346,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         pushFeed(`${personaMeta(forecast.competitor).label} estimates $${forecast.prediction.toFixed(2)}`);
         broadcast();
       },
-      onEstimates: ({ line, settleAtMs }) => {
+      onEstimates: ({ line, betCloseAtMs }) => {
         if (!state.round) return;
         // Auto-calibrate the hiring ETA from this round's real open→betting duration (EMA) so the
         // next round's countdown is honest and doesn't sit on "any moment…".
@@ -352,13 +355,26 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           // EMA, but CLAMPED [45s,150s] so a pathological round (stuck provider) can't inflate the ETA.
           HIRING_ETA_MS = Math.max(45_000, Math.min(150_000, Math.round(HIRING_ETA_MS * 0.5 + hiringMs * 0.5)));
         }
+        // COMMIT window: bets OPEN, outcome not measured yet (no last-second cheat). Countdown to close.
         state.round.phase = 'betting';
         state.round.line = line;
+        state.round.betCloseAtMs = betCloseAtMs;
+        state.round.settleAtMs = undefined;
+        state.round.raceStartMs = undefined;
+        state.round.liveAmplitude = 0;
+        refreshUsdcBet(); // new round → fresh (empty) USDC pool
+        pushFeed(`Line set at $${line.toFixed(2)} — betting open (closes before the race)`);
+        broadcast();
+      },
+      onRaceStart: ({ settleAtMs, raceOpenPrice }) => {
+        if (!state.round) return;
+        // Bets CLOSED → the reveal/race begins; the move is measured from raceOpenPrice.
+        state.round.phase = 'racing';
+        state.round.openPrice = raceOpenPrice;
         state.round.settleAtMs = settleAtMs;
         state.round.raceStartMs = Date.now();
         state.round.liveAmplitude = 0;
-        refreshUsdcBet(); // new round → fresh (empty) USDC pool
-        pushFeed(`Line set at $${line.toFixed(2)} — over/under open; move building live…`);
+        pushFeed("Betting closed — they're off! The move is revealing live…");
         broadcast();
       },
       onTick: ({ liveAmplitude }) => {
@@ -562,7 +578,7 @@ async function main(): Promise<void> {
           const { roundId, side, visitorId } = JSON.parse(body || '{}') as { roundId?: string; side?: string; visitorId?: string };
           if (side !== 'over' && side !== 'under') return reply(400, { error: 'side must be over|under' });
           if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 64) return reply(400, { error: 'visitorId required' });
-          if (!roundId || roundId !== state.round?.id) return reply(409, { error: 'no live round to predict on' });
+          if (!roundId || roundId !== state.round?.id || state.round?.phase !== 'betting') return reply(409, { error: 'betting is closed for this round' });
           const arr = predictPending.get(roundId) ?? [];
           arr.push({ side });
           predictPending.set(roundId, arr);

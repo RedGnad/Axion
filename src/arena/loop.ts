@@ -60,8 +60,11 @@ export interface RoundHooks {
   onOpen?: (info: { id: string; openPrice: number }) => void;
   /** Fires as EACH competitor finishes, so its kart takes position one-by-one (watchable hiring). */
   onEstimate?: (info: { forecast: Forecast; edges: ArenaEdge[] }) => void;
-  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; settleAtMs: number }) => void;
-  /** Fires every ~2s during the betting window with the live realized amplitude from Pyth. */
+  /** Betting OPENS (commit window) — the outcome is NOT being measured yet, so a late bet can't cheat. */
+  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; betCloseAtMs: number }) => void;
+  /** Betting CLOSED → the reveal/race begins; the move is measured from raceOpenPrice over the window. */
+  onRaceStart?: (info: { settleAtMs: number; raceOpenPrice: number }) => void;
+  /** Fires every ~2s during the reveal window with the live realized amplitude from Pyth. */
   onTick?: (info: { liveAmplitude: number; settleAtMs: number }) => void;
   onSettled?: (result: RoundResult) => void;
 }
@@ -272,30 +275,37 @@ export async function runRound(
   for (const f of forecasts) {
     console.log(`[arena] ${f.competitor} estimates amplitude $${f.prediction.toFixed(2)} — "${f.rationale}"`);
   }
-  // Betting window starts NOW (after estimates) so the race is watchable: a clean window during
-  // which the live realized amplitude accumulates from Pyth toward the agents' guesses.
+  // COMMIT window: betting OPENS now, but the outcome is NOT measured yet (the move starts only after
+  // betting closes) → a last-second bet cannot cheat. This is the deadline the UI counts down to.
+  const commitMs = Math.max(10, Number(process.env.ARENA_COMMIT_SECONDS ?? '25')) * 1000;
+  const betCloseAtMs = Date.now() + commitMs;
+  hooks.onEstimates?.({ forecasts, line, edges, betCloseAtMs });
+  while (Date.now() < betCloseAtMs) await new Promise((r) => setTimeout(r, 1000));
+
+  // Betting CLOSED → capture the race-open price; the realized amplitude is measured from HERE.
+  const raceOpen = await fetchPythPrice();
   const settleAtMs = Date.now() + windowSeconds * 1000;
-  hooks.onEstimates?.({ forecasts, line, edges, settleAtMs });
+  hooks.onRaceStart?.({ settleAtMs, raceOpenPrice: raceOpen.price });
 
   while (Date.now() < settleAtMs) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
       const live = await fetchPythPrice();
-      hooks.onTick?.({ liveAmplitude: Math.abs(live.price - open.price), settleAtMs });
+      hooks.onTick?.({ liveAmplitude: Math.abs(live.price - raceOpen.price), settleAtMs });
     } catch {
       /* transient Hermes hiccup — keep ticking */
     }
   }
 
   const close = await fetchPythPrice();
-  const actualAmplitude = Math.abs(close.price - open.price);
+  const actualAmplitude = Math.abs(close.price - raceOpen.price);
   const outcome = settle(forecasts, actualAmplitude, new Date(close.publishTime * 1000));
   console.log(
-    `[arena] ${id} settled — open $${open.price.toFixed(2)} → close $${close.price.toFixed(2)} → ` +
+    `[arena] ${id} settled — race-open $${raceOpen.price.toFixed(2)} → close $${close.price.toFixed(2)} → ` +
       `amplitude $${actualAmplitude.toFixed(2)}; winner(s): ${outcome.winners.join(', ')}`,
   );
 
-  const round: Round = { id, phase: 'settled', openPrice: open.price, closePrice: close.price, settleAtMs, forecasts, outcome };
+  const round: Round = { id, phase: 'settled', openPrice: raceOpen.price, closePrice: close.price, settleAtMs, forecasts, outcome };
   const result: RoundResult = { round, edges, line };
   hooks.onSettled?.(result);
   return result;

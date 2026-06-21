@@ -42,8 +42,11 @@ export default function Race({ round }: { round: RoundView | null }) {
         const headStart = (launchAtMs?: number) =>
           launchAtMs == null || maxL === minL ? 0 : ((maxL - launchAtMs) / (maxL - minL)) * HEADSTART;
 
-        const betting = (r.phase === 'betting' || r.phase === 'settled') && r.competitors.some((c) => c.estimate != null);
-        if (betting) {
+        // The scored RACE runs only in the reveal ('racing') + 'settled'. During the 'betting' commit
+        // window the karts are lined up at the start (handled by the else branch) — no movement = no
+        // information leak, and the suspense starts when they're off.
+        const racing = (r.phase === 'racing' || r.phase === 'settled') && r.competitors.some((c) => c.estimate != null);
+        if (racing) {
           const truth = r.amplitude != null ? r.amplitude : r.liveAmplitude || 0;
           const ests = r.competitors.map((c) => c.estimate).filter((v): v is number => v != null);
           const scale = Math.max(3, truth, ...(ests.length ? ests : [0])) * 1.15;
@@ -79,9 +82,11 @@ export default function Race({ round }: { round: RoundView | null }) {
           const el = root.querySelector<HTMLElement>(`[data-kart="${c.id}"]`);
           if (!el) continue;
           if (pos.current[c.id] == null) pos.current[c.id] = A0;
-          // Race over → snap to the final standings (so the winner sits exactly on the line, no lerp drift).
-          if (r.phase === 'settled') pos.current[c.id] = targets[c.id];
-          else pos.current[c.id] += (targets[c.id] - pos.current[c.id]) * 0.12;
+          // Smooth glide everywhere (no teleport). At settle, ease a bit faster + tidy the last fraction
+          // so the winner lands exactly on the line without a jarring jump.
+          const ease = r.phase === 'settled' ? 0.18 : 0.12;
+          pos.current[c.id] += (targets[c.id] - pos.current[c.id]) * ease;
+          if (r.phase === 'settled' && Math.abs(targets[c.id] - pos.current[c.id]) < 0.25) pos.current[c.id] = targets[c.id];
           el.style.left = (pos.current[c.id] - halfKartPct).toFixed(2) + '%';
         }
       }
@@ -96,7 +101,6 @@ export default function Race({ round }: { round: RoundView | null }) {
   }
   const key = round.competitors.map((c) => c.id).join(',');
   if (trackKey.current !== key) { trackKey.current = key; pos.current = {}; }
-  const truth = round.amplitude != null ? round.amplitude : round.liveAmplitude;
   // Fastest data this round → ⚡ badge (legitimate edge for picking responsive providers).
   const withData = round.competitors.filter((c) => c.dataMs != null);
   const fastestId = withData.length ? withData.reduce((a, b) => (a.dataMs! <= b.dataMs! ? a : b)).id : null;
@@ -144,9 +148,18 @@ export default function Race({ round }: { round: RoundView | null }) {
           outline: '1px solid rgba(255,255,255,.6)',
         }}
       />
-      <div className="mt-3 flex justify-between font-mono text-[10px] uppercase tracking-wider text-dim">
-        <span>off the mark ⟵ closeness to the real move ⟶ exact</span>
-        <span style={{ color: 'var(--color-volt)' }}>real move {usd(truth ?? 0)}</span>
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-line/50 pt-3">
+        <span className="text-[11px] leading-snug text-dim">Each kart advances as its guess gets closer to the real ETH move.</span>
+        {(() => {
+          const p = round.phase;
+          const label = p === 'settled' ? 'final move' : p === 'racing' ? 'live move' : 'the line';
+          const val = p === 'settled' ? round.amplitude : p === 'racing' ? round.liveAmplitude : round.line;
+          return (
+            <span className="shrink-0 rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider tnum" style={{ borderColor: 'var(--color-volt)', color: 'var(--color-volt)' }}>
+              {label} {usd(val ?? 0)}
+            </span>
+          );
+        })()}
       </div>
     </div>
   );
