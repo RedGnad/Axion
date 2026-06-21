@@ -141,6 +141,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const settledRef = useRef<{ id: string; at: number } | null>(null);
+  const sawLiveRef = useRef<Set<string>>(new Set());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   const startNow = async () => {
@@ -149,8 +150,10 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
     setTimeout(() => setBusy(false), 3000);
   };
 
-  // Detect a FRESH settle → celebrate the winner for a few seconds before the next-race countdown.
-  if (r && r.phase === 'settled' && r.amplitude != null) {
+  // Win flash ONLY for a round we watched go from live → settled this session (never on a page load
+  // that lands on an already-settled round). Track which rounds we saw live (open/betting).
+  if (r && (r.phase === 'open' || r.phase === 'betting')) sawLiveRef.current.add(r.id);
+  if (r && r.phase === 'settled' && r.amplitude != null && sawLiveRef.current.has(r.id)) {
     if (settledRef.current?.id !== r.id) settledRef.current = { id: r.id, at: Date.now() };
   }
   const justSettled = !!(r && r.phase === 'settled' && settledRef.current?.id === r.id && now - settledRef.current.at < 7000);
@@ -200,7 +203,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
 
   return (
     <div className="flex h-full flex-wrap items-center justify-between gap-4">
-      <div className="min-w-0">
+      <div key={kicker} className="swapin min-w-0">
         <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-dim">{kicker}</div>
         <div className={cn('font-display leading-none tnum mt-0.5', accent ? 'text-volt' : 'text-ink')} style={{ fontSize: 'clamp(2.25rem, 7vw, 3.5rem)' }}>
           {big}
