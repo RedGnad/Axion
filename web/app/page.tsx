@@ -165,8 +165,8 @@ function clock(ms: number) {
 function MoveBadge({ state }: { state: ArenaState | null }) {
   const r = state?.round;
   if (!r) return null;
-  const label = r.phase === 'settled' ? 'final move' : r.phase === 'racing' ? 'live move' : 'line';
-  const val = r.phase === 'settled' ? r.amplitude : r.phase === 'racing' ? r.liveAmplitude : r.line;
+  const label = r.phase === 'settled' ? 'final move' : r.phase === 'betting' ? 'live move' : 'line';
+  const val = r.phase === 'settled' ? r.amplitude : r.phase === 'betting' ? r.liveAmplitude : r.line;
   if (val == null) return null;
   return (
     <span className="rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider tnum" style={{ borderColor: 'color-mix(in srgb, var(--color-volt) 50%, transparent)', color: 'var(--color-volt)' }}>
@@ -195,15 +195,24 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   const active = state?.status === 'running' && r && r.phase !== 'settled';
   const nextAt = state?.nextRoundAtMs;
   const [busy, setBusy] = useState(false);
+  const [startMsg, setStartMsg] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const settledRef = useRef<{ id: string; at: number } | null>(null);
   const sawLiveRef = useRef<Set<string>>(new Set());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
 
   const startNow = async () => {
-    setBusy(true);
-    try { await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' }); } catch {}
-    setTimeout(() => setBusy(false), 3000);
+    setBusy(true); setStartMsg('waking the arena & starting…');
+    try {
+      const res = await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' });
+      const j = (await res.json().catch(() => ({}))) as { started?: boolean; nextAtMs?: number; error?: string };
+      if (j.started) setStartMsg('✓ race starting — agents hiring data…');
+      else if (j.nextAtMs) setStartMsg(`on cooldown · next race in ${Math.max(0, Math.round((j.nextAtMs - Date.now()) / 1000))}s`);
+      else setStartMsg(j.error ? `couldn't start: ${j.error}` : 'a race is already running…');
+    } catch {
+      setStartMsg('arena was asleep — waking it, try again in ~20s');
+    }
+    setTimeout(() => { setBusy(false); setStartMsg(null); }, 6000);
   };
 
   // Win flash ONLY for a round we watched go from live → settled this session (never on a page load
@@ -220,6 +229,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   let showStart = true;  // judge can always trigger a real round
   let note = '';
   let barPct: number | null = null; // hiring DQ-cutoff bar (red): fills toward the slow-agent cutoff
+  let secondary: { label: string; value: string } | null = null; // 2nd always-visible stat (so timer + odds show together)
 
   if (!online) {
     kicker = 'STATUS'; big = 'offline'; accent = false; showStart = false; note = 'runner unreachable — retrying every 2s';
@@ -233,43 +243,51 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       ? `called the move best — $${r.amplitude.toFixed(2)} vs line $${r.line.toFixed(2)}`
       : 'race settled on-chain';
   } else if (active && r) {
-    // Betting is OPEN the whole time (blind during hiring = top odds, decaying with info). The HERO is
-    // the dropping ×odds (compulsion); the live STATE (honest rising elapsed + who's ready) is the note.
     showStart = false;
     const mult = state?.usdcBet?.multiplier ?? (r.phase === 'open' ? 4 : 2);
     const ready = r.competitors.filter((c) => c.estimate != null).length;
     const total = r.competitors.length || 1;
     const openMs = Number((r.id || '').split('-')[1]) || now;
     const graceOpen = r.dqFromMs != null && r.dqAtMs != null && r.dqAtMs > r.dqFromMs && ready < total;
-    kicker = r.phase === 'betting' ? 'RACE LIVE · BET NOW' : 'BLIND BETS OPEN · TOP ODDS';
-    big = `×${mult.toFixed(1)}`;
     if (r.phase === 'betting') {
-      note = 'race live · odds drop as the move reveals';
+      // The race is live → odds (dropping) is the hero; keep the suspense (no settle countdown).
+      kicker = 'RACE LIVE · BET NOW'; big = `×${mult.toFixed(1)}`;
+      note = 'odds drop as the move reveals — bet a side below';
     } else if (graceOpen) {
-      // Fastest agent in → grace window (red bar). Only a real straggler gets cut; healthy ones are safe.
-      const left = r.dqAtMs! - now;
-      note = `${ready}/${total} agents in · stragglers cut in ${left > 1000 ? clock(left) : '…'}`;
+      // Grace: controlled countdown (hero) + odds (secondary, still visible) + red bar.
+      kicker = 'STRAGGLERS CUT IN'; big = clock(r.dqAtMs! - now);
+      secondary = { label: 'blind odds', value: `×${mult.toFixed(1)}` };
+      note = `${ready}/${total} agents in · only slow data gets cut`;
       barPct = Math.min(0.99, Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)));
     } else {
-      // Honest rising elapsed + who's ready — never frozen, never a fake countdown.
-      note = `agents hiring data · ${clock(now - openMs)} · ${ready}/${total} ready`;
+      // Hiring: BOTH the honest elapsed timer (hero) AND the blind odds (secondary) are visible.
+      kicker = 'AGENTS HIRING DATA'; big = clock(now - openMs);
+      secondary = { label: 'blind odds', value: `×${mult.toFixed(1)}` };
+      note = `${ready}/${total} ready · buying real data on-chain`;
     }
   } else {
+    // Idle / between races — the grid below shows the LAST race result (not a live race).
     const delta = nextAt ? nextAt - now : 0;
-    if (nextAt && delta > 0) {
-      kicker = 'NEXT RACE IN'; big = clock(delta);
-      note = `auto-scheduled · or don't wait —`;
-    } else {
-      kicker = 'ARENA READY'; big = 'on the line'; accent = false; note = 'one click runs a real on-chain round';
-    }
+    const w = r?.competitors.find((c) => c.isWinner);
+    if (nextAt && delta > 0) { kicker = 'NEXT RACE IN'; big = clock(delta); }
+    else { kicker = 'ARENA READY'; big = 'start a race'; accent = false; }
+    note = startMsg ?? (w ? `last race won by ${w.label} — start the next one` : 'one tap runs a real on-chain race');
   }
 
   return (
     <div className="flex h-full flex-wrap items-center justify-between gap-4">
       <div key={kicker} className="swapin min-w-0 flex-1">
         <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-dim">{kicker}</div>
-        <div className={cn('font-display leading-none tnum mt-0.5', accent ? 'text-volt' : 'text-ink')} style={{ fontSize: 'clamp(2.25rem, 7vw, 3.5rem)' }}>
-          {big}
+        <div className="mt-0.5 flex items-end gap-4">
+          <div className={cn('font-display leading-none tnum', accent ? 'text-volt' : 'text-ink')} style={{ fontSize: 'clamp(2rem, 6.5vw, 3.25rem)' }}>
+            {big}
+          </div>
+          {secondary ? (
+            <div className="pb-1">
+              <div className="font-mono text-[9px] uppercase tracking-wider text-dim">{secondary.label}</div>
+              <div className="font-display text-2xl leading-none tnum text-ink">{secondary.value}</div>
+            </div>
+          ) : null}
         </div>
         {note ? <div className="mt-1.5 font-mono text-[11px] text-dim">{note}</div> : null}
         {barPct != null ? (
@@ -493,15 +511,22 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
   );
 }
 
-/** Compact live on-chain activity ticker — keeps real txs visible right under the race. */
+/** Live activity feed under the race — shows the play-by-play SCROLLING during a round (so the user is
+ *  never staring at a frozen wait), collapses to one line when idle. */
 function LiveTicker({ state }: { state: ArenaState | null }) {
-  const f = state?.feed?.[0];
-  if (!f) return null;
+  const feed = state?.feed ?? [];
+  if (!feed.length) return null;
+  const active = state?.status === 'running' && state.round && state.round.phase !== 'settled';
+  const rows = active ? feed.slice(0, 3) : feed.slice(0, 1); // scroll the play-by-play while live
   return (
-    <div className="flex items-center gap-2 border-t border-line px-5 py-2.5 font-mono text-[11px] text-dim">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-volt" style={{ animation: 'pulse-dot 1.3s infinite' }} />
-      <span className="truncate text-ink/80">{f.text}</span>
-      {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="shrink-0 text-under hover:underline">on-chain ↗</a> : null}
+    <div className="border-t border-line px-5 py-2.5">
+      {rows.map((f, i) => (
+        <div key={`${f.ts}-${i}`} className={cn('flex items-center gap-2 font-mono text-[11px]', i === 0 ? 'text-ink/80 swapin' : 'text-dim/70', i > 0 && 'mt-1')}>
+          {i === 0 ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-volt" style={{ animation: 'pulse-dot 1.3s infinite' }} /> : <span className="h-1.5 w-1.5 shrink-0" />}
+          <span className="truncate">{f.text}</span>
+          {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="shrink-0 text-under hover:underline">↗</a> : null}
+        </div>
+      ))}
     </div>
   );
 }
