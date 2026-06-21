@@ -275,9 +275,10 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
     for (const h of state.history) {
       for (const e of h.edges ?? []) {
         if (e.ours) continue;
-        const key = e.serviceId || e.label;
+        const key = e.label; // dedupe by label (older seed edges have no serviceId → would double-count)
         const row = stats.get(key) ?? { label: e.label, serviceId: e.serviceId ?? '', hires: 0, latSum: 0, latN: 0 };
         row.hires += 1;
+        if (!row.serviceId && e.serviceId) row.serviceId = e.serviceId;
         if (typeof e.latencyMs === 'number') { row.latSum += e.latencyMs; row.latN += 1; }
         stats.set(key, row);
       }
