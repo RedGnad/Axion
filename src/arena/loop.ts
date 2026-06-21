@@ -60,11 +60,12 @@ export interface RoundHooks {
   onOpen?: (info: { id: string; openPrice: number }) => void;
   /** Fires as EACH competitor finishes, so its kart takes position one-by-one (watchable hiring). */
   onEstimate?: (info: { forecast: Forecast; edges: ArenaEdge[] }) => void;
-  /** Betting OPENS (commit window) — the outcome is NOT being measured yet, so a late bet can't cheat. */
-  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; betCloseAtMs: number }) => void;
-  /** Betting CLOSED → the reveal/race begins; the move is measured from raceOpenPrice over the window. */
-  onRaceStart?: (info: { settleAtMs: number; raceOpenPrice: number }) => void;
-  /** Fires every ~2s during the reveal window with the live realized amplitude from Pyth. */
+  /** First estimate landed → the DQ cutoff is now known (slow agents are out when it passes). */
+  onFirstEstimate?: (info: { dqAtMs: number }) => void;
+  /** Betting OPENS (commit window) — the outcome is NOT being measured yet, so a late bet can't cheat.
+   *  `dqIds` = competitors disqualified this round for not delivering before the cutoff. */
+  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; betCloseAtMs: number; dqIds: string[] }) => void;
+  /** Fires every ~2s during the race window with the live realized amplitude from Pyth. */
   onTick?: (info: { liveAmplitude: number; settleAtMs: number }) => void;
   onSettled?: (result: RoundResult) => void;
 }
@@ -261,51 +262,71 @@ export async function runRound(
   // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   // The game: estimate the AMPLITUDE |close - open| over the window (not the level/direction).
   const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
-  // Stream each competitor's estimate as soon as it lands → karts take position one-by-one.
-  const played = await Promise.all(
-    competitors.map(async (c) => {
-      const r = await play(c, ctx);
-      hooks.onEstimate?.({ forecast: r.forecast, edges: r.edges });
-      return r;
-    }),
+  // Hiring with a DQ CUTOFF: an agent that doesn't deliver before the cutoff is OUT this round, so the
+  // race starts without waiting for the slowest (and nudges builders toward faster data providers).
+  // Cutoff = grace after the FIRST estimate lands, capped by a hard ceiling so it never hangs.
+  const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '30')) * 1000;
+  const hardCap = Math.max(grace, Number(process.env.ARENA_ESTIMATE_HARDCAP_SECONDS ?? '120') * 1000);
+  const hiringStart = Date.now();
+  const done = new Map<string, { forecast: Forecast; edges: ArenaEdge[] }>();
+  let firstAt = 0;
+  let dqAtMs = hiringStart + hardCap;
+  const playP = competitors.map((c) =>
+    play(c, ctx)
+      .then((r) => {
+        if (!firstAt) { firstAt = Date.now(); dqAtMs = Math.min(hiringStart + hardCap, firstAt + grace); hooks.onFirstEstimate?.({ dqAtMs }); }
+        done.set(c.id, r);
+        hooks.onEstimate?.({ forecast: r.forecast, edges: r.edges });
+      })
+      .catch((e) => console.warn(`[arena] ${c.id} estimate failed: ${(e as Error).message}`)),
   );
+  await new Promise<void>((resolve) => {
+    let fin = false;
+    const end = () => { if (!fin) { fin = true; clearInterval(iv); resolve(); } };
+    const iv = setInterval(() => {
+      if (done.size === competitors.length) return end();       // everyone in
+      if (Date.now() >= dqAtMs && done.size >= 1) return end();  // cutoff reached + ≥1 racer
+      if (Date.now() >= hiringStart + hardCap) return end();     // hard ceiling
+    }, 500);
+    void Promise.allSettled(playP).then(end);
+  });
+  const dqIds = competitors.filter((c) => !done.has(c.id)).map((c) => c.id);
+  if (dqIds.length) console.log(`[arena] DQ this round (too slow): ${dqIds.join(', ')}`);
+  const played = competitors.filter((c) => done.has(c.id)).map((c) => done.get(c.id)!);
   const forecasts = played.map((p) => p.forecast);
   const edges = played.flatMap((p) => p.edges);
+  if (!forecasts.length) throw new Error('no agent delivered before the cutoff');
   const line = consensusLine(forecasts);
   for (const f of forecasts) {
     console.log(`[arena] ${f.competitor} estimates amplitude $${f.prediction.toFixed(2)} — "${f.rationale}"`);
   }
   // COMMIT window: betting OPENS now, but the outcome is NOT measured yet (the move starts only after
   // betting closes) → a last-second bet cannot cheat. This is the deadline the UI counts down to.
-  const commitMs = Math.max(10, Number(process.env.ARENA_COMMIT_SECONDS ?? '25')) * 1000;
-  const betCloseAtMs = Date.now() + commitMs;
-  hooks.onEstimates?.({ forecasts, line, edges, betCloseAtMs });
-  while (Date.now() < betCloseAtMs) await new Promise((r) => setTimeout(r, 1000));
-
-  // Betting CLOSED → capture the race-open price; the realized amplitude is measured from HERE.
-  const raceOpen = await fetchPythPrice();
+  // SINGLE window (sports-book style): the race runs AND betting stays OPEN throughout. A late bet is
+  // not a cheat because the payout multiplier DECAYS over the window (applied at settle) → no extra
+  // "closing" timer = fast + compulsive. Amplitude is measured from the round-open price.
   const settleAtMs = Date.now() + windowSeconds * 1000;
-  hooks.onRaceStart?.({ settleAtMs, raceOpenPrice: raceOpen.price });
+  hooks.onEstimates?.({ forecasts, line, edges, betCloseAtMs: settleAtMs, dqIds });
 
   while (Date.now() < settleAtMs) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
       const live = await fetchPythPrice();
-      hooks.onTick?.({ liveAmplitude: Math.abs(live.price - raceOpen.price), settleAtMs });
+      hooks.onTick?.({ liveAmplitude: Math.abs(live.price - open.price), settleAtMs });
     } catch {
       /* transient Hermes hiccup — keep ticking */
     }
   }
 
   const close = await fetchPythPrice();
-  const actualAmplitude = Math.abs(close.price - raceOpen.price);
+  const actualAmplitude = Math.abs(close.price - open.price);
   const outcome = settle(forecasts, actualAmplitude, new Date(close.publishTime * 1000));
   console.log(
-    `[arena] ${id} settled — race-open $${raceOpen.price.toFixed(2)} → close $${close.price.toFixed(2)} → ` +
+    `[arena] ${id} settled — open $${open.price.toFixed(2)} → close $${close.price.toFixed(2)} → ` +
       `amplitude $${actualAmplitude.toFixed(2)}; winner(s): ${outcome.winners.join(', ')}`,
   );
 
-  const round: Round = { id, phase: 'settled', openPrice: raceOpen.price, closePrice: close.price, settleAtMs, forecasts, outcome };
+  const round: Round = { id, phase: 'settled', openPrice: open.price, closePrice: close.price, settleAtMs, forecasts, outcome };
   const result: RoundResult = { round, edges, line };
   hooks.onSettled?.(result);
   return result;

@@ -30,6 +30,8 @@ interface CompetitorView {
   launchAtMs?: number;
   /** Latency from round open to estimate ready (ms) — fast-data head-start + ⚡ + tie-break. */
   dataMs?: number;
+  /** Disqualified this round (didn't deliver before the cutoff) — doesn't race or win. */
+  dq?: boolean;
 }
 interface RoundView {
   id: string;
@@ -44,8 +46,10 @@ interface RoundView {
   /** When the race (reveal window) started — the client animates progress between this and settleAtMs. */
   raceStartMs?: number;
   settleAtMs?: number;
-  /** When betting closes (end of the commit window) — the UI counts down to this. */
+  /** When betting closes (= settle, single window). */
   betCloseAtMs?: number;
+  /** DQ cutoff during hiring — the red bar fills toward this; slow agents are out when it passes. */
+  dqAtMs?: number;
   /** Estimated settle time set at round OPEN (hiring is ~incompressible) so the UI shows a descending
    *  countdown from the very start; replaced by the exact settleAtMs once betting opens. */
   etaSettleMs?: number;
@@ -94,7 +98,7 @@ interface ArenaState {
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
-  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; pool: { over: string; under: string; bettors: number } };
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; decayFloor: number; pool: { over: string; under: string; bettors: number } };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
     discovered: number;
@@ -228,6 +232,16 @@ function saveHistory(): void {
   void saveState(blob); // durable (Upstash) — survives Render restarts
 }
 
+const BET_DECAY_FLOOR = Math.max(0.1, Math.min(1, Number(process.env.BET_DECAY_FLOOR ?? '0.25')));
+
+/** Current odds-decay weight (1 at race start → BET_DECAY_FLOOR at settle). Bet early = bigger share. */
+function betWeightNow(): number {
+  const r = state.round;
+  if (!r?.raceStartMs || !r.settleAtMs || r.settleAtMs <= r.raceStartMs) return 1;
+  const frac = Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs)));
+  return Math.round((1 - (1 - BET_DECAY_FLOOR) * frac) * 100) / 100;
+}
+
 /** Reflect the human-USDC-bet config + current round pool into state (for the UI). */
 function refreshUsdcBet(): void {
   const p = poolFor(state.round?.id ?? '');
@@ -235,6 +249,8 @@ function refreshUsdcBet(): void {
     enabled: houseEnabled(),
     houseAddress: houseAddress(),
     maxBetUSDC: MAX_BET_USDC,
+    multiplier: betWeightNow(),
+    decayFloor: BET_DECAY_FLOOR,
     pool: { over: (Number(p.over) / 1e6).toFixed(2), under: (Number(p.under) / 1e6).toFixed(2), bettors: p.bettors },
   };
 }
@@ -346,35 +362,29 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         pushFeed(`${personaMeta(forecast.competitor).label} estimates $${forecast.prediction.toFixed(2)}`);
         broadcast();
       },
-      onEstimates: ({ line, betCloseAtMs }) => {
+      onFirstEstimate: ({ dqAtMs }) => {
+        if (state.round) { state.round.dqAtMs = dqAtMs; broadcast(); }
+      },
+      onEstimates: ({ line, betCloseAtMs, dqIds }) => {
         if (!state.round) return;
-        // Auto-calibrate the hiring ETA from this round's real open→betting duration (EMA) so the
+        // Auto-calibrate the hiring ETA from this round's real open→race duration (EMA) so the
         // next round's countdown is honest and doesn't sit on "any moment…".
         if (roundOpenMs) {
           const hiringMs = Date.now() - roundOpenMs;
-          // EMA, but CLAMPED [45s,150s] so a pathological round (stuck provider) can't inflate the ETA.
           HIRING_ETA_MS = Math.max(45_000, Math.min(150_000, Math.round(HIRING_ETA_MS * 0.5 + hiringMs * 0.5)));
         }
-        // COMMIT window: bets OPEN, outcome not measured yet (no last-second cheat). Countdown to close.
+        // SINGLE window: the race is on AND betting is OPEN throughout (odds decay over time → no cheat).
         state.round.phase = 'betting';
         state.round.line = line;
+        state.round.settleAtMs = betCloseAtMs; // race + betting both end here
         state.round.betCloseAtMs = betCloseAtMs;
-        state.round.settleAtMs = undefined;
-        state.round.raceStartMs = undefined;
-        state.round.liveAmplitude = 0;
-        refreshUsdcBet(); // new round → fresh (empty) USDC pool
-        pushFeed(`Line set at $${line.toFixed(2)} — betting open (closes before the race)`);
-        broadcast();
-      },
-      onRaceStart: ({ settleAtMs, raceOpenPrice }) => {
-        if (!state.round) return;
-        // Bets CLOSED → the reveal/race begins; the move is measured from raceOpenPrice.
-        state.round.phase = 'racing';
-        state.round.openPrice = raceOpenPrice;
-        state.round.settleAtMs = settleAtMs;
         state.round.raceStartMs = Date.now();
         state.round.liveAmplitude = 0;
-        pushFeed("Betting closed — they're off! The move is revealing live…");
+        // Mark disqualified (too-slow) competitors so the UI shows them out (they don't race/win).
+        for (const c of state.round.competitors) if (dqIds.includes(c.id)) c.dq = true;
+        refreshUsdcBet(); // new round → fresh (empty) USDC pool
+        const dqNote = dqIds.length ? ` · ${dqIds.length} agent(s) cut (too slow)` : '';
+        pushFeed(`They're off! Betting open at line $${line.toFixed(2)} — odds drop as the move reveals${dqNote}`);
         broadcast();
       },
       onTick: ({ liveAmplitude }) => {
@@ -613,9 +623,10 @@ async function main(): Promise<void> {
             const amount = BigInt(Math.round(amt * 1e6));
             const ok = await verifyBetTx(txHash, eoa, amount).catch(() => false);
             if (!ok) return reply(400, { error: 'bet tx not verified on-chain (USDC transfer to house not found)' });
-            recordBet({ roundId, side, amount, eoa, txHash });
+            const weight = betWeightNow(); // odds decay: earlier = bigger share of the pool
+            recordBet({ roundId, side, amount, eoa, txHash, weight });
             refreshUsdcBet();
-            pushFeed(`USDC bet: ${amt} on ${side} (${eoa.slice(0, 6)}…)`, BASESCAN + txHash);
+            pushFeed(`USDC bet: ${amt} on ${side} ×${weight.toFixed(2)} (${eoa.slice(0, 6)}…)`, BASESCAN + txHash);
             broadcast();
             reply(202, { ok: true, pool: state.usdcBet?.pool });
           } catch (e) {

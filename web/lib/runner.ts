@@ -15,6 +15,7 @@ export interface CompetitorView {
   isWinner?: boolean;
   launchAtMs?: number; // when its data landed → staggered launch
   dataMs?: number;     // data latency (ms) → ⚡ fastest-grid badge
+  dq?: boolean;        // disqualified this round (too slow) → doesn't race/win
 }
 export interface RoundView {
   id: string;
@@ -27,6 +28,7 @@ export interface RoundView {
   raceStartMs?: number;
   settleAtMs?: number;
   betCloseAtMs?: number;
+  dqAtMs?: number;
   etaSettleMs?: number;
   etaRaceStartMs?: number;
   competitors: CompetitorView[];
@@ -72,7 +74,7 @@ export interface ArenaState {
   leaderboard: LeaderRow[];
   feed: FeedItem[];
   predictStats?: { total: number; correct: number; visitors: number };
-  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; pool: { over: string; under: string; bettors: number } };
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; decayFloor: number; pool: { over: string; under: string; bettors: number } };
   dataMarket?: {
     discovered: number;
     maxPriceUSDC: number;

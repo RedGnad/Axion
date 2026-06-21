@@ -42,10 +42,9 @@ export default function Race({ round }: { round: RoundView | null }) {
         const headStart = (launchAtMs?: number) =>
           launchAtMs == null || maxL === minL ? 0 : ((maxL - launchAtMs) / (maxL - minL)) * HEADSTART;
 
-        // The scored RACE runs only in the reveal ('racing') + 'settled'. During the 'betting' commit
-        // window the karts are lined up at the start (handled by the else branch) — no movement = no
-        // information leak, and the suspense starts when they're off.
-        const racing = (r.phase === 'racing' || r.phase === 'settled') && r.competitors.some((c) => c.estimate != null);
+        // The scored RACE runs during 'betting' (single live window) + 'settled'. Disqualified karts
+        // (too slow) are parked at the grid and don't race.
+        const racing = (r.phase === 'betting' || r.phase === 'settled') && r.competitors.some((c) => c.estimate != null);
         if (racing) {
           const truth = r.amplitude != null ? r.amplitude : r.liveAmplitude || 0;
           const ests = r.competitors.map((c) => c.estimate).filter((v): v is number => v != null);
@@ -59,6 +58,7 @@ export default function Race({ round }: { round: RoundView | null }) {
           const settled = r.phase === 'settled';
           const t = settled ? 1 : Math.max(0, Math.min(1, (now - (r.raceStartMs || 0)) / ((r.settleAtMs! - r.raceStartMs!) || 60000)));
           for (const c of r.competitors) {
+            if (c.dq) { targets[c.id] = A0; continue; } // disqualified → parked at the grid
             // Standing 0..1; the winner always finishes ON the line (standing 1), regardless of edge cases.
             const standing = settled && c.isWinner ? 1 : maxQ > 0 ? q[c.id] / maxQ : 0;
             const acc = RACE_L + t * standing * span;
@@ -111,22 +111,22 @@ export default function Race({ round }: { round: RoundView | null }) {
         const col = livery(c.id);
         return (
           <div key={c.id} className="relative h-14 border-b border-dashed border-white/5">
-            <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[13px]" style={{ color: col }}>
+            <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
-              {c.id === fastestId ? <span className="ml-1 text-volt" title="fastest data this round">⚡</span> : null}
+              {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 text-volt" title="fastest data this round">⚡</span> : null}
             </span>
             <div
               data-kart={c.id}
               className="absolute top-4 -translate-x-1/2 flex flex-col items-center gap-1 z-20"
-              style={{ left: A0 + '%' }}
-              title={c.rationale || ''}
+              style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
+              title={c.dq ? 'too slow this round — cut' : c.rationale || ''}
             >
               <div
                 className="h-3.5 w-8 rounded-[3px]"
-                style={{ background: col, boxShadow: `0 0 14px ${col}99`, opacity: c.isWinner ? 1 : 0.92, outline: c.isWinner ? `2px solid var(--color-gold)` : 'none' }}
+                style={{ background: col, boxShadow: c.dq ? 'none' : `0 0 14px ${col}99`, opacity: c.isWinner ? 1 : 0.92, outline: c.isWinner ? `2px solid var(--color-gold)` : 'none', filter: c.dq ? 'grayscale(1)' : 'none' }}
               />
-              <span className="font-mono text-[10px] tnum" style={{ color: c.isWinner ? 'var(--color-gold)' : c.estimate != null ? '#cfcfd4' : 'var(--color-dim)' }}>
-                {c.estimate != null ? usd(c.estimate) : 'scouting…'}
+              <span className="font-mono text-[10px] tnum" style={{ color: c.isWinner ? 'var(--color-gold)' : c.dq ? 'var(--color-over)' : c.estimate != null ? '#cfcfd4' : 'var(--color-dim)' }}>
+                {c.dq ? 'too slow' : c.estimate != null ? usd(c.estimate) : 'scouting…'}
               </span>
             </div>
           </div>

@@ -140,7 +140,7 @@ function MoveBadge({ state }: { state: ArenaState | null }) {
 function PhaseTag({ state, online }: { state: ArenaState | null; online: boolean }) {
   const r = state?.round;
   const active = state?.status === 'running' && r && r.phase !== 'settled';
-  const text = !online ? 'offline' : !active ? 'between races' : r!.phase === 'betting' ? 'betting open' : r!.phase === 'racing' ? 'race live' : 'estimating';
+  const text = !online ? 'offline' : !active ? 'between races' : r!.phase === 'betting' ? 'race live' : 'estimating';
   const col = !online ? 'var(--color-over)' : active ? 'var(--color-volt)' : 'var(--color-dim)';
   return (
     <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider" style={{ color: col }}>
@@ -180,7 +180,7 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
   let accent = true;     // lime number vs neutral
   let showStart = true;  // judge can always trigger a real round
   let note = '';
-  let barPct: number | null = null; // hiring progress bar (sensory backup so the wait never feels frozen)
+  let barPct: number | null = null; // hiring DQ-cutoff bar (red): fills toward the slow-agent cutoff
 
   if (!online) {
     kicker = 'STATUS'; big = 'offline'; accent = false; showStart = false; note = 'runner unreachable — retrying every 2s';
@@ -195,26 +195,26 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       : 'race settled on-chain';
   } else if (active && r) {
     showStart = false;
-    if (r.phase === 'betting' && r.betCloseAtMs) {
-      // COMMIT window: the deadline that drives action (bets close BEFORE the race → no last-second cheat).
-      const left = r.betCloseAtMs - now;
-      kicker = 'BETTING CLOSES IN'; big = left > 1000 ? clock(left) : 'closing…';
-      note = 'pick OVER / UNDER below — free, no wallet';
-    } else if (r.phase === 'racing') {
-      // Reveal: NO timer, keep the suspense of who reaches the line first.
-      kicker = 'RACE LIVE'; big = '🏁 they’re off'; accent = false;
-      note = 'betting closed · first kart to the line wins';
+    if (r.phase === 'betting') {
+      // Live race + betting OPEN. The hero is the DROPPING multiplier (urgency) — bet now, odds fall.
+      const floor = state?.usdcBet?.decayFloor ?? 0.25;
+      const frac = r.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs
+        ? Math.min(1, Math.max(0, (now - r.raceStartMs) / (r.settleAtMs - r.raceStartMs))) : 0;
+      const mult = Math.round((1 - (1 - floor) * frac) * 100) / 100;
+      kicker = 'RACE LIVE · BET NOW';
+      big = `×${mult.toFixed(2)}`;
+      note = 'odds drop as the move reveals — call a side below';
     } else {
-      // Hiring: count down to RACE START + a progress bar so the wait always feels alive.
+      // Hiring: count down to RACE START + a RED bar toward the slow-agent DQ cutoff.
       const openMs = Number((r.id || '').split('-')[1]) || now;
-      const target = r.etaRaceStartMs;
+      const target = r.dqAtMs ?? r.etaRaceStartMs;
       const left = target ? target - now : 0;
       const ready = r.competitors.filter((c) => c.estimate != null).length;
       const total = r.competitors.length || 1;
       if (target && left > 1000) { kicker = 'RACE STARTS IN'; big = '~' + clock(left); }
-      else { kicker = 'ALMOST OFF'; big = `${ready}/${total} ready`; }
-      note = 'agents hiring data on-chain…';
-      barPct = target && target > openMs ? Math.min(0.96, Math.max(0.04, (now - openMs) / (target - openMs))) : 0.5;
+      else { kicker = 'ALMOST OFF'; big = `${ready}/${total} in`; }
+      note = 'agents racing to deliver — slow ones are cut';
+      barPct = target && target > openMs ? Math.min(0.97, Math.max(0.04, (now - openMs) / (target - openMs))) : 0.5;
     }
   } else {
     const delta = nextAt ? nextAt - now : 0;
@@ -235,8 +235,8 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
         </div>
         {note ? <div className="mt-1.5 font-mono text-[11px] text-dim">{note}</div> : null}
         {barPct != null ? (
-          <div className="mt-2.5 h-1 w-full max-w-[260px] overflow-hidden rounded-full bg-line">
-            <div className="h-full rounded-full bg-volt transition-[width] duration-1000 ease-linear" style={{ width: `${Math.round(barPct * 100)}%` }} />
+          <div className="mt-2.5 h-1 w-full max-w-[260px] overflow-hidden rounded-full bg-line" title="slow agents are cut when this fills">
+            <div className="h-full rounded-full transition-[width] duration-1000 ease-linear" style={{ width: `${Math.round(barPct * 100)}%`, background: 'var(--color-over)' }} />
           </div>
         ) : null}
       </div>
@@ -342,11 +342,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         ) : mine ? (
           <>you called <b className="text-ink">{pick!.side.toUpperCase()}</b> — waiting for the move to settle…</>
         ) : live ? (
-          <span className="text-ink">betting is open — pick a side, it&apos;s free</span>
-        ) : (
-          <>the buttons light up when a race is live</>
-        )}
-        {rec.t > 0 ? <span className="ml-2 text-volt">· your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
+          <span className="text-ink">pick a side — it&apos;s free</span>
+        ) : null}
+        {rec.t > 0 ? <span className="ml-2 text-volt">your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
       </div>
       <UsdcBet state={state} />
       <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
@@ -398,15 +396,22 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
     }
   };
 
+  // Live odds multiplier (decays over the race) — bet early for a bigger payout share.
+  const frac = live && r?.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs
+    ? Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs))) : 0;
+  const mult = Math.round((1 - (1 - ub.decayFloor) * frac) * 100) / 100;
+
   return (
     <div className="mt-5 rounded-xl border border-line bg-panel2/50 p-5">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="font-display text-lg uppercase tracking-wide text-ink">Play for real — USDC</div>
-          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">winner-takes-pool · paid out at settle</div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+            {live ? <>odds <b style={{ color: 'var(--color-volt)' }}>×{mult.toFixed(2)}</b> — dropping · bet early</> : 'winner splits the pool at settle'}
+          </div>
         </div>
         <div className="text-right font-mono text-[11px] tnum text-dim">
-          pool <b className="text-ink">${ub.pool.over}</b> over / <b className="text-ink">${ub.pool.under}</b> under · {ub.pool.bettors} in
+          pool <b className="text-ink">${ub.pool.over}</b> / <b className="text-ink">${ub.pool.under}</b> · {ub.pool.bettors} in
         </div>
       </div>
 
@@ -518,12 +523,12 @@ function DataMarket({ state }: { state: ArenaState | null }) {
           </p>
           {dm.earners && dm.earners.length ? (
             <div className="mt-4">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">already paid by Axion</div>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">hired by Axion so far</div>
               <div className="mt-2 space-y-1.5">
                 {dm.earners.slice(0, 4).map((e, i) => (
                   <div key={i} className="flex items-center justify-between text-[12px]">
                     <span className="truncate pr-2 text-ink">{e.label}</span>
-                    <span className="shrink-0 font-mono tnum text-under">≈{usd(e.hires * 0.1)}</span>
+                    <span className="shrink-0 font-mono tnum text-under">{e.hires} hire{e.hires > 1 ? 's' : ''}</span>
                   </div>
                 ))}
               </div>

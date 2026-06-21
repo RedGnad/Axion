@@ -27,6 +27,9 @@ export interface HouseBet {
   amount: bigint; // smallest-unit USDC (6 dec)
   eoa: string;
   txHash: string;
+  /** Odds-decay weight at placement (1 early → BET_DECAY_FLOOR late). Late winners get a smaller share
+   *  of the pool → last-second betting isn't profitable, so betting can stay OPEN during the race. */
+  weight: number;
 }
 
 let bets: HouseBet[] = [];
@@ -95,17 +98,20 @@ export async function settleHouseBets(
   const usdc = new ethers.Contract(USDC, ERC20, signer);
 
   const winners = outcome === 'push' ? [] : rb.filter((b) => b.side === outcome);
-  const winningTotal = winners.reduce((s, b) => s + b.amount, 0n);
+  // Weighted stake (decay): a winner's share is proportional to amount × placement-weight, so a
+  // last-second winner gets a small slice (its forgone share boosts the early bettors).
+  const wstake = (b: HouseBet): bigint => (b.amount * BigInt(Math.round(Math.max(0.01, b.weight) * 1000))) / 1000n;
+  const winningWeighted = winners.reduce((s, b) => s + wstake(b), 0n);
 
   // Build a payout list. Push OR no one on the winning side → refund all stakes (no rake taken).
   const payouts: { to: string; amount: bigint }[] = [];
-  if (outcome === 'push' || winningTotal === 0n) {
+  if (outcome === 'push' || winningWeighted === 0n) {
     for (const b of rb) payouts.push({ to: b.eoa, amount: b.amount });
   } else {
     const pool = rb.reduce((s, b) => s + b.amount, 0n);
     const rake = (pool * RAKE_BPS) / 10000n;
     const distributable = pool - rake;
-    for (const b of winners) payouts.push({ to: b.eoa, amount: (b.amount * distributable) / winningTotal });
+    for (const b of winners) payouts.push({ to: b.eoa, amount: (wstake(b) * distributable) / winningWeighted });
   }
 
   // Aggregate by address (one tx per winner) and pay.
