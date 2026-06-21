@@ -96,6 +96,8 @@ interface ArenaState {
     censusAt: number;
     top: { name: string; orders7d: number; priceUSDC: number }[];
     wired: { label: string; serviceId: string; ours: boolean }[];
+    /** Real third-party providers Axion has paid (cumulative hires) — the zero-work earn hook. */
+    earners?: { label: string; serviceId: string; hires: number }[];
   };
 }
 
@@ -225,12 +227,25 @@ function saveHistory(): void {
 async function refreshDataMarket(wired?: { label: string; serviceId: string; ours: boolean }[]): Promise<void> {
   try {
     const pool = await discoverProviders();
+    // Cumulative third-party providers Axion has paid (real hires from settled history) — zero-work earn hook.
+    const counts = new Map<string, { label: string; serviceId: string; hires: number }>();
+    for (const h of state.history) {
+      for (const e of h.edges ?? []) {
+        if (e.ours) continue;
+        const key = e.serviceId || e.label;
+        const row = counts.get(key) ?? { label: e.label, serviceId: e.serviceId ?? '', hires: 0 };
+        row.hires += 1;
+        counts.set(key, row);
+      }
+    }
+    const earners = [...counts.values()].sort((a, b) => b.hires - a.hires).slice(0, 8);
     state.dataMarket = {
       discovered: pool.length,
       maxPriceUSDC: Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10,
       censusAt: Date.now(),
       top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
       wired: wired ?? state.dataMarket?.wired ?? [],
+      earners,
     };
     broadcast();
   } catch {

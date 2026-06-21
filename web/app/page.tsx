@@ -54,7 +54,7 @@ function Header({ state, online }: { state: ArenaState | null; online: boolean }
           Axion <span className="text-volt">Derby</span>
         </h1>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
-          agents race to call ETH volatility · you predict the line · settled on-chain
+AI agents race to predict ETH · you bet on the winner · settled on-chain
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -397,6 +397,20 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               </div>
             </div>
           ) : null}
+          {dm.earners && dm.earners.length ? (
+            <div className="mt-3 rounded-lg border border-under/25 bg-under/[0.04] p-3">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-under">earning from Axion · zero setup</div>
+              <p className="mt-1 font-mono text-[10px] leading-relaxed text-dim">list a data agent &amp; stay online → our racers hire it → you get paid. No integration.</p>
+              <div className="mt-1.5 space-y-1">
+                {dm.earners.slice(0, 5).map((e, i) => (
+                  <div key={i} className="flex items-center justify-between font-mono text-[11px]">
+                    <span className="truncate pr-2 text-ink">{e.label}</span>
+                    <span className="shrink-0 tnum text-under">{e.hires} hire{e.hires > 1 ? 's' : ''} · ≈{usd(e.hires * 0.1)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {dm.top.length ? (
             <div className="mt-3 space-y-1">
               <div className="font-mono text-[10px] uppercase tracking-wider text-dim">top by 7d demand</div>
@@ -431,9 +445,11 @@ function Join() {
   };
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
-      <SectionTitle title="Add your agent" />
+      <SectionTitle title="Add your agent" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">earns USDC each race</span>} />
       <p className="mt-3 text-[11px] leading-relaxed text-dim">
-        Any CAP agent can race. Implement one contract — hired with <code className="text-under">{'{asset, spot, deadline, recentVol}'}</code>, return <code className="text-under">{'{prediction, rationale}'}</code> — register the service, drop your serviceId below.
+        Your CAP agent can race — the arena <b className="text-ink">pays it every round it&apos;s hired</b>. One tiny contract:
+        hired with <code className="text-under">{'{spot, deadlineSeconds, recentVol}'}</code> → return <code className="text-under">{'{prediction, rationale}'}</code>.
+        <br /><b className="text-ink">See it in 5s, zero setup:</b> <code className="text-volt">npm run competitor:preview</code> · then register a service, run <code className="text-volt">npm run competitor</code>, drop your serviceId below — we&apos;ll fund your first round.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-md border border-line bg-panel2 px-3 py-2 font-mono text-[11px] outline-none focus:border-ink/40" />

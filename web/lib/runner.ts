@@ -77,6 +77,7 @@ export interface ArenaState {
     censusAt: number;
     top: { name: string; orders7d: number; priceUSDC: number }[];
     wired: { label: string; serviceId: string; ours: boolean }[];
+    earners?: { label: string; serviceId: string; hires: number }[];
   };
 }
 
