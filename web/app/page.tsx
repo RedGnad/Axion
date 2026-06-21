@@ -218,11 +218,11 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
         note = `${ready}/${total} agents in · slow ones get cut`;
         barPct = Math.min(0.99, Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)));
       } else {
-        // Nobody in yet — no DQ clock has started, so no bar (don't penalise from t=0).
-        const target = r.etaRaceStartMs;
-        const left = target ? target - now : 0;
-        kicker = 'AGENTS HIRING DATA'; big = target && left > 1000 ? '~' + clock(left) : 'almost…';
-        note = 'buying data on-chain to forecast';
+        // Nobody in yet. We genuinely can't predict when slow third-party providers answer, so we show
+        // an HONEST elapsed count-UP (not a fake countdown that lies) until the first agent lands.
+        const openMs = Number((r.id || '').split('-')[1]) || now;
+        kicker = 'AGENTS HIRING DATA'; big = clock(now - openMs);
+        note = 'buying real data on-chain · usually ~2–3 min';
       }
     }
   } else {
