@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useArena, postPredict, RUNNER_URL, type ArenaState } from '@/lib/runner';
+import { placeUsdcBet, postUsdcBet } from '@/lib/bet';
 import { cn, livery, usd } from '@/lib/utils';
 import Race from '@/components/Race';
 
@@ -311,9 +312,66 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         )}
         {rec.t > 0 ? <span className="ml-1 text-volt">· your calls {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
       </div>
+      <UsdcBet state={state} />
       <p className="mt-3 text-[11px] leading-relaxed text-dim">
         The line is the agents&apos; consensus estimate; the outcome is the Pyth ETH/USD move — exogenous, nobody controls it.
-        Real USDC bets settle on-chain via the CAP bookmaker (3% house rake); browser predictions are free.
+        Browser predictions are free; real USDC bets settle on-chain.
+      </p>
+    </div>
+  );
+}
+
+/** Custodial-disclosed real USDC bet from an EOA wallet (only shown if the house is configured). */
+function UsdcBet({ state }: { state: ArenaState | null }) {
+  const ub = state?.usdcBet;
+  const r = state?.round;
+  const live = r?.phase === 'betting';
+  const [amount, setAmount] = useState(0.1);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  if (!ub?.enabled) return null;
+  const max = ub.maxBetUSDC;
+
+  const bet = async (side: 'over' | 'under') => {
+    if (!live || !r) return;
+    const amt = Math.min(Math.max(0.01, amount), max);
+    setBusy(true); setMsg(null);
+    try {
+      setMsg({ ok: true, text: 'confirm the USDC transfer in your wallet…' });
+      const { txHash, eoa } = await placeUsdcBet(ub.houseAddress, amt);
+      setMsg({ ok: true, text: 'tx sent — verifying on-chain…' });
+      const res = await postUsdcBet(r.id, side, amt, eoa, txHash);
+      setMsg(res.ok ? { ok: true, text: `✓ ${amt} USDC on ${side.toUpperCase()} — paid out at settle` } : { ok: false, text: `✗ ${res.error}` });
+    } catch (e) {
+      setMsg({ ok: false, text: '✗ ' + (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-lg border border-line bg-panel2/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-ink">Real USDC bet <span className="text-dim">· custodial demo</span></div>
+        <div className="font-mono text-[10px] tnum text-dim">pool ${ub.pool.over} / ${ub.pool.under} · {ub.pool.bettors} bettor{ub.pool.bettors === 1 ? '' : 's'}</div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          type="number" min={0.01} max={max} step={0.01} value={amount}
+          onChange={(e) => setAmount(Number(e.target.value))}
+          className="w-20 rounded border border-line bg-panel px-2 py-1.5 font-mono text-[12px] outline-none focus:border-ink/40"
+        />
+        <span className="font-mono text-[10px] text-dim">USDC (≤{max})</span>
+        <button disabled={!live || busy} onClick={() => bet('over')}
+          className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
+          style={{ background: 'var(--color-over)' }}>bet over</button>
+        <button disabled={!live || busy} onClick={() => bet('under')}
+          className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
+          style={{ background: 'var(--color-under)' }}>bet under</button>
+      </div>
+      {msg ? <div className="mt-1.5 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
+      <p className="mt-2 font-mono text-[9px] leading-relaxed text-dim">
+        Custodial demo: your USDC goes to the house wallet on Base; winners are paid back at settle (pari-mutuel − 3% rake). Small stakes only. The free predict above needs no wallet.
       </p>
     </div>
   );

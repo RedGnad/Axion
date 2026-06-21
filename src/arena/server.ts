@@ -6,6 +6,7 @@ import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
 import { discoverProviders } from './discovery.js';
+import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC } from './housebet.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -89,6 +90,8 @@ interface ArenaState {
   feed: FeedItem[];
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number };
+  /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; pool: { over: string; under: string; bettors: number } };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
     discovered: number;
@@ -222,6 +225,17 @@ function saveHistory(): void {
   void saveState(blob); // durable (Upstash) — survives Render restarts
 }
 
+/** Reflect the human-USDC-bet config + current round pool into state (for the UI). */
+function refreshUsdcBet(): void {
+  const p = poolFor(state.round?.id ?? '');
+  state.usdcBet = {
+    enabled: houseEnabled(),
+    houseAddress: houseAddress(),
+    maxBetUSDC: MAX_BET_USDC,
+    pool: { over: (Number(p.over) / 1e6).toFixed(2), under: (Number(p.under) / 1e6).toFixed(2), bettors: p.bettors },
+  };
+}
+
 /** Refresh the live store data-market panel (free, read-only). `wired` = the providers actually
  *  hired in the most recent round (from its edges) so the demo shows real A2A, not just the catalog. */
 async function refreshDataMarket(wired?: { label: string; serviceId: string; ours: boolean }[]): Promise<void> {
@@ -343,6 +357,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         state.round.settleAtMs = settleAtMs;
         state.round.raceStartMs = Date.now();
         state.round.liveAmplitude = 0;
+        refreshUsdcBet(); // new round → fresh (empty) USDC pool
         pushFeed(`Line set at $${line.toFixed(2)} — over/under open; move building live…`);
         broadcast();
       },
@@ -398,6 +413,12 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           for (const g of guesses) if (g.side === side) state.predictStats.correct++;
         }
         predictPending.delete(round.id);
+        // Settle human USDC bets (custodial house EOA pays winners; no-op unless configured).
+        void (async () => {
+          const res = await settleHouseBets(round.id, side).catch(() => null);
+          if (res && res.paid > 0) pushFeed(`USDC bets settled — paid ${res.total} USDC to ${res.paid} winner(s)`);
+          refreshUsdcBet();
+        })();
         pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
         saveHistory();
         // Reflect the providers actually wired this round into the live data-market panel.
@@ -423,6 +444,8 @@ async function main(): Promise<void> {
   const lastEdges = (state.history[0]?.edges ?? []).map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
   void refreshDataMarket(lastEdges.length ? lastEdges : undefined);
   setInterval(() => void refreshDataMarket(), 10 * 60_000);
+  refreshUsdcBet();
+  if (houseEnabled()) console.log(`[arena-server] human USDC betting ON (house ${houseAddress()}, max ${MAX_BET_USDC} USDC/bet)`);
 
   const cfg = {
     baseURL: process.env.CROO_API_URL ?? '',
@@ -551,6 +574,38 @@ async function main(): Promise<void> {
         } catch (e) {
           reply(400, { error: (e as Error).message });
         }
+      });
+      return;
+    }
+    if (req.method === 'POST' && url === '/api/bet') {
+      // Custodial-disclosed human USDC bet. The tx is VERIFIED on-chain before it counts (no fake bets).
+      const reply = (code: number, obj: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      if (!houseEnabled()) return reply(403, { error: 'USDC betting disabled (house EOA not configured)' });
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 2000) req.destroy(); });
+      req.on('end', () => {
+        void (async () => {
+          try {
+            const { roundId, side, amountUSDC, eoa, txHash } = JSON.parse(body || '{}') as
+              { roundId?: string; side?: string; amountUSDC?: number; eoa?: string; txHash?: string };
+            if (side !== 'over' && side !== 'under') return reply(400, { error: 'side must be over|under' });
+            if (!eoa || !/^0x[0-9a-fA-F]{40}$/.test(eoa)) return reply(400, { error: 'valid eoa required' });
+            if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) return reply(400, { error: 'valid txHash required' });
+            const amt = Number(amountUSDC);
+            if (!(amt > 0) || amt > MAX_BET_USDC) return reply(400, { error: `amount must be 0 < x ≤ ${MAX_BET_USDC} USDC` });
+            if (!roundId || roundId !== state.round?.id || state.round?.phase !== 'betting') return reply(409, { error: 'no live betting round' });
+            const amount = BigInt(Math.round(amt * 1e6));
+            const ok = await verifyBetTx(txHash, eoa, amount).catch(() => false);
+            if (!ok) return reply(400, { error: 'bet tx not verified on-chain (USDC transfer to house not found)' });
+            recordBet({ roundId, side, amount, eoa, txHash });
+            refreshUsdcBet();
+            pushFeed(`USDC bet: ${amt} on ${side} (${eoa.slice(0, 6)}…)`, BASESCAN + txHash);
+            broadcast();
+            reply(202, { ok: true, pool: state.usdcBet?.pool });
+          } catch (e) {
+            reply(400, { error: (e as Error).message });
+          }
+        })();
       });
       return;
     }
