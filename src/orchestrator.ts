@@ -68,7 +68,7 @@ export class Orchestrator {
       const ord = await this.client.getOrder(orderId);
       const price = Number(ord.price);
       if (Number.isFinite(price) && price > opts.maxPriceSmallestUnit) {
-        try { await this.client.rejectOrder(orderId); } catch { /* best-effort */ }
+        try { await this.client.rejectOrder(orderId, 'price above cap'); } catch { /* best-effort */ }
         throw new Error(`order price ${price} > cap ${opts.maxPriceSmallestUnit} (${service.label})`);
       }
     }
