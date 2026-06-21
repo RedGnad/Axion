@@ -28,6 +28,7 @@ export default function Page() {
         <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
           <ToteBoard state={state} />
         </div>
+        <LiveTicker state={state} />
       </section>
 
       {/* ── RESULTS ──────────────────────────────────────── */}
@@ -454,18 +455,31 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
   );
 }
 
+/** Compact live on-chain activity ticker — keeps real txs visible right under the race. */
+function LiveTicker({ state }: { state: ArenaState | null }) {
+  const f = state?.feed?.[0];
+  if (!f) return null;
+  return (
+    <div className="flex items-center gap-2 border-t border-line px-5 py-2.5 font-mono text-[11px] text-dim">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-volt" style={{ animation: 'pulse-dot 1.3s infinite' }} />
+      <span className="truncate text-ink/80">{f.text}</span>
+      {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="shrink-0 text-under hover:underline">on-chain ↗</a> : null}
+    </div>
+  );
+}
+
 function Ledger({ state }: { state: ArenaState | null }) {
   const feed = state?.feed ?? [];
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '180ms' }}>
-      <SectionTitle title="On-chain ledger" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">Base · verifiable</span>} />
-      <div className="mt-4 max-h-[380px] space-y-0 overflow-auto">
+      <SectionTitle title="Live activity" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">real txs · Base</span>} />
+      <div className="mt-3 max-h-[340px] space-y-0 overflow-auto">
         {feed.length === 0 ? <div className="py-8 text-center font-mono text-sm text-dim">waiting…</div> : feed.map((f, i) => (
-          <div key={i} className="flex items-start gap-3 border-b border-white/5 py-2.5 text-[12px]">
-            <span className="w-14 shrink-0 font-mono text-[10px] text-dim tnum">{new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-            <span className="leading-snug">
+          <div key={i} className="flex items-baseline gap-2 border-b border-white/5 py-1.5 text-[12px] leading-snug">
+            <span className="shrink-0 font-mono text-[9px] text-dim tnum">{new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-ink/90">
               {f.text}{' '}
-              {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="text-under hover:underline">tx ↗</a> : null}
+              {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="text-under hover:underline">↗</a> : null}
             </span>
           </div>
         ))}
