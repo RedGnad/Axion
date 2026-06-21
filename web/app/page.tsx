@@ -8,45 +8,83 @@ import { useAccount, useConnect, useSwitchChain, useWriteContract } from 'wagmi'
 import { base } from 'wagmi/chains';
 import { parseUnits } from 'viem';
 
+type Tab = 'play' | 'builders' | 'proof';
+
 export default function Page() {
   const { state, online } = useArena(2000);
+  const [tab, setTab] = useState<Tab>('play');
   return (
     <main className="mx-auto max-w-[1180px] px-5 pb-24 pt-6">
       <Header state={state} online={online} />
-      <HowItWorks />
+      <Tabs tab={tab} setTab={setTab} />
 
-      {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
-      <section className="reveal mt-4 overflow-hidden rounded-2xl border border-line bg-panel/70" style={{ animationDelay: '80ms' }}>
-        <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
-          <div className="bg-panel px-5 py-5"><Telemetry state={state} /></div>
-          <div className="bg-panel px-5 py-5"><RaceControl state={state} online={online} /></div>
-        </div>
-        <div className="border-t border-line px-5 py-5">
-          <SectionTitle title="The grid" right={<div className="flex items-center gap-3"><MoveBadge state={state} /><PhaseTag state={state} online={online} /></div>} />
-          <div className="mt-4"><Race round={state?.round ?? null} /></div>
-        </div>
-        <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
-          <ToteBoard state={state} />
-        </div>
-        <LiveTicker state={state} />
-      </section>
+      {tab === 'play' && (
+        <>
+          <HowItWorks />
+          {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
+          <section className="reveal mt-4 overflow-hidden rounded-2xl border border-line bg-panel/70" style={{ animationDelay: '80ms' }}>
+            <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
+              <div className="bg-panel px-5 py-5"><Telemetry state={state} /></div>
+              <div className="bg-panel px-5 py-5"><RaceControl state={state} online={online} /></div>
+            </div>
+            <div className="border-t border-line px-5 py-5">
+              <SectionTitle title="The grid" right={<div className="flex items-center gap-3"><MoveBadge state={state} /><PhaseTag state={state} online={online} /></div>} />
+              <div className="mt-4"><Race round={state?.round ?? null} /></div>
+            </div>
+            <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
+              <ToteBoard state={state} />
+            </div>
+            <LiveTicker state={state} />
+          </section>
+          <ZoneLabel title="Standings" blurb="which agent calls ETH best" />
+          <Leaderboard state={state} />
+        </>
+      )}
 
-      {/* ── RESULTS ──────────────────────────────────────── */}
-      <ZoneLabel title="Live results" blurb="who's winning · every race on Base" />
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Leaderboard state={state} />
-        <Ledger state={state} />
-      </div>
+      {tab === 'builders' && (
+        <>
+          <ZoneLabel title="For builders" blurb="race your agent · or earn as a data provider" />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Join />
+            <DataMarket state={state} />
+          </div>
+        </>
+      )}
 
-      {/* ── BUILDERS ─────────────────────────────────────── */}
-      <ZoneLabel title="For builders" blurb="put your own agent in the race" />
-      <div className="grid gap-5 lg:grid-cols-2">
-        <DataMarket state={state} />
-        <Join />
-      </div>
+      {tab === 'proof' && (
+        <>
+          <ZoneLabel title="On-chain proof" blurb="every estimate, bet & payout is a real tx on Base" />
+          <Ledger state={state} />
+        </>
+      )}
 
       <Footer />
     </main>
+  );
+}
+
+/** Top-level tabs: consumers stay on Play; builders/judges get the plumbing behind a click. */
+function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'play', label: 'Play' },
+    { id: 'builders', label: 'For builders' },
+    { id: 'proof', label: 'On-chain proof' },
+  ];
+  return (
+    <div className="reveal mt-5 flex gap-1 border-b border-line">
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => setTab(t.id)}
+          className={cn(
+            '-mb-px border-b-2 px-4 py-2.5 font-display text-[13px] uppercase tracking-wide transition',
+            tab === t.id ? 'border-volt text-volt' : 'border-transparent text-dim hover:text-ink',
+          )}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -630,7 +668,7 @@ function HowItWorks() {
 function Footer() {
   return (
     <footer className="mt-10 border-t border-line pt-5 font-mono text-[10px] uppercase tracking-wider text-dim">
-      Every estimate, bet and payout is a real CAP order on Base. Outcomes are the Pyth ETH/USD move — exogenous, verifiable, riggable by no one.
+      Every estimate, bet and payout is a real transaction on Base. The result is the live Pyth ETH/USD move — nobody can rig it.
     </footer>
   );
 }
