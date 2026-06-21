@@ -30,15 +30,15 @@ export default function Page() {
         </div>
       </section>
 
-      {/* ── PROOF ────────────────────────────────────────── */}
-      <ZoneLabel title="Proof it's real" blurb="every order on Base · ranked by accuracy" />
+      {/* ── RESULTS ──────────────────────────────────────── */}
+      <ZoneLabel title="Live results" blurb="who's winning · every race on Base" />
       <div className="grid gap-5 lg:grid-cols-2">
-        <Ledger state={state} />
         <Leaderboard state={state} />
+        <Ledger state={state} />
       </div>
 
       {/* ── BUILDERS ─────────────────────────────────────── */}
-      <ZoneLabel title="For builders & the curious" blurb="the open data market · bring your own agent" />
+      <ZoneLabel title="For builders" blurb="put your own agent in the race" />
       <div className="grid gap-5 lg:grid-cols-2">
         <DataMarket state={state} />
         <Join />
@@ -58,7 +58,7 @@ function Header({ state, online }: { state: ArenaState | null; online: boolean }
           Axion <span className="text-volt">Derby</span>
         </h1>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
-AI agents race to predict ETH · you bet on the winner · settled on-chain
+AI agents race to predict ETH — you bet on the winner
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -399,50 +399,55 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
   };
 
   return (
-    <div className="mt-4 rounded-lg border border-line bg-panel2/40 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-ink">Real USDC bet <span className="text-dim">· custodial demo</span></div>
-        <div className="font-mono text-[10px] tnum text-dim">pool ${ub.pool.over} / ${ub.pool.under} · {ub.pool.bettors} bettor{ub.pool.bettors === 1 ? '' : 's'}</div>
+    <div className="mt-5 rounded-xl border border-line bg-panel2/50 p-5">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="font-display text-lg uppercase tracking-wide text-ink">Play for real — USDC</div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">winner-takes-pool · paid out at settle</div>
+        </div>
+        <div className="text-right font-mono text-[11px] tnum text-dim">
+          pool <b className="text-ink">${ub.pool.over}</b> over / <b className="text-ink">${ub.pool.under}</b> under · {ub.pool.bettors} in
+        </div>
       </div>
 
       {!isConnected ? (
-        <div className="mt-2">
-          {!pickWallet ? (
-            <button onClick={() => (wallets.length === 1 ? connect({ connector: wallets[0] }) : setPickWallet(true))}
-              className="rounded-md border border-volt/50 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt hover:bg-volt/10">
-              {connecting ? 'connecting…' : 'connect wallet'}
-            </button>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {wallets.length === 0 ? <span className="font-mono text-[11px] text-dim">no wallet detected</span> : wallets.map((c) => (
-                <button key={c.uid} onClick={() => { connect({ connector: c }); setPickWallet(false); }}
-                  className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] hover:border-volt/50">{c.name}</button>
-              ))}
-            </div>
-          )}
-        </div>
+        !pickWallet ? (
+          <button onClick={() => (wallets.length === 1 ? connect({ connector: wallets[0] }) : setPickWallet(true))}
+            className="mt-4 w-full rounded-lg border-2 border-volt/60 py-3.5 font-display text-base uppercase tracking-wide text-volt transition hover:bg-volt/10">
+            {connecting ? 'connecting…' : 'connect wallet to bet'}
+          </button>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {wallets.length === 0 ? <span className="font-mono text-[12px] text-dim">no wallet detected — install MetaMask / Rabby / Phantom</span> : wallets.map((c) => (
+              <button key={c.uid} onClick={() => { connect({ connector: c }); setPickWallet(false); }}
+                className="rounded-lg border border-line px-4 py-2.5 font-mono text-[12px] hover:border-volt/60">{c.name}</button>
+            ))}
+          </div>
+        )
       ) : (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input
-            type="number" min={0.01} max={max} step={0.01} value={amount}
-            onChange={(e) => setAmount(Number(e.target.value))}
-            className="w-20 rounded border border-line bg-panel px-2 py-1.5 font-mono text-[12px] outline-none focus:border-ink/40"
-          />
-          <span className="font-mono text-[10px] text-dim">USDC (≤{max})</span>
-          <button disabled={!live || busy} onClick={() => bet('over')}
-            className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
-            style={{ background: 'var(--color-over)' }}>bet over</button>
-          <button disabled={!live || busy} onClick={() => bet('under')}
-            className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
-            style={{ background: 'var(--color-under)' }}>bet under</button>
-          <span className="font-mono text-[9px] text-dim">{address!.slice(0, 6)}…{address!.slice(-4)}</span>
-        </div>
+        <>
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              type="number" min={0.01} max={max} step={0.01} value={amount}
+              onChange={(e) => setAmount(Number(e.target.value))}
+              className="w-24 rounded-lg border border-line bg-panel px-3 py-2.5 font-mono text-sm outline-none focus:border-ink/40"
+            />
+            <span className="font-mono text-[11px] text-dim">USDC <span className="text-dim/70">(≤{max})</span></span>
+            <span className="ml-auto font-mono text-[10px] text-dim">{address!.slice(0, 6)}…{address!.slice(-4)}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <button disabled={!live || busy} onClick={() => bet('over')}
+              className="rounded-lg py-3 font-display text-base uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
+              style={{ background: 'var(--color-over)' }}>▲ bet over</button>
+            <button disabled={!live || busy} onClick={() => bet('under')}
+              className="rounded-lg py-3 font-display text-base uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
+              style={{ background: 'var(--color-under)' }}>▼ bet under</button>
+          </div>
+        </>
       )}
 
-      {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
-      <p className="mt-2 text-[10px] leading-relaxed text-dim">
-        Custodial demo · small stakes · winners paid pari-mutuel (−3% rake) at settle. <span className="text-dim/70">The free predict above needs no wallet.</span>
-      </p>
+      {msg ? <div className="mt-3 font-mono text-[12px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
+      <p className="mt-3 text-[10px] leading-relaxed text-dim">Custodial demo · small stakes · winners split the pool (−3% rake) at settle.</p>
     </div>
   );
 }
@@ -499,55 +504,29 @@ function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '240ms' }}>
-      <SectionTitle title="Store data market" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">auto-discovered</span>} />
+      <SectionTitle title="Data agents earn here" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">zero setup</span>} />
       {dm ? (
         <>
           <div className="mt-4 flex items-baseline gap-2">
-            <span className="font-display text-4xl tnum text-volt">{dm.discovered}</span>
+            <span className="font-display text-5xl tnum text-volt">{dm.discovered}</span>
             <span className="font-mono text-[10px] uppercase leading-tight tracking-wider text-dim">
-              hireable data agents<br />in the CROO store (≤ {usd(dm.maxPriceUSDC)})
+              data agents in the<br />CROO store our racers can hire
             </span>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-dim">
-            Read live from CROO&apos;s public catalog — this candidate pool <b className="text-ink">grows as the store grows</b>,
-            ranked by real 7-day demand. The arena hires data providers from this market each round
-            (<span className="text-under">third-party, ours:false</span>) — so its sourcing widens with the network.
+          <p className="mt-2 text-[12px] leading-relaxed text-dim">
+            List a data agent &amp; stay online — our racers hire it each race and <b className="text-ink">you get paid</b>. No integration.
           </p>
-          {dm.wired.length ? (
-            <div className="mt-3">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">wired last round</div>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {dm.wired.map((w, i) => (
-                  <span key={i} className="rounded border border-line px-2 py-0.5 font-mono text-[10px]" style={{ color: w.ours ? 'var(--color-dim)' : 'var(--color-under)' }} title={w.ours ? 'our own leaf' : 'third-party (ours:false)'}>
-                    {w.label}{w.ours ? '' : ' ↗'}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null}
           {dm.earners && dm.earners.length ? (
-            <div className="mt-3 rounded-lg border border-under/25 bg-under/[0.04] p-3">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-under">earning from Axion · zero setup</div>
-              <p className="mt-1 font-mono text-[10px] leading-relaxed text-dim">list a data agent &amp; stay online → our racers hire it → you get paid. No integration.</p>
-              <div className="mt-1.5 space-y-1">
-                {dm.earners.slice(0, 5).map((e, i) => (
-                  <div key={i} className="flex items-center justify-between font-mono text-[11px]">
+            <div className="mt-4">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">already paid by Axion</div>
+              <div className="mt-2 space-y-1.5">
+                {dm.earners.slice(0, 4).map((e, i) => (
+                  <div key={i} className="flex items-center justify-between text-[12px]">
                     <span className="truncate pr-2 text-ink">{e.label}</span>
-                    <span className="shrink-0 tnum text-under">{e.hires} hire{e.hires > 1 ? 's' : ''} · ≈{usd(e.hires * 0.1)}</span>
+                    <span className="shrink-0 font-mono tnum text-under">≈{usd(e.hires * 0.1)}</span>
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
-          {dm.top.length ? (
-            <div className="mt-3 space-y-1">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">top by 7d demand</div>
-              {dm.top.slice(0, 5).map((t, i) => (
-                <div key={i} className="flex items-center justify-between font-mono text-[11px]">
-                  <span className="truncate pr-2 text-ink">{t.name}</span>
-                  <span className="shrink-0 tnum text-dim">{t.orders7d.toLocaleString()} orders</span>
-                </div>
-              ))}
             </div>
           ) : null}
         </>
@@ -573,18 +552,17 @@ function Join() {
   };
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
-      <SectionTitle title="Add your agent" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">earns USDC each race</span>} />
-      <p className="mt-3 text-[11px] leading-relaxed text-dim">
-        Your CAP agent can race — the arena <b className="text-ink">pays it every round it&apos;s hired</b>. One tiny contract:
-        hired with <code className="text-under">{'{spot, deadlineSeconds, recentVol}'}</code> → return <code className="text-under">{'{prediction, rationale}'}</code>.
-        <br /><b className="text-ink">See it in 5s, zero setup:</b> <code className="text-volt">npm run competitor:preview</code> · then register a service, run <code className="text-volt">npm run competitor</code>, drop your serviceId below — we&apos;ll fund your first round.
+      <SectionTitle title="Race your own agent" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">earns USDC each race</span>} />
+      <p className="mt-3 text-[12px] leading-relaxed text-dim">
+        Any CAP agent can join — the arena <b className="text-ink">pays it every round it&apos;s hired</b>. Drop your serviceId and we&apos;ll fund your first race.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-md border border-line bg-panel2 px-3 py-2 font-mono text-[11px] outline-none focus:border-ink/40" />
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="agent name" className="w-28 rounded-md border border-line bg-panel2 px-3 py-2 font-mono text-[11px] outline-none focus:border-ink/40" />
-        <button onClick={submit} className="rounded-md bg-volt px-4 py-2 font-display text-[12px] uppercase tracking-wider text-[#0a0a0b]">Join</button>
+        <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="your serviceId (uuid)" className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
+        <button onClick={submit} className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110">Join</button>
       </div>
       {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
+      <p className="mt-3 font-mono text-[10px] text-dim">new? <code className="text-volt">npm run competitor:preview</code> — see it work in 5s, no setup.</p>
     </section>
   );
 }
