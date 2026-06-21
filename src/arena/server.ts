@@ -67,6 +67,7 @@ interface HistoryEdge {
   ours: boolean;
   payTxHash: string;
   clearTxHash: string;
+  latencyMs?: number; // hire latency → provider-speed leaderboard
 }
 interface HistoryItem {
   id: string;
@@ -110,6 +111,8 @@ interface ArenaState {
     wired: { label: string; serviceId: string; ours: boolean }[];
     /** Real third-party providers Axion has paid (cumulative hires) — the zero-work earn hook. */
     earners?: { label: string; serviceId: string; hires: number }[];
+    /** Avg hire latency per provider (fastest first) — the ecosystem speed signal; fast = hired more. */
+    providerSpeed?: { label: string; avgMs: number; samples: number }[];
   };
 }
 
@@ -274,6 +277,22 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
       }
     }
     const earners = [...counts.values()].sort((a, b) => b.hires - a.hires).slice(0, 8);
+    // Provider SPEED: average hire latency per provider across history (fastest first) — the ecosystem
+    // quality signal. Fast providers get raced → hired → paid; slow ones bypassed.
+    const lat = new Map<string, { label: string; sum: number; n: number }>();
+    for (const h of state.history) {
+      for (const e of h.edges ?? []) {
+        if (e.ours || typeof e.latencyMs !== 'number') continue;
+        const key = e.serviceId || e.label;
+        const row = lat.get(key) ?? { label: e.label, sum: 0, n: 0 };
+        row.sum += e.latencyMs; row.n += 1;
+        lat.set(key, row);
+      }
+    }
+    const providerSpeed = [...lat.values()]
+      .map((r) => ({ label: r.label, avgMs: Math.round(r.sum / r.n), samples: r.n }))
+      .sort((a, b) => a.avgMs - b.avgMs)
+      .slice(0, 6);
     state.dataMarket = {
       discovered: pool.length,
       maxPriceUSDC: Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10,
@@ -281,6 +300,7 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
       top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
       wired: wired ?? state.dataMarket?.wired ?? [],
       earners,
+      providerSpeed,
     };
     broadcast();
   } catch {
@@ -430,7 +450,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             error: o.errors[f.competitor],
             isWinner: winners.includes(f.competitor),
           })),
-          edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash })),
+          edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash, latencyMs: e.latencyMs })),
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);

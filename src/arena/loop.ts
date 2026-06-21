@@ -46,6 +46,8 @@ export interface ArenaEdge {
   payTxHash: string;
   clearTxHash: string;
   ours: boolean;
+  /** Wall-clock latency of this hire (ms) — the provider-speed signal for the ecosystem leaderboard. */
+  latencyMs?: number;
 }
 
 export interface RoundResult {
@@ -166,8 +168,10 @@ async function playLocal(
   const services = c.persona.capabilities.map((cap) => getDataAgent(cap)).filter((s): s is NonNullable<typeof s> => !!s);
   const results = await Promise.all(
     services.map(async (service) => {
+      const t0 = Date.now();
       try {
-        return await c.orchestrator.hireService(service, buildRequirements(service.capability));
+        const hr = await c.orchestrator.hireService(service, buildRequirements(service.capability));
+        return { hr, latencyMs: Date.now() - t0 }; // time the hire → provider-speed signal
       } catch (err) {
         // A third-party provider may be offline despite "online" — degrade, don't crash the round.
         console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${(err as Error).message}`);
@@ -175,7 +179,9 @@ async function playLocal(
       }
     }),
   );
-  const hires: HireResult[] = results.filter((h): h is HireResult => h !== null);
+  const ok = results.filter((r): r is { hr: HireResult; latencyMs: number } => r !== null);
+  const hires: HireResult[] = ok.map((r) => r.hr);
+  const latencyByService = new Map(ok.map((r) => [r.hr.service.serviceId, r.latencyMs]));
 
   const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
   const baseline = ctx.recentVol * c.persona.volMultiplier; // calibrated, persona-distinct
@@ -197,6 +203,7 @@ async function playLocal(
     payTxHash: h.payTxHash,
     clearTxHash: h.clearTxHash,
     ours: h.service.ours,
+    latencyMs: latencyByService.get(h.service.serviceId),
   }));
   return { forecast: f, edges };
 }

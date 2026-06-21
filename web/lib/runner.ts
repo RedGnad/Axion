@@ -83,6 +83,7 @@ export interface ArenaState {
     top: { name: string; orders7d: number; priceUSDC: number }[];
     wired: { label: string; serviceId: string; ours: boolean }[];
     earners?: { label: string; serviceId: string; hires: number }[];
+    providerSpeed?: { label: string; avgMs: number; samples: number }[];
   };
 }
 
