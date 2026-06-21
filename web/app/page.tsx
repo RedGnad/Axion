@@ -1,9 +1,12 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useArena, postPredict, RUNNER_URL, type ArenaState } from '@/lib/runner';
-import { placeUsdcBet, postUsdcBet } from '@/lib/bet';
+import { postUsdcBet, USDC_ADDRESS, ERC20_TRANSFER_ABI } from '@/lib/bet';
 import { cn, livery, usd } from '@/lib/utils';
 import Race from '@/components/Race';
+import { useAccount, useConnect, useSwitchChain, useWriteContract } from 'wagmi';
+import { base } from 'wagmi/chains';
+import { parseUnits } from 'viem';
 
 export default function Page() {
   const { state, online } = useArena(2000);
@@ -324,29 +327,43 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   );
 }
 
-/** Custodial-disclosed real USDC bet from an EOA wallet (only shown if the house is configured). */
+/** Custodial-disclosed real USDC bet from an EOA wallet (only shown if the house is configured).
+ *  Wallet via wagmi v2 (EIP-6963 multi-wallet discovery) — no window.ethereum collision. */
 function UsdcBet({ state }: { state: ArenaState | null }) {
   const ub = state?.usdcBet;
   const r = state?.round;
   const live = r?.phase === 'betting';
+  const { address, isConnected, chainId } = useAccount();
+  const { connectors, connect, isPending: connecting } = useConnect();
+  const { switchChainAsync } = useSwitchChain();
+  const { writeContractAsync } = useWriteContract();
   const [amount, setAmount] = useState(0.1);
   const [busy, setBusy] = useState(false);
+  const [pickWallet, setPickWallet] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   if (!ub?.enabled) return null;
   const max = ub.maxBetUSDC;
 
+  // De-dupe connectors by name (EIP-6963 + injected can both list the same wallet).
+  const seen = new Set<string>();
+  const wallets = connectors.filter((c) => (seen.has(c.name) ? false : (seen.add(c.name), true)));
+
   const bet = async (side: 'over' | 'under') => {
-    if (!live || !r) return;
+    if (!live || !r || !address) return;
     const amt = Math.min(Math.max(0.01, amount), max);
     setBusy(true); setMsg(null);
     try {
+      if (chainId !== base.id) await switchChainAsync({ chainId: base.id });
       setMsg({ ok: true, text: 'confirm the USDC transfer in your wallet…' });
-      const { txHash, eoa } = await placeUsdcBet(ub.houseAddress, amt);
+      const txHash = await writeContractAsync({
+        address: USDC_ADDRESS, abi: ERC20_TRANSFER_ABI, functionName: 'transfer',
+        args: [ub.houseAddress as `0x${string}`, parseUnits(String(amt), 6)], chainId: base.id,
+      });
       setMsg({ ok: true, text: 'tx sent — verifying on-chain…' });
-      const res = await postUsdcBet(r.id, side, amt, eoa, txHash);
+      const res = await postUsdcBet(r.id, side, amt, address, txHash);
       setMsg(res.ok ? { ok: true, text: `✓ ${amt} USDC on ${side.toUpperCase()} — paid out at settle` } : { ok: false, text: `✗ ${res.error}` });
     } catch (e) {
-      setMsg({ ok: false, text: '✗ ' + (e as Error).message });
+      setMsg({ ok: false, text: '✗ ' + ((e as Error).message || 'rejected').slice(0, 80) });
     } finally {
       setBusy(false);
     }
@@ -358,20 +375,41 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
         <div className="font-mono text-[10px] uppercase tracking-wider text-ink">Real USDC bet <span className="text-dim">· custodial demo</span></div>
         <div className="font-mono text-[10px] tnum text-dim">pool ${ub.pool.over} / ${ub.pool.under} · {ub.pool.bettors} bettor{ub.pool.bettors === 1 ? '' : 's'}</div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <input
-          type="number" min={0.01} max={max} step={0.01} value={amount}
-          onChange={(e) => setAmount(Number(e.target.value))}
-          className="w-20 rounded border border-line bg-panel px-2 py-1.5 font-mono text-[12px] outline-none focus:border-ink/40"
-        />
-        <span className="font-mono text-[10px] text-dim">USDC (≤{max})</span>
-        <button disabled={!live || busy} onClick={() => bet('over')}
-          className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
-          style={{ background: 'var(--color-over)' }}>bet over</button>
-        <button disabled={!live || busy} onClick={() => bet('under')}
-          className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
-          style={{ background: 'var(--color-under)' }}>bet under</button>
-      </div>
+
+      {!isConnected ? (
+        <div className="mt-2">
+          {!pickWallet ? (
+            <button onClick={() => (wallets.length === 1 ? connect({ connector: wallets[0] }) : setPickWallet(true))}
+              className="rounded-md border border-volt/50 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt hover:bg-volt/10">
+              {connecting ? 'connecting…' : 'connect wallet'}
+            </button>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {wallets.length === 0 ? <span className="font-mono text-[11px] text-dim">no wallet detected</span> : wallets.map((c) => (
+                <button key={c.uid} onClick={() => { connect({ connector: c }); setPickWallet(false); }}
+                  className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] hover:border-volt/50">{c.name}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            type="number" min={0.01} max={max} step={0.01} value={amount}
+            onChange={(e) => setAmount(Number(e.target.value))}
+            className="w-20 rounded border border-line bg-panel px-2 py-1.5 font-mono text-[12px] outline-none focus:border-ink/40"
+          />
+          <span className="font-mono text-[10px] text-dim">USDC (≤{max})</span>
+          <button disabled={!live || busy} onClick={() => bet('over')}
+            className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
+            style={{ background: 'var(--color-over)' }}>bet over</button>
+          <button disabled={!live || busy} onClick={() => bet('under')}
+            className="rounded-md px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-[#0a0a0b] disabled:opacity-40"
+            style={{ background: 'var(--color-under)' }}>bet under</button>
+          <span className="font-mono text-[9px] text-dim">{address!.slice(0, 6)}…{address!.slice(-4)}</span>
+        </div>
+      )}
+
       {msg ? <div className="mt-1.5 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
       <p className="mt-2 font-mono text-[9px] leading-relaxed text-dim">
         Custodial demo: your USDC goes to the house wallet on Base; winners are paid back at settle (pari-mutuel − 3% rake). Small stakes only. The free predict above needs no wallet.
