@@ -194,36 +194,26 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
       ? `called the move best — $${r.amplitude.toFixed(2)} vs line $${r.line.toFixed(2)}`
       : 'race settled on-chain';
   } else if (active && r) {
+    // Betting is OPEN the whole time (blind during hiring = top odds, decaying with info). The HERO is
+    // the dropping ×odds (compulsion); the live STATE (honest rising elapsed + who's ready) is the note.
     showStart = false;
+    const mult = state?.usdcBet?.multiplier ?? (r.phase === 'open' ? 4 : 2);
+    const ready = r.competitors.filter((c) => c.estimate != null).length;
+    const total = r.competitors.length || 1;
+    const openMs = Number((r.id || '').split('-')[1]) || now;
+    const graceOpen = r.dqFromMs != null && r.dqAtMs != null && r.dqAtMs > r.dqFromMs && ready < total;
+    kicker = r.phase === 'betting' ? 'RACE LIVE · BET NOW' : 'BLIND BETS OPEN · TOP ODDS';
+    big = `×${mult.toFixed(1)}`;
     if (r.phase === 'betting') {
-      // Live race + betting OPEN. The hero is the DROPPING multiplier (urgency) — bet now, odds fall.
-      const floor = state?.usdcBet?.decayFloor ?? 0.25;
-      const frac = r.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs
-        ? Math.min(1, Math.max(0, (now - r.raceStartMs) / (r.settleAtMs - r.raceStartMs))) : 0;
-      const mult = Math.round((1 - (1 - floor) * frac) * 100) / 100;
-      kicker = 'RACE LIVE · BET NOW';
-      big = `×${mult.toFixed(2)}`;
-      note = 'odds drop as the move reveals — call a side below';
+      note = 'race live · odds drop as the move reveals';
+    } else if (graceOpen) {
+      // Fastest agent in → grace window (red bar). Only a real straggler gets cut; healthy ones are safe.
+      const left = r.dqAtMs! - now;
+      note = `${ready}/${total} agents in · stragglers cut in ${left > 1000 ? clock(left) : '…'}`;
+      barPct = Math.min(0.99, Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)));
     } else {
-      // Hiring. Descending countdown to the expected start; then a GRACE window (red bar) for stragglers.
-      const ready = r.competitors.filter((c) => c.estimate != null).length;
-      const total = r.competitors.length || 1;
-      const graceOpen = r.dqFromMs != null && r.dqAtMs != null && r.dqAtMs > r.dqFromMs;
-      if (ready >= total) {
-        kicker = 'LINING UP'; big = 'they’re off…'; accent = false; note = 'all agents in — race starting';
-      } else if (graceOpen && ready >= 1) {
-        // Fastest agent is in → GRACE window: red bar over [first agent → cutoff]; only outliers get cut.
-        const left = r.dqAtMs! - now;
-        kicker = 'STRAGGLERS CUT IN'; big = left > 1000 ? clock(left) : 'cutting…';
-        note = `${ready}/${total} agents in · only the slow stragglers get cut`;
-        barPct = Math.min(0.99, Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)));
-      } else {
-        // Before the first agent: descending countdown to the calibrated expected start (approximate).
-        const eta = r.etaRaceStartMs;
-        const left = eta ? eta - now : 0;
-        kicker = 'RACE STARTS IN'; big = eta && left > 1000 ? '~' + clock(left) : 'any moment…';
-        note = 'buying real data on-chain to forecast';
-      }
+      // Honest rising elapsed + who's ready — never frozen, never a fake countdown.
+      note = `agents hiring data · ${clock(now - openMs)} · ${ready}/${total} ready`;
     }
   } else {
     const delta = nextAt ? nextAt - now : 0;
@@ -281,15 +271,15 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     setPick({ ...pick, resolved: true, correct: actual === pick.side });
   }, [r?.phase, r?.id, r?.amplitude, r?.line, pick, rec]);
 
+  const live = r?.phase === 'open' || r?.phase === 'betting'; // betting open from hiring (blind) through the race
   const choose = (side: 'over' | 'under') => {
-    if (r && r.phase === 'betting' && !(pick && pick.round === r.id)) {
+    if (r && live && !(pick && pick.round === r.id)) {
       setPick({ round: r.id, side });
       void postPredict(r.id, side); // count it toward the public usage tally (no wallet, no signup)
     }
   };
   const mine = pick && r && pick.round === r.id;
   const ps = state?.predictStats;
-  const live = r?.phase === 'betting';
 
   return (
     <div>
@@ -336,7 +326,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                 {side === 'over' ? '▲' : '▼'} {side}
               </div>
               <div className="mt-2 font-mono text-[11px] uppercase tracking-wider text-dim">
-                move {side === 'over' ? 'bigger than' : 'smaller than'} {usd(r?.line)}
+                {r?.line != null ? <>move {side === 'over' ? 'bigger than' : 'smaller than'} {usd(r.line)}</> : <>{side === 'over' ? 'big' : 'small'} move · line locks at start</>}
               </div>
               <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: emphasised ? col : 'var(--color-dim)' }}>
                 {picked ? '✓ your call' : bettable ? '▸ tap to call' : 'opens next race'}
@@ -368,7 +358,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
 function UsdcBet({ state }: { state: ArenaState | null }) {
   const ub = state?.usdcBet;
   const r = state?.round;
-  const live = r?.phase === 'betting';
+  const live = r?.phase === 'open' || r?.phase === 'betting'; // bet from hiring (blind, top odds) through the race
   const { address, isConnected, chainId } = useAccount();
   const { connectors, connect, isPending: connecting } = useConnect();
   const { switchChainAsync } = useSwitchChain();
@@ -406,9 +396,7 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
   };
 
   // Live odds multiplier (decays over the race) — bet early for a bigger payout share.
-  const frac = live && r?.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs
-    ? Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs))) : 0;
-  const mult = Math.round((1 - (1 - ub.decayFloor) * frac) * 100) / 100;
+  const mult = ub.multiplier; // ×odds (4 blind → 2 at race start → 1 at settle); decays with information
 
   return (
     <div className="mt-5 rounded-xl border border-line bg-panel2/50 p-5">
@@ -416,7 +404,7 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
         <div>
           <div className="font-display text-lg uppercase tracking-wide text-ink">Play for real — USDC</div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-            {live ? <>odds <b style={{ color: 'var(--color-volt)' }}>×{mult.toFixed(2)}</b> — dropping · bet early</> : 'winner splits the pool at settle'}
+            {live ? <>odds <b style={{ color: 'var(--color-volt)' }}>×{mult.toFixed(1)}</b> — dropping · bet early wins more</> : 'winner splits the pool at settle'}
           </div>
         </div>
         <div className="text-right font-mono text-[11px] tnum text-dim">

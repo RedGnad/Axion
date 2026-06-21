@@ -100,7 +100,7 @@ interface ArenaState {
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
-  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; decayFloor: number; pool: { over: string; under: string; bettors: number } };
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { over: string; under: string; bettors: number } };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
     discovered: number;
@@ -236,14 +236,21 @@ function saveHistory(): void {
   void saveState(blob); // durable (Upstash) — survives Render restarts
 }
 
-const BET_DECAY_FLOOR = Math.max(0.1, Math.min(1, Number(process.env.BET_DECAY_FLOOR ?? '0.25')));
-
-/** Current odds-decay weight (1 at race start → BET_DECAY_FLOOR at settle). Bet early = bigger share. */
-function betWeightNow(): number {
+/** DISPLAY odds multiplier (×N), decaying with INFORMATION — reward strictly drops as you learn more,
+ *  so betting is fair + non-farmable: blind during hiring = ×4, line set (race start) = ×2, → ×1 at settle. */
+function displayMultNow(): number {
   const r = state.round;
-  if (!r?.raceStartMs || !r.settleAtMs || r.settleAtMs <= r.raceStartMs) return 1;
-  const frac = Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs)));
-  return Math.round((1 - (1 - BET_DECAY_FLOOR) * frac) * 100) / 100;
+  if (!r) return 4;
+  if (r.phase === 'open') return 4; // blind (no line, no move) = max reward
+  if (r.phase === 'betting' && r.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs) {
+    const frac = Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs)));
+    return Math.round((2 - 1 * frac) * 100) / 100; // 2.0 at race start → 1.0 at settle
+  }
+  return 1;
+}
+/** Internal pari-mutuel share weight = displayMult / 4 (so ×4→1.0 … ×1→0.25). */
+function betWeightNow(): number {
+  return displayMultNow() / 4;
 }
 
 /** Reflect the human-USDC-bet config + current round pool into state (for the UI). */
@@ -253,8 +260,7 @@ function refreshUsdcBet(): void {
     enabled: houseEnabled(),
     houseAddress: houseAddress(),
     maxBetUSDC: MAX_BET_USDC,
-    multiplier: betWeightNow(),
-    decayFloor: BET_DECAY_FLOOR,
+    multiplier: displayMultNow(),
     pool: { over: (Number(p.over) / 1e6).toFixed(2), under: (Number(p.under) / 1e6).toFixed(2), bettors: p.bettors },
   };
 }
@@ -365,7 +371,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           dqAtMs,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
-        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring data & estimating…`);
+        refreshUsdcBet(); // betting opens NOW (blind, highest odds) → fresh pool from the hiring phase
+        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring · blind bets open at top odds`);
         broadcast();
       },
       onFirstEstimate: ({ dqFromMs, dqAtMs }) => {
@@ -629,7 +636,7 @@ async function main(): Promise<void> {
           const { roundId, side, visitorId } = JSON.parse(body || '{}') as { roundId?: string; side?: string; visitorId?: string };
           if (side !== 'over' && side !== 'under') return reply(400, { error: 'side must be over|under' });
           if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 64) return reply(400, { error: 'visitorId required' });
-          if (!roundId || roundId !== state.round?.id || state.round?.phase !== 'betting') return reply(409, { error: 'betting is closed for this round' });
+          if (!roundId || roundId !== state.round?.id || (state.round?.phase !== 'open' && state.round?.phase !== 'betting')) return reply(409, { error: 'betting is closed for this round' });
           const arr = predictPending.get(roundId) ?? [];
           arr.push({ side });
           predictPending.set(roundId, arr);
@@ -660,7 +667,7 @@ async function main(): Promise<void> {
             if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) return reply(400, { error: 'valid txHash required' });
             const amt = Number(amountUSDC);
             if (!(amt > 0) || amt > MAX_BET_USDC) return reply(400, { error: `amount must be 0 < x ≤ ${MAX_BET_USDC} USDC` });
-            if (!roundId || roundId !== state.round?.id || state.round?.phase !== 'betting') return reply(409, { error: 'no live betting round' });
+            if (!roundId || roundId !== state.round?.id || (state.round?.phase !== 'open' && state.round?.phase !== 'betting')) return reply(409, { error: 'no live betting round' });
             const amount = BigInt(Math.round(amt * 1e6));
             const ok = await verifyBetTx(txHash, eoa, amount).catch(() => false);
             if (!ok) return reply(400, { error: 'bet tx not verified on-chain (USDC transfer to house not found)' });
