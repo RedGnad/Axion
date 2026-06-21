@@ -108,10 +108,8 @@ interface ArenaState {
     censusAt: number;
     top: { name: string; orders7d: number; priceUSDC: number }[];
     wired: { label: string; serviceId: string; ours: boolean }[];
-    /** Real third-party providers Axion has paid (cumulative hires) — the zero-work earn hook. */
-    earners?: { label: string; serviceId: string; hires: number }[];
-    /** Avg hire latency per provider (fastest first) — the ecosystem speed signal; fast = hired more. */
-    providerSpeed?: { label: string; avgMs: number; samples: number }[];
+    /** Structured per-provider stats from real hires: count, avg latency (ms), USDC paid. */
+    providerStats?: { label: string; serviceId: string; hires: number; avgMs: number | null; paidUSDC: number }[];
   };
 }
 
@@ -270,42 +268,31 @@ function refreshUsdcBet(): void {
 async function refreshDataMarket(wired?: { label: string; serviceId: string; ours: boolean }[]): Promise<void> {
   try {
     const pool = await discoverProviders();
-    // Cumulative third-party providers Axion has paid (real hires from settled history) — zero-work earn hook.
-    const counts = new Map<string, { label: string; serviceId: string; hires: number }>();
+    // Per-provider stats from real settled history (third parties only): hires, avg latency, USDC paid.
+    // ONE structured table the UI can rank by any column — the ecosystem-quality signal.
+    const PRICE = Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10; // per-hire order price (USDC)
+    const stats = new Map<string, { label: string; serviceId: string; hires: number; latSum: number; latN: number }>();
     for (const h of state.history) {
       for (const e of h.edges ?? []) {
         if (e.ours) continue;
         const key = e.serviceId || e.label;
-        const row = counts.get(key) ?? { label: e.label, serviceId: e.serviceId ?? '', hires: 0 };
+        const row = stats.get(key) ?? { label: e.label, serviceId: e.serviceId ?? '', hires: 0, latSum: 0, latN: 0 };
         row.hires += 1;
-        counts.set(key, row);
+        if (typeof e.latencyMs === 'number') { row.latSum += e.latencyMs; row.latN += 1; }
+        stats.set(key, row);
       }
     }
-    const earners = [...counts.values()].sort((a, b) => b.hires - a.hires).slice(0, 8);
-    // Provider SPEED: average hire latency per provider across history (fastest first) — the ecosystem
-    // quality signal. Fast providers get raced → hired → paid; slow ones bypassed.
-    const lat = new Map<string, { label: string; sum: number; n: number }>();
-    for (const h of state.history) {
-      for (const e of h.edges ?? []) {
-        if (e.ours || typeof e.latencyMs !== 'number') continue;
-        const key = e.serviceId || e.label;
-        const row = lat.get(key) ?? { label: e.label, sum: 0, n: 0 };
-        row.sum += e.latencyMs; row.n += 1;
-        lat.set(key, row);
-      }
-    }
-    const providerSpeed = [...lat.values()]
-      .map((r) => ({ label: r.label, avgMs: Math.round(r.sum / r.n), samples: r.n }))
-      .sort((a, b) => a.avgMs - b.avgMs)
-      .slice(0, 6);
+    const providerStats = [...stats.values()]
+      .map((r) => ({ label: r.label, serviceId: r.serviceId, hires: r.hires, avgMs: r.latN ? Math.round(r.latSum / r.latN) : null, paidUSDC: Math.round(r.hires * PRICE * 100) / 100 }))
+      .sort((a, b) => b.hires - a.hires)
+      .slice(0, 8);
     state.dataMarket = {
       discovered: pool.length,
       maxPriceUSDC: Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10,
       censusAt: Date.now(),
       top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
       wired: wired ?? state.dataMarket?.wired ?? [],
-      earners,
-      providerSpeed,
+      providerStats,
     };
     broadcast();
   } catch {

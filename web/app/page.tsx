@@ -532,30 +532,22 @@ function DataMarket({ state }: { state: ArenaState | null }) {
           <p className="mt-2 text-[12px] leading-relaxed text-dim">
             List a data agent &amp; stay online — our racers hire it each race and <b className="text-ink">you get paid</b>. No integration.
           </p>
-          {dm.providerSpeed && dm.providerSpeed.length ? (
+          {dm.providerStats && dm.providerStats.length ? (
             <div className="mt-4">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">fastest data providers · response time</div>
-              <p className="mt-1 text-[11px] leading-relaxed text-dim">Fast providers get raced &amp; <b className="text-ink">hired more</b> — the arena rewards speed, lifting the whole store.</p>
-              <div className="mt-2 space-y-1.5">
-                {dm.providerSpeed.map((p, i) => {
-                  const last = i === dm.providerSpeed!.length - 1;
-                  return (
-                    <div key={i} className="flex items-center justify-between text-[12px]">
-                      <span className="truncate pr-2 text-ink">{i === 0 ? '⚡ ' : last && dm.providerSpeed!.length > 2 ? '🐌 ' : ''}{p.label}</span>
-                      <span className="shrink-0 font-mono tnum" style={{ color: i === 0 ? 'var(--color-volt)' : 'var(--color-dim)' }}>{(p.avgMs / 1000).toFixed(1)}s</span>
-                    </div>
-                  );
-                })}
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">providers paid by Axion</div>
+              <div className="mb-1 mt-2 flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-dim">
+                <span className="flex-1">provider</span>
+                <span className="w-12 text-right" title="hires">hires</span>
+                <span className="w-14 text-right" title="avg response time">latency</span>
+                <span className="w-14 text-right" title="USDC paid">paid</span>
               </div>
-            </div>
-          ) : dm.earners && dm.earners.length ? (
-            <div className="mt-4">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">hired by Axion so far</div>
-              <div className="mt-2 space-y-1.5">
-                {dm.earners.slice(0, 4).map((e, i) => (
-                  <div key={i} className="flex items-center justify-between text-[12px]">
-                    <span className="truncate pr-2 text-ink">{e.label}</span>
-                    <span className="shrink-0 font-mono tnum text-under">{e.hires} hire{e.hires > 1 ? 's' : ''}</span>
+              <div className="space-y-1">
+                {dm.providerStats.slice(0, 6).map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[12px]">
+                    <span className="flex-1 truncate text-ink">{p.label}</span>
+                    <span className="w-12 text-right font-mono tnum text-dim">{p.hires}</span>
+                    <span className="w-14 text-right font-mono tnum" style={{ color: p.avgMs != null && p.avgMs < 5000 ? 'var(--color-volt)' : 'var(--color-dim)' }}>{p.avgMs != null ? `${(p.avgMs / 1000).toFixed(1)}s` : '—'}</span>
+                    <span className="w-14 text-right font-mono tnum text-under">${p.paidUSDC.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
