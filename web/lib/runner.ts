@@ -71,6 +71,7 @@ export interface ArenaState {
   leaderboard: LeaderRow[];
   feed: FeedItem[];
   predictStats?: { total: number; correct: number; visitors: number };
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; pool: { over: string; under: string; bettors: number } };
   dataMarket?: {
     discovered: number;
     maxPriceUSDC: number;
