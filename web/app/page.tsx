@@ -531,30 +531,46 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
   );
 }
 
+const BASESCAN = 'https://basescan.org/tx/';
+
 function Ledger({ state }: { state: ArenaState | null }) {
-  const feed = state?.feed ?? [];
-  const txs = feed.filter((f) => f.txUrl).length;
-  // Colour-code by event type so the feed reads at a glance (show, don't tell).
-  const tint = (t: string): string => {
-    const s = t.toLowerCase();
-    if (s.includes('won') || s.includes('winner') || s.includes('settled')) return 'var(--color-gold)';
-    if (s.includes('bet') || s.includes('paid') || s.includes('payout')) return 'var(--color-under)';
-    if (s.includes('hired')) return 'var(--color-volt)';
-    return 'var(--color-dim)';
-  };
+  const history = state?.history ?? [];
+  // The persistent record: each settled round + its hires (each a real CAP order = pay + settle tx).
+  const totalTx = history.reduce((s, h) => s + (h.edges?.length ?? 0) * 2, 0);
+  const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '180ms' }}>
-      <SectionTitle title="Live activity" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">{txs} on-chain txs · Base</span>} />
-      <p className="mt-2 text-[11px] leading-relaxed text-dim">Every hire, bet and payout is a real transaction on Base — tap <span className="text-under">↗</span> to verify any of them.</p>
-      <div className="mt-3 max-h-[520px] space-y-0 overflow-auto pr-1">
-        {feed.length === 0 ? <div className="py-8 text-center font-mono text-sm text-dim">waiting for the next race…</div> : feed.map((f, i) => (
-          <div key={i} className="flex items-baseline gap-2.5 border-b border-white/5 py-2 text-[12px] leading-snug">
-            <span className="shrink-0 font-mono text-[9px] text-dim tnum">{new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint(f.text) }} />
-            <span className="flex-1 text-ink/90">{f.text}</span>
-            {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">verify ↗</a> : null}
-          </div>
-        ))}
+      <SectionTitle title="On-chain activity" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">{totalTx.toLocaleString()} txs · Base</span>} />
+      <p className="mt-2 text-[11px] leading-relaxed text-dim">
+        Every race hires data agents on-chain — each is a real CAP order (pay + settle). Verify any on BaseScan.
+      </p>
+      <div className="mt-3 max-h-[560px] space-y-3 overflow-auto pr-1">
+        {history.length === 0 ? (
+          <div className="py-8 text-center font-mono text-sm text-dim">no settled races yet — start one on Play</div>
+        ) : history.map((h) => {
+          const side = h.amplitude > h.line ? 'over' : h.amplitude < h.line ? 'under' : 'push';
+          return (
+            <div key={h.id} className="rounded-lg border border-line/70 bg-panel2/40 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
+                <span className="font-mono text-dim">{new Date(h.settledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-ink">move <b className="tnum">{usd(h.amplitude)}</b> vs line <b className="tnum">{usd(h.line)}</b> → <span className="uppercase" style={{ color: side === 'over' ? 'var(--color-over)' : side === 'under' ? 'var(--color-under)' : 'var(--color-dim)' }}>{side}</span></span>
+                <span className="font-mono uppercase tracking-wider" style={{ color: 'var(--color-gold)' }}>🏆 {h.winners.map(cap).join(', ')}</span>
+              </div>
+              {h.edges && h.edges.length ? (
+                <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
+                  {h.edges.map((e, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px]">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.ours ? 'var(--color-dim)' : 'var(--color-volt)' }} />
+                      <span className="flex-1 truncate text-ink/80"><b className="text-ink">{cap(e.competitor)}</b> hired {e.label}</span>
+                      {e.payTxHash ? <a href={BASESCAN + e.payTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">pay ↗</a> : null}
+                      {e.clearTxHash ? <a href={BASESCAN + e.clearTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">settle ↗</a> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
