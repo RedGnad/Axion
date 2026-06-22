@@ -653,7 +653,7 @@ function CopyCmd({ cmd }: { cmd: string }) {
 function Step({ n, title, children }: { n: number; title: React.ReactNode; children?: React.ReactNode }) {
   return (
     <div className="flex gap-3">
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-volt/50 font-mono text-[10px] text-volt">{n}</span>
+      <span className="mt-px w-4 shrink-0 font-display text-[15px] leading-none text-volt">{n}</span>
       <div className="min-w-0 flex-1">
         <div className="text-[12px] text-ink">{title}</div>
         {children ? <div className="mt-1.5">{children}</div> : null}
@@ -679,31 +679,43 @@ function Join() {
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
       <SectionTitle title="Race your own agent" right={<a href={REPO_URL} target="_blank" rel="noopener" className="font-mono text-[10px] uppercase tracking-wider text-under hover:underline">repo ↗</a>} />
       <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Your CAP agent forecasts ETH&apos;s next move; the arena <b className="text-ink">pays it every round it&apos;s hired</b> and ranks it on-chain.
-        Beat Slicer/Tanker/Wizord → top the standings. The whole contract: hired with
+        Any agent that answers one tiny contract can race — hired with
         <code className="mx-1 text-under">{'{spot, deadlineSeconds, recentVol}'}</code>→<code className="mx-1 text-under">{'{prediction, rationale}'}</code>.
+        The arena <b className="text-ink">pays it every round it&apos;s hired</b> + ranks it on-chain. Beat Slicer/Tanker/Wizord → top the standings.
       </p>
 
-      <div className="mt-4 space-y-3">
-        <Step n={1} title={<>Clone &amp; install <span className="text-dim">(needs Node 18+)</span></>}>
-          <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
-        </Step>
-        <Step n={2} title={<>See it work — <b className="text-ink">no keys, no USDC</b> (prints a live forecast in your terminal)</>}>
-          <CopyCmd cmd="npm run competitor:preview" />
-        </Step>
-        <Step n={3} title={<>Register a CAP agent on <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a> → get a serviceId + key, fund its wallet a little.</>} />
-        <Step n={4} title={<>Go live (with your keys in <code className="text-under">.env</code>):</>}>
-          <CopyCmd cmd="npm run competitor" />
-        </Step>
-        <Step n={5} title={<>Enter the grid — paste your serviceId below. <b className="text-ink">We fund your first race.</b></>}>
-          <div className="flex flex-wrap gap-2">
-            <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
-            <button onClick={submit} className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110">Join</button>
-          </div>
-          {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
-        </Step>
+      {/* Primary path: you already have a CAP agent → just paste its serviceId. No clone. */}
+      <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.03] p-4">
+        <div className="font-display text-[15px] uppercase tracking-wide text-ink">Already have a CAP agent?</div>
+        <p className="mt-1 text-[12px] leading-relaxed text-dim">
+          Make it answer the contract above, register it on <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a>, then drop its serviceId — <b className="text-ink">we fund your first race.</b>
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
+          <button onClick={submit} className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110">Join the grid</button>
+        </div>
+        {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
       </div>
+
+      {/* Secondary path (progressive disclosure): no agent yet → our template. */}
+      <details className="mt-3 group">
+        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
+          <span className="text-volt">▸</span> No agent yet? Start from our template
+        </summary>
+        <div className="mt-3 space-y-3 border-l border-line pl-4">
+          <Step n={1} title={<>Get the template <span className="text-dim">(Node 18+)</span></>}>
+            <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
+          </Step>
+          <Step n={2} title={<>See a forecast run <b className="text-ink">instantly — no keys, no USDC</b></>}>
+            <CopyCmd cmd="npm run competitor:preview" />
+          </Step>
+          <Step n={3} title={<>Add your CROO key in <code className="text-under">.env</code>, then go live:</>}>
+            <CopyCmd cmd="npm run competitor" />
+          </Step>
+          <Step n={4} title={<>Paste the serviceId above. Done.</>} />
+        </div>
+      </details>
     </section>
   );
 }
@@ -735,11 +747,20 @@ function ZoneLabel({ step, title, blurb }: { step?: string; title: string; blurb
 
 /** Slim one-line explainer — orients a first-time visitor without pushing the action below the fold. */
 function HowItWorks() {
+  const steps = [
+    ['01', 'AI agents forecast ETH'],
+    ['02', 'you call over / under — free'],
+    ['03', 'the Pyth move settles it'],
+  ];
   return (
-    <div className="reveal mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[11px] text-dim" style={{ animationDelay: '40ms' }}>
-      <span><span className="text-volt">①</span> agents forecast the next ETH move (buying real data on-chain)</span>
-      <span><span className="text-volt">②</span> you call over / under their line — free</span>
-      <span><span className="text-volt">③</span> the Pyth move settles it on Base</span>
+    <div className="reveal mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-dim" style={{ animationDelay: '40ms' }}>
+      {steps.map(([n, t], i) => (
+        <span key={n} className="flex items-center gap-2">
+          <span className="font-display text-[15px] leading-none text-volt">{n}</span>
+          <span>{t}</span>
+          {i < steps.length - 1 ? <span className="ml-3 h-3 w-px bg-line" /> : null}
+        </span>
+      ))}
     </div>
   );
 }
