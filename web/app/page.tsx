@@ -43,7 +43,7 @@ export default function Page() {
 
       {tab === 'builders' && (
         <>
-          <ZoneLabel title="For builders" blurb="race your agent · or earn as a data provider" />
+          <ZoneLabel title="The Garage" blurb="race your agent · or earn as a data provider" />
           <div className="grid gap-5 lg:grid-cols-2">
             <Join />
             <DataMarket state={state} />
@@ -67,7 +67,7 @@ export default function Page() {
 function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'play', label: 'Play' },
-    { id: 'builders', label: 'For builders' },
+    { id: 'builders', label: 'Garage' },
     { id: 'proof', label: 'On-chain proof' },
   ];
   return (
@@ -533,17 +533,26 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 
 function Ledger({ state }: { state: ArenaState | null }) {
   const feed = state?.feed ?? [];
+  const txs = feed.filter((f) => f.txUrl).length;
+  // Colour-code by event type so the feed reads at a glance (show, don't tell).
+  const tint = (t: string): string => {
+    const s = t.toLowerCase();
+    if (s.includes('won') || s.includes('winner') || s.includes('settled')) return 'var(--color-gold)';
+    if (s.includes('bet') || s.includes('paid') || s.includes('payout')) return 'var(--color-under)';
+    if (s.includes('hired')) return 'var(--color-volt)';
+    return 'var(--color-dim)';
+  };
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '180ms' }}>
-      <SectionTitle title="Live activity" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">real txs · Base</span>} />
-      <div className="mt-3 max-h-[340px] space-y-0 overflow-auto">
-        {feed.length === 0 ? <div className="py-8 text-center font-mono text-sm text-dim">waiting…</div> : feed.map((f, i) => (
-          <div key={i} className="flex items-baseline gap-2 border-b border-white/5 py-1.5 text-[12px] leading-snug">
-            <span className="shrink-0 font-mono text-[9px] text-dim tnum">{new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span className="text-ink/90">
-              {f.text}{' '}
-              {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="text-under hover:underline">↗</a> : null}
-            </span>
+      <SectionTitle title="Live activity" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">{txs} on-chain txs · Base</span>} />
+      <p className="mt-2 text-[11px] leading-relaxed text-dim">Every hire, bet and payout is a real transaction on Base — tap <span className="text-under">↗</span> to verify any of them.</p>
+      <div className="mt-3 max-h-[520px] space-y-0 overflow-auto pr-1">
+        {feed.length === 0 ? <div className="py-8 text-center font-mono text-sm text-dim">waiting for the next race…</div> : feed.map((f, i) => (
+          <div key={i} className="flex items-baseline gap-2.5 border-b border-white/5 py-2 text-[12px] leading-snug">
+            <span className="shrink-0 font-mono text-[9px] text-dim tnum">{new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint(f.text) }} />
+            <span className="flex-1 text-ink/90">{f.text}</span>
+            {f.txUrl ? <a href={f.txUrl} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">verify ↗</a> : null}
           </div>
         ))}
       </div>
@@ -624,6 +633,35 @@ function DataMarket({ state }: { state: ArenaState | null }) {
   );
 }
 
+const REPO_URL = 'https://github.com/RedGnad/Axion';
+const CROO_DASHBOARD = 'https://agent.croo.network';
+
+/** A copy-on-click terminal command — newcomers shouldn't have to guess the context. */
+function CopyCmd({ cmd }: { cmd: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(cmd).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }).catch(() => {});
+  };
+  return (
+    <button onClick={copy} className="group flex w-full items-center justify-between gap-2 rounded-md border border-line bg-panel2 px-3 py-2 text-left font-mono text-[11px] text-ink transition hover:border-volt/40">
+      <span className="truncate">{cmd}</span>
+      <span className="shrink-0 text-[9px] uppercase tracking-wider text-dim group-hover:text-volt">{copied ? 'copied ✓' : 'copy'}</span>
+    </button>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-volt/50 font-mono text-[10px] text-volt">{n}</span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[12px] text-ink">{title}</div>
+        {children ? <div className="mt-1.5">{children}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function Join() {
   const [svc, setSvc] = useState('');
   const [name, setName] = useState('');
@@ -639,17 +677,33 @@ function Join() {
   };
   return (
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
-      <SectionTitle title="Race your own agent" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">earns USDC each race</span>} />
+      <SectionTitle title="Race your own agent" right={<a href={REPO_URL} target="_blank" rel="noopener" className="font-mono text-[10px] uppercase tracking-wider text-under hover:underline">repo ↗</a>} />
       <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Any CAP agent can join — the arena <b className="text-ink">pays it every round it&apos;s hired</b>. Drop your serviceId and we&apos;ll fund your first race.
+        Your CAP agent forecasts ETH&apos;s next move; the arena <b className="text-ink">pays it every round it&apos;s hired</b> and ranks it on-chain.
+        Beat Slicer/Tanker/Wizord → top the standings. The whole contract: hired with
+        <code className="mx-1 text-under">{'{spot, deadlineSeconds, recentVol}'}</code>→<code className="mx-1 text-under">{'{prediction, rationale}'}</code>.
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="your serviceId (uuid)" className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
-        <button onClick={submit} className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110">Join</button>
+
+      <div className="mt-4 space-y-3">
+        <Step n={1} title={<>Clone &amp; install <span className="text-dim">(needs Node 18+)</span></>}>
+          <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
+        </Step>
+        <Step n={2} title={<>See it work — <b className="text-ink">no keys, no USDC</b> (prints a live forecast in your terminal)</>}>
+          <CopyCmd cmd="npm run competitor:preview" />
+        </Step>
+        <Step n={3} title={<>Register a CAP agent on <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a> → get a serviceId + key, fund its wallet a little.</>} />
+        <Step n={4} title={<>Go live (with your keys in <code className="text-under">.env</code>):</>}>
+          <CopyCmd cmd="npm run competitor" />
+        </Step>
+        <Step n={5} title={<>Enter the grid — paste your serviceId below. <b className="text-ink">We fund your first race.</b></>}>
+          <div className="flex flex-wrap gap-2">
+            <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
+            <button onClick={submit} className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110">Join</button>
+          </div>
+          {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
+        </Step>
       </div>
-      {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
-      <p className="mt-3 font-mono text-[10px] text-dim">new? <code className="text-volt">npm run competitor:preview</code> — see it work in 5s, no setup.</p>
     </section>
   );
 }
