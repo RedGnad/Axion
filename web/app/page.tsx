@@ -362,31 +362,31 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           const col = side === 'over' ? 'var(--color-over)' : 'var(--color-under)';
           const picked = mine && pick!.side === side;
           const bettable = live && !mine; // tappable right now
-          const emphasised = bettable || picked || won;
+          const boxed = bettable || picked || won; // gets the "button" chrome only when it means something
           return (
             <button
               key={side}
               onClick={() => choose(side)}
               disabled={!bettable && !picked}
               className={cn(
-                'relative rounded-2xl border-2 px-4 py-6 text-center transition-transform',
-                bettable && 'cursor-pointer hover:-translate-y-0.5',
-                !bettable && !picked && 'cursor-default',
+                'relative rounded-2xl px-4 py-6 text-center transition-transform',
+                boxed ? 'border-2' : 'border border-line',           // no false affordance when inert
+                bettable ? 'cursor-pointer hover:-translate-y-0.5' : 'cursor-default',
               )}
               style={{
-                borderColor: picked ? '#fff' : col,
-                background: emphasised ? `color-mix(in srgb, ${col} 13%, transparent)` : 'transparent',
+                borderColor: picked ? '#fff' : bettable || won ? col : undefined,
+                background: boxed ? `color-mix(in srgb, ${col} 13%, transparent)` : 'transparent',
                 boxShadow: bettable ? `0 0 28px ${col}66` : won ? `0 0 22px ${col}33` : 'none',
               }}
             >
-              <div className="font-display text-4xl uppercase leading-none tracking-wide" style={{ color: col }}>
+              <div className="font-display text-4xl uppercase leading-none tracking-wide" style={{ color: col, opacity: boxed ? 1 : 0.7 }}>
                 {side === 'over' ? '▲' : '▼'} {side}
               </div>
               <div className="mt-2 font-mono text-[11px] uppercase tracking-wider text-dim">
-                {r?.line != null ? <>move {side === 'over' ? 'bigger than' : 'smaller than'} {usd(r.line)}</> : <>{side === 'over' ? 'big' : 'small'} move · line locks at start</>}
+                {r?.line != null ? <>move {side === 'over' ? 'bigger than' : 'smaller than'} {usd(r.line)}</> : <>{side === 'over' ? 'big' : 'small'} move</>}
               </div>
-              <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: emphasised ? col : 'var(--color-dim)' }}>
-                {picked ? '✓ your call' : bettable ? '▸ tap to call' : 'opens next race'}
+              <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: bettable ? col : picked ? '#fff' : 'var(--color-dim)' }}>
+                {picked ? '✓ your call' : bettable ? '▸ tap to call' : 'opens when a race starts'}
               </div>
             </button>
           );
