@@ -101,6 +101,8 @@ interface ArenaState {
   predictStats: { total: number; correct: number; visitors: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { over: string; under: string; bettors: number } };
+  /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
+  budget?: { used: number; cap: number; resetsAt: number };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
     discovered: number;
@@ -125,6 +127,9 @@ let HIRING_ETA_MS = 90_000; // estimated hiring time; AUTO-CALIBRATED from each 
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
+// Cold-start subsidy is BOUNDED: at most N free races/day from our treasury (each ~0.6 USDC of data
+// hires). Beyond it, "start" is paused till tomorrow (UTC) — a bot/spam can never drain us.
+const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '12'));
 const BASESCAN = 'https://basescan.org/tx/';
 
 const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [], predictStats: { total: 0, correct: 0, visitors: 0 } };
@@ -134,6 +139,8 @@ let metaById = new Map<string, { label: string; blurb: string }>();
 let running = false;
 let lastRoundStartMs = 0;
 let roundOpenMs = 0; // when the current round opened (for per-agent data latency + ETA calibration)
+let racesToday = 0;  // bounded daily subsidy counter (resets at UTC midnight)
+let racesDayKey = '';
 // Free guest predictions, kept server-side so the usage counter is real (not localStorage-only).
 const predictVisitors = new Set<string>();                       // unique visitor ids seen this instance
 const predictPending = new Map<string, { side: 'over' | 'under' }[]>(); // roundId → unresolved guesses
@@ -328,12 +335,28 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   setInterval(() => void tick(), 6000);
 }
 
-/** Trigger a round respecting the cost ceiling (cooldown) + the running guard. Returns why/when. */
-function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, reason: string): { started: boolean; nextAtMs?: number } {
-  if (running) return { started: false, nextAtMs: state.nextRoundAtMs };
+function nextUtcMidnightMs(): number {
+  const d = new Date();
+  d.setUTCHours(24, 0, 0, 0);
+  return d.getTime();
+}
+/** Reflect the bounded daily subsidy into state (for the UI), rolling over at UTC midnight. */
+function refreshBudget(): void {
+  const today = new Date().toISOString().slice(0, 10);
+  if (today !== racesDayKey) { racesDayKey = today; racesToday = 0; }
+  state.budget = { used: racesToday, cap: DAILY_RACES, resetsAt: nextUtcMidnightMs() };
+}
+
+/** Trigger a round respecting the cost ceiling (cooldown) + running guard + bounded daily subsidy. */
+function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, reason: string): { started: boolean; nextAtMs?: number; reason?: string } {
+  if (running) return { started: false, reason: 'a race is already running', nextAtMs: state.nextRoundAtMs };
   const since = Date.now() - lastRoundStartMs;
-  if (lastRoundStartMs && since < MIN_ROUND_MS) return { started: false, nextAtMs: lastRoundStartMs + MIN_ROUND_MS };
-  console.log(`[arena-server] round trigger: ${reason}`);
+  if (lastRoundStartMs && since < MIN_ROUND_MS) return { started: false, reason: 'cooldown', nextAtMs: lastRoundStartMs + MIN_ROUND_MS };
+  refreshBudget();
+  if (racesToday >= DAILY_RACES) return { started: false, reason: `today's free races are used up (${DAILY_RACES}/day) — back at UTC midnight`, nextAtMs: nextUtcMidnightMs() };
+  racesToday++;
+  refreshBudget();
+  console.log(`[arena-server] round trigger: ${reason} (${racesToday}/${DAILY_RACES} today)`);
   void runOneRound(cfg);
   return { started: true };
 }
@@ -507,6 +530,8 @@ async function main(): Promise<void> {
   void refreshDataMarket(lastEdges.length ? lastEdges : undefined);
   setInterval(() => void refreshDataMarket(), 10 * 60_000);
   refreshUsdcBet();
+  refreshBudget();
+  console.log(`[arena-server] bounded subsidy: ${DAILY_RACES} free races/day`);
   if (houseEnabled()) console.log(`[arena-server] human USDC betting ON (house ${houseAddress()}, max ${MAX_BET_USDC} USDC/bet)`);
 
   const cfg = {

@@ -205,10 +205,11 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
     setBusy(true); setStartMsg('waking the arena & starting…');
     try {
       const res = await fetch(`${RUNNER_URL}/api/round`, { method: 'POST' });
-      const j = (await res.json().catch(() => ({}))) as { started?: boolean; nextAtMs?: number; error?: string };
+      const j = (await res.json().catch(() => ({}))) as { started?: boolean; nextAtMs?: number; reason?: string; error?: string };
       if (j.started) setStartMsg('✓ race starting — agents hiring data…');
-      else if (j.nextAtMs) setStartMsg(`on cooldown · next race in ${Math.max(0, Math.round((j.nextAtMs - Date.now()) / 1000))}s`);
-      else setStartMsg(j.error ? `couldn't start: ${j.error}` : 'a race is already running…');
+      else if (j.reason) setStartMsg(j.reason);
+      else if (j.nextAtMs) setStartMsg(`next race in ${Math.max(0, Math.round((j.nextAtMs - Date.now()) / 1000))}s`);
+      else setStartMsg(j.error || 'a race is already running…');
     } catch {
       setStartMsg('arena was asleep — waking it, try again in ~20s');
     }
@@ -269,9 +270,13 @@ function RaceControl({ state, online }: { state: ArenaState | null; online: bool
     // Idle / between races — the grid below shows the LAST race result (not a live race).
     const delta = nextAt ? nextAt - now : 0;
     const w = r?.competitors.find((c) => c.isWinner);
+    const budLeft = state?.budget ? Math.max(0, state.budget.cap - state.budget.used) : null;
+    const exhausted = budLeft === 0;
     if (nextAt && delta > 0) { kicker = 'NEXT RACE IN'; big = clock(delta); }
-    else { kicker = 'ARENA READY'; big = 'start a race'; accent = false; }
-    note = startMsg ?? (w ? `last race won by ${w.label} — start the next one` : 'one tap runs a real on-chain race');
+    else { kicker = 'ARENA READY'; big = exhausted ? 'back tomorrow' : 'start a race'; accent = false; showStart = !exhausted; }
+    note = startMsg ?? (exhausted
+      ? "today's free races are used up — back at UTC midnight"
+      : `${w ? `last race won by ${w.label}` : 'one tap runs a real on-chain race'}${budLeft != null ? ` · ${budLeft} free races left today` : ''}`);
   }
 
   return (
