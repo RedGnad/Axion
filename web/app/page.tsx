@@ -31,6 +31,7 @@ export default function Page() {
               <SectionTitle title="The grid" right={<div className="flex items-center gap-3"><MoveBadge state={state} /><PhaseTag state={state} online={online} /></div>} />
               <div className="mt-4"><Race round={state?.round ?? null} /></div>
             </div>
+            <AgentCards state={state} />
             <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
               <ToteBoard state={state} />
             </div>
@@ -537,6 +538,77 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 }
 
 const BASESCAN = 'https://basescan.org/tx/';
+
+/** LAYER 2 (progressive disclosure) — tap an agent to reveal WHY it called the line and WHO it paid.
+ *  Honest by construction: the rationale is the agent's own (live), and the hires are labelled
+ *  "this race" only when the shown round is the one in history; otherwise "last race". A discovered
+ *  provider is NEVER shown as paid — only real on-chain hires (with BaseScan tx) appear here. */
+function AgentCards({ state }: { state: ArenaState | null }) {
+  const r = state?.round;
+  const comps = r?.competitors ?? [];
+  const history = state?.history ?? [];
+  const [open, setOpen] = useState<string | null>(null);
+  if (!comps.length) return null;
+  const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
+  // Match the shown round to a settled record so hires read as "this race"; else fall back to last race.
+  const thisRound = history.find((h) => h.id === r?.id);
+  const hiresSrc = thisRound ?? history[0];
+  const hiresLabel = thisRound ? 'paid this race' : history[0] ? 'paid last race' : '';
+
+  return (
+    <div className="border-t border-line px-5 py-5">
+      <SectionTitle title="The racers" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">tap an agent — see why it called the line</span>} />
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {comps.map((c) => {
+          const isOpen = open === c.id;
+          const status = c.dq ? 'cut — data too slow' : c.isWinner ? '🏆 won this race' : c.estimate != null ? 'called the line' : 'hiring data…';
+          const hires = (hiresSrc?.edges ?? []).filter((e) => e.competitor === c.id);
+          return (
+            <div key={c.id} className={cn('rounded-xl border bg-panel2/40 transition', isOpen ? 'border-volt/50' : 'border-line', c.dq && 'opacity-60')}>
+              <button onClick={() => setOpen(isOpen ? null : c.id)} className="flex w-full items-center gap-3 px-3.5 py-3 text-left">
+                <span className="h-3.5 w-3.5 shrink-0 rounded-sm" style={{ background: livery(c.id) }} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-display text-sm uppercase tracking-wide">{c.label}</span>
+                  <span className="block font-mono text-[10px] uppercase tracking-wider text-dim">{status}</span>
+                </span>
+                {c.estimate != null ? <span className="shrink-0 font-mono text-[12px] tnum text-volt" title="this agent's predicted move">{usd(c.estimate)}</span> : null}
+                <span className="shrink-0 font-mono text-[10px] text-dim">{isOpen ? '▾' : '▸'}</span>
+              </button>
+              {isOpen ? (
+                <div className="space-y-3 border-t border-line/60 px-3.5 py-3">
+                  <div>
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-dim">why this call</div>
+                    {c.rationale
+                      ? <p className="mt-1 text-[12px] leading-relaxed text-ink/85">{c.rationale}</p>
+                      : <p className="mt-1 text-[12px] text-dim">still working — it shares its reasoning once it&apos;s in</p>}
+                  </div>
+                  {c.dataMs != null ? (
+                    <div className="font-mono text-[10px] text-dim">data arrived in <b className="text-ink">{(c.dataMs / 1000).toFixed(1)}s</b></div>
+                  ) : null}
+                  {hires.length ? (
+                    <div>
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-dim">{cap(c.id)} {hiresLabel}</div>
+                      <div className="mt-1 space-y-1">
+                        {hires.map((e, i) => (
+                          <div key={i} className="flex items-center gap-2 text-[11px]">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.ours ? 'var(--color-dim)' : 'var(--color-volt)' }} title={e.ours ? 'our data agent' : 'independent data agent'} />
+                            <span className="flex-1 truncate text-ink/80">{e.label}</span>
+                            {e.payTxHash ? <a href={BASESCAN + e.payTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">pay ↗</a> : null}
+                            {e.clearTxHash ? <a href={BASESCAN + e.clearTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">settle ↗</a> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
