@@ -77,6 +77,7 @@ export interface ArenaState {
   predictStats?: { total: number; correct: number; visitors: number };
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   budget?: { used: number; cap: number; resetsAt: number };
+  notice?: { level: 'warn'; text: string };
   dataMarket?: {
     discovered: number;
     maxPriceUSDC: number;

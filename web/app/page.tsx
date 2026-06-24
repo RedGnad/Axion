@@ -27,6 +27,7 @@ export default function Page() {
     <main className="mx-auto max-w-[1180px] px-5 pb-24 pt-6">
       <Header state={state} online={online} />
       <Tabs tab={tab} setTab={setTab} />
+      <Notice state={state} />
 
       {tab === "play" && (
         <>
@@ -120,6 +121,22 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
           {t.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Health banner — surfaced when data hires are failing (e.g. arena wallet out of USDC), so a hollow
+ *  "no data" round is never presented silently as a working A2A demo. */
+function Notice({ state }: { state: ArenaState | null }) {
+  const n = state?.notice;
+  if (!n) return null;
+  return (
+    <div
+      className="reveal mt-4 flex items-start gap-2.5 rounded-lg border px-4 py-3"
+      style={{ borderColor: "color-mix(in srgb, var(--color-over) 45%, transparent)", background: "color-mix(in srgb, var(--color-over) 8%, transparent)" }}
+    >
+      <span className="mt-px font-mono text-[12px] font-bold" style={{ color: "var(--color-over)" }}>!</span>
+      <span className="font-mono text-[11px] leading-relaxed text-ink/85">{n.text}</span>
     </div>
   );
 }

@@ -57,12 +57,22 @@ export interface RoundResult {
   line: number;
 }
 
+/** A data/competitor hire that FAILED this round (surfaced, never swallowed — silent failure makes
+ *  the A2A look hollow when really it's infra/funding). reason is the underlying error, human-ish. */
+export interface HireFail {
+  competitor: string;
+  label: string;
+  reason: string;
+}
+
 /** Live phase hooks so a UI/server can stream a round as it happens. */
 export interface RoundHooks {
   /** Round opens. `dqAtMs` = backstop cutoff (refined to first-agent + grace once the fastest lands). */
   onOpen?: (info: { id: string; openPrice: number; dqAtMs: number }) => void;
   /** Fires as EACH competitor finishes, so its kart takes position one-by-one (watchable hiring). */
   onEstimate?: (info: { forecast: Forecast; edges: ArenaEdge[] }) => void;
+  /** A data/competitor hire FAILED — surfaced so the failure is never silent (see HireFail). */
+  onHireFail?: (info: HireFail) => void;
   /** The FASTEST agent landed → the grace window opens: [dqFromMs, dqAtMs]. Stragglers cut at dqAtMs. */
   onFirstEstimate?: (info: { dqFromMs: number; dqAtMs: number }) => void;
   /** Betting OPENS (commit window) — the outcome is NOT being measured yet, so a late bet can't cheat.
@@ -154,7 +164,7 @@ function buildRequirements(capability: string): string {
 }
 
 /** Estimate for one competitor (local persona or remote open agent). */
-async function play(c: Competitor, ctx: PlayCtx): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
+async function play(c: Competitor, ctx: PlayCtx): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   return c.kind === 'local' ? playLocal(c, ctx) : playRemote(c, ctx);
 }
 
@@ -162,11 +172,12 @@ async function play(c: Competitor, ctx: PlayCtx): Promise<{ forecast: Forecast; 
 async function playLocal(
   c: Extract<Competitor, { kind: 'local' }>,
   ctx: PlayCtx,
-): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
+): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   // Hire the persona's data-agents IN PARALLEL. (The docs warn against concurrent payOrder from one
   // wallet, but in practice the backend tolerates it and parallel is REQUIRED for acceptable latency:
   // sequential doubled the hiring time and stacked slow-provider timeouts → rounds hung ~4-8min.)
   const services = c.persona.capabilities.map((cap) => getDataAgent(cap)).filter((s): s is NonNullable<typeof s> => !!s);
+  const fails: HireFail[] = [];
   const results = await Promise.all(
     services.map(async (service) => {
       const t0 = Date.now();
@@ -174,8 +185,11 @@ async function playLocal(
         const hr = await c.orchestrator.hireService(service, buildRequirements(service.capability));
         return { hr, latencyMs: Date.now() - t0 }; // time the hire → provider-speed signal
       } catch (err) {
-        // A third-party provider may be offline despite "online" — degrade, don't crash the round.
-        console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${(err as Error).message}`);
+        // A hire can fail because the arena AA wallet is out of USDC, a provider is offline/slow, or a
+        // negotiation is rejected. Degrade the round, but SURFACE the reason (never swallow silently).
+        const reason = (err as Error).message || 'unknown error';
+        console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${reason}`);
+        fails.push({ competitor: c.id, label: service.label, reason });
         return null;
       }
     }),
@@ -206,7 +220,7 @@ async function playLocal(
     ours: h.service.ours,
     latencyMs: latencyByService.get(h.service.serviceId),
   }));
-  return { forecast: f, edges };
+  return { forecast: f, edges, fails };
 }
 
 /** Remote open competitor: the Arena HIRES its CAP service (one A2A edge); the agent's own data
@@ -214,7 +228,7 @@ async function playLocal(
 async function playRemote(
   c: Extract<Competitor, { kind: 'remote' }>,
   ctx: PlayCtx,
-): Promise<{ forecast: Forecast; edges: ArenaEdge[] }> {
+): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds, recentVol: ctx.recentVol };
   const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
   // Cost cap: don't pay an open racer more than ARENA_MAX_RACER_PRICE_USDC (default 0.20) for its forecast.
@@ -249,7 +263,7 @@ async function playRemote(
     clearTxHash: hire.clearTxHash,
     ours: c.ours,
   }];
-  return { forecast: f, edges };
+  return { forecast: f, edges, fails: [] as HireFail[] };
 }
 
 /**
@@ -292,9 +306,14 @@ export async function runRound(
           hooks.onFirstEstimate?.({ dqFromMs: firstAt, dqAtMs });
         }
         done.set(c.id, r);
+        for (const f of r.fails) hooks.onHireFail?.(f); // surface swallowed data-hire failures
         hooks.onEstimate?.({ forecast: r.forecast, edges: r.edges });
       })
-      .catch((e) => console.warn(`[arena] ${c.id} estimate failed: ${(e as Error).message}`)),
+      .catch((e) => {
+        const reason = (e as Error).message;
+        console.warn(`[arena] ${c.id} estimate failed: ${reason}`);
+        hooks.onHireFail?.({ competitor: c.id, label: c.label, reason });
+      }),
   );
   await new Promise<void>((resolve) => {
     let fin = false;

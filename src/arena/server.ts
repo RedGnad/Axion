@@ -103,6 +103,9 @@ interface ArenaState {
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
   budget?: { used: number; cap: number; resetsAt: number };
+  /** Health banner: surfaced (never silent) when data hires fail — e.g. the arena AA wallet is out of
+   *  USDC so agents couldn't buy data and forecast on baseline only. Cleared once a round buys data. */
+  notice?: { level: 'warn'; text: string };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
     discovered: number;
@@ -194,6 +197,16 @@ function computeRecentVol(): number {
 function pushFeed(text: string, txUrl?: string): void {
   state.feed.unshift({ ts: Date.now(), text, txUrl });
   state.feed = state.feed.slice(0, 40);
+}
+
+let lastHireFailReason = ''; // most recent data-hire failure (human-ish), for the health banner
+/** Turn a raw hire error into a short, honest human cause for the feed + banner. */
+function humanizeHireFail(reason: string): string {
+  const r = reason.toLowerCase();
+  if (/insufficient|balance|funds/.test(r)) return 'arena wallet out of USDC';
+  if (/timed out|timeout/.test(r)) return 'provider too slow (timeout)';
+  if (/create_failed|rejected|reject/.test(r)) return 'provider rejected the order';
+  return reason.slice(0, 80);
 }
 
 function broadcast(): void {
@@ -455,8 +468,18 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           dqAtMs,
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
+        lastHireFailReason = ''; // fresh round; failures (if any) will re-arm the banner
         refreshUsdcBet(); // betting opens NOW (blind, highest odds) → fresh pool from the hiring phase
         pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring · blind bets open at top odds`);
+        broadcast();
+      },
+      onHireFail: ({ competitor, label, reason }) => {
+        // NEVER silent: surface the real cause in the feed + a health banner (most commonly the arena
+        // AA wallet is out of USDC, so agents can't buy data and forecast on baseline only).
+        const why = humanizeHireFail(reason);
+        lastHireFailReason = why;
+        state.notice = { level: 'warn', text: `Data hires are failing: ${why}. Agents are forecasting on baseline only. Fund the arena wallet to restore real data.` };
+        pushFeed(`Data hire failed: ${personaMeta(competitor).label} could not hire ${label} (${why})`);
         broadcast();
       },
       onFirstEstimate: ({ dqFromMs, dqAtMs }) => {
@@ -508,6 +531,9 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
       },
       onSettled: ({ round, line, edges }) => {
         const o = round.outcome!;
+        // Data flowed this round → clear the health banner; none → keep/raise it (A2A is hollow).
+        if (edges.length > 0) { state.notice = undefined; lastHireFailReason = ''; }
+        else if (!state.notice) state.notice = { level: 'warn', text: 'No data was purchased this round. Agents forecast on baseline only. Fund the arena wallet to restore real data.' };
         // Accuracy decides the win; SPEED only breaks exact ties — among co-winners, the agent whose
         // data landed first takes it (legitimate edge for choosing fast data-providers).
         let winners = o.winners;
