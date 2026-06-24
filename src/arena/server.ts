@@ -100,7 +100,7 @@ interface ArenaState {
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
-  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { over: string; under: string; bettors: number } };
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
   budget?: { used: number; cap: number; resetsAt: number };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
@@ -147,7 +147,7 @@ let racesToday = 0;  // bounded daily subsidy counter (resets at UTC midnight)
 let racesDayKey = '';
 // Free guest predictions, kept server-side so the usage counter is real (not localStorage-only).
 const predictVisitors = new Set<string>();                       // unique visitor ids seen this instance
-const predictPending = new Map<string, { side: 'over' | 'under' }[]>(); // roundId → unresolved guesses
+const predictPending = new Map<string, { agentId: string }[]>(); // roundId → unresolved guesses (which agent)
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
@@ -316,12 +316,14 @@ function betWeightNow(): number {
 /** Reflect the human-USDC-bet config + current round pool into state (for the UI). */
 function refreshUsdcBet(): void {
   const p = poolFor(state.round?.id ?? '');
+  let total = 0n;
+  const byAgent = Object.entries(p.byAgent).map(([id, amount]) => { total += amount; return { id, amount: (Number(amount) / 1e6).toFixed(2) }; });
   state.usdcBet = {
     enabled: houseEnabled(),
     houseAddress: houseAddress(),
     maxBetUSDC: MAX_BET_USDC,
     multiplier: displayMultNow(),
-    pool: { over: (Number(p.over) / 1e6).toFixed(2), under: (Number(p.under) / 1e6).toFixed(2), bettors: p.bettors },
+    pool: { byAgent, total: (Number(total) / 1e6).toFixed(2), bettors: p.bettors },
   };
 }
 
@@ -544,20 +546,20 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
         bumpLeaderboard(round.forecasts.map((f) => f.competitor), winners, o.errors);
-        const side = o.actual > line ? 'over' : o.actual < line ? 'under' : 'push';
-        // Resolve free guest predictions for this round (push = void, doesn't count against accuracy).
+        // Resolve free guest predictions: a guess is correct if it backed a winning agent (ties = co-winners).
+        const winSet = new Set(winners);
         const guesses = predictPending.get(round.id);
-        if (guesses && side !== 'push') {
-          for (const g of guesses) if (g.side === side) state.predictStats.correct++;
+        if (guesses) {
+          for (const g of guesses) if (winSet.has(g.agentId)) state.predictStats.correct++;
         }
         predictPending.delete(round.id);
-        // Settle human USDC bets (custodial house EOA pays winners; no-op unless configured).
+        // Settle human USDC bets: bettors who backed a winning agent split the pool (custodial house EOA; no-op unless configured).
         void (async () => {
-          const res = await settleHouseBets(round.id, side).catch(() => null);
+          const res = await settleHouseBets(round.id, winners).catch(() => null);
           if (res && res.paid > 0) pushFeed(`USDC bets settled — paid ${res.total} USDC to ${res.paid} winner(s)`);
           refreshUsdcBet();
         })();
-        pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
+        pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} (line $${line.toFixed(2)}). Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
         // "Adopted" deltas: any agent→provider pair hired for the first time this round (real new A2A edge).
         detectAdoptions(item.edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(item.settledAt) || Date.now(), true);
         saveHistory();
@@ -719,12 +721,12 @@ async function main(): Promise<void> {
       req.on('data', (c) => { body += c; if (body.length > 2000) req.destroy(); });
       req.on('end', () => {
         try {
-          const { roundId, side, visitorId } = JSON.parse(body || '{}') as { roundId?: string; side?: string; visitorId?: string };
-          if (side !== 'over' && side !== 'under') return reply(400, { error: 'side must be over|under' });
+          const { roundId, agentId, visitorId } = JSON.parse(body || '{}') as { roundId?: string; agentId?: string; visitorId?: string };
           if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 64) return reply(400, { error: 'visitorId required' });
           if (!roundId || roundId !== state.round?.id || (state.round?.phase !== 'open' && state.round?.phase !== 'betting')) return reply(409, { error: 'betting is closed for this round' });
+          if (!agentId || !state.round.competitors.some((c) => c.id === agentId)) return reply(400, { error: 'agentId must be a racer in this round' });
           const arr = predictPending.get(roundId) ?? [];
-          arr.push({ side });
+          arr.push({ agentId });
           predictPending.set(roundId, arr);
           if (!predictVisitors.has(visitorId)) { predictVisitors.add(visitorId); state.predictStats.visitors++; }
           state.predictStats.total++;
@@ -746,21 +748,21 @@ async function main(): Promise<void> {
       req.on('end', () => {
         void (async () => {
           try {
-            const { roundId, side, amountUSDC, eoa, txHash } = JSON.parse(body || '{}') as
-              { roundId?: string; side?: string; amountUSDC?: number; eoa?: string; txHash?: string };
-            if (side !== 'over' && side !== 'under') return reply(400, { error: 'side must be over|under' });
+            const { roundId, agentId, amountUSDC, eoa, txHash } = JSON.parse(body || '{}') as
+              { roundId?: string; agentId?: string; amountUSDC?: number; eoa?: string; txHash?: string };
             if (!eoa || !/^0x[0-9a-fA-F]{40}$/.test(eoa)) return reply(400, { error: 'valid eoa required' });
             if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) return reply(400, { error: 'valid txHash required' });
             const amt = Number(amountUSDC);
             if (!(amt > 0) || amt > MAX_BET_USDC) return reply(400, { error: `amount must be 0 < x ≤ ${MAX_BET_USDC} USDC` });
             if (!roundId || roundId !== state.round?.id || (state.round?.phase !== 'open' && state.round?.phase !== 'betting')) return reply(409, { error: 'no live betting round' });
+            if (!agentId || !state.round.competitors.some((c) => c.id === agentId)) return reply(400, { error: 'agentId must be a racer in this round' });
             const amount = BigInt(Math.round(amt * 1e6));
             const ok = await verifyBetTx(txHash, eoa, amount).catch(() => false);
             if (!ok) return reply(400, { error: 'bet tx not verified on-chain (USDC transfer to house not found)' });
             const weight = betWeightNow(); // odds decay: earlier = bigger share of the pool
-            recordBet({ roundId, side, amount, eoa, txHash, weight });
+            recordBet({ roundId, agentId, amount, eoa, txHash, weight });
             refreshUsdcBet();
-            pushFeed(`USDC bet: ${amt} on ${side} ×${weight.toFixed(2)} (${eoa.slice(0, 6)}…)`, BASESCAN + txHash);
+            pushFeed(`USDC bet: ${amt} on ${personaMeta(agentId).label} ×${weight.toFixed(2)} (${eoa.slice(0, 6)}…)`, BASESCAN + txHash);
             broadcast();
             reply(202, { ok: true, pool: state.usdcBet?.pool });
           } catch (e) {

@@ -8,12 +8,12 @@ export const ERC20_TRANSFER_ABI = [
 ] as const;
 
 /** Register a verified USDC bet with the runner (the on-chain transfer is done via wagmi in the UI). */
-export async function postUsdcBet(roundId: string, side: 'over' | 'under', amountUSDC: number, eoa: string, txHash: string): Promise<{ ok: boolean; error?: string }> {
+export async function postUsdcBet(roundId: string, agentId: string, amountUSDC: number, eoa: string, txHash: string): Promise<{ ok: boolean; error?: string }> {
   try {
     const r = await fetch(`${RUNNER_URL}/api/bet`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roundId, side, amountUSDC, eoa, txHash }),
+      body: JSON.stringify({ roundId, agentId, amountUSDC, eoa, txHash }),
     });
     const j = (await r.json()) as { ok?: boolean; error?: string };
     return r.ok ? { ok: true } : { ok: false, error: j.error || String(r.status) };

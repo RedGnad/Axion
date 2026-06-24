@@ -23,7 +23,7 @@ export const MAX_BET_USDC = Number(process.env.HOUSE_MAX_BET_USDC ?? '1'); // sy
 
 export interface HouseBet {
   roundId: string;
-  side: 'over' | 'under';
+  agentId: string; // the RACER this bet backs (parimutuel on the agents, not over/under)
   amount: bigint; // smallest-unit USDC (6 dec)
   eoa: string;
   txHash: string;
@@ -70,25 +70,27 @@ export function recordBet(b: HouseBet): void {
   bets.push(b);
 }
 
-/** Current pool (smallest-unit USDC) per side for a round. */
-export function poolFor(roundId: string): { over: bigint; under: bigint; bettors: number } {
-  let over = 0n, under = 0n, n = 0;
+/** Current pool (smallest-unit USDC) per AGENT for a round, plus the unique-bettor count. */
+export function poolFor(roundId: string): { byAgent: Record<string, bigint>; bettors: number } {
+  const byAgent: Record<string, bigint> = {};
+  let n = 0;
   for (const b of bets) {
     if (b.roundId !== roundId) continue;
     n++;
-    if (b.side === 'over') over += b.amount; else under += b.amount;
+    byAgent[b.agentId] = (byAgent[b.agentId] ?? 0n) + b.amount;
   }
-  return { over, under, bettors: n };
+  return { byAgent, bettors: n };
 }
 
 /**
- * Settle the human USDC bets for a round: pari-mutuel on the winning side, minus rake; push or an
- * empty winning side → refund every stake. The house EOA sends the payouts (real USDC tx on Base).
- * Best-effort + logged; a failed payout never throws into the round loop.
+ * Settle the human USDC bets for a round: pari-mutuel on the bettors who backed a WINNING AGENT
+ * (ties = co-winners, so a bet on any winning agent pays), minus rake; no winning backers → refund
+ * every stake. The house EOA sends the payouts (real USDC tx on Base). Best-effort + logged; a
+ * failed payout never throws into the round loop.
  */
 export async function settleHouseBets(
   roundId: string,
-  outcome: 'over' | 'under' | 'push',
+  winnerAgentIds: string[],
 ): Promise<{ paid: number; total: string } | null> {
   const rb = bets.filter((b) => b.roundId === roundId);
   bets = bets.filter((b) => b.roundId !== roundId); // clear this round either way
@@ -97,15 +99,16 @@ export async function settleHouseBets(
   const signer = new ethers.Wallet(process.env.HOUSE_EOA_PRIVATE_KEY as string, provider());
   const usdc = new ethers.Contract(USDC, ERC20, signer);
 
-  const winners = outcome === 'push' ? [] : rb.filter((b) => b.side === outcome);
+  const winSet = new Set(winnerAgentIds);
+  const winners = rb.filter((b) => winSet.has(b.agentId));
   // Weighted stake (decay): a winner's share is proportional to amount × placement-weight, so a
   // last-second winner gets a small slice (its forgone share boosts the early bettors).
   const wstake = (b: HouseBet): bigint => (b.amount * BigInt(Math.round(Math.max(0.01, b.weight) * 1000))) / 1000n;
   const winningWeighted = winners.reduce((s, b) => s + wstake(b), 0n);
 
-  // Build a payout list. Push OR no one on the winning side → refund all stakes (no rake taken).
+  // Build a payout list. No one backed a winning agent → refund all stakes (no rake taken).
   const payouts: { to: string; amount: bigint }[] = [];
-  if (outcome === 'push' || winningWeighted === 0n) {
+  if (winningWeighted === 0n) {
     for (const b of rb) payouts.push({ to: b.eoa, amount: b.amount });
   } else {
     const pool = rb.reduce((s, b) => s + b.amount, 0n);

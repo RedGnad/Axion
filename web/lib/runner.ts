@@ -75,7 +75,7 @@ export interface ArenaState {
   leaderboard: LeaderRow[];
   feed: FeedItem[];
   predictStats?: { total: number; correct: number; visitors: number };
-  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { over: string; under: string; bettors: number } };
+  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   budget?: { used: number; cap: number; resetsAt: number };
   dataMarket?: {
     discovered: number;
@@ -97,12 +97,12 @@ export function visitorId(): string {
 }
 
 /** Record a free guest prediction on the runner (counts toward the public usage tally). */
-export async function postPredict(roundId: string, side: 'over' | 'under'): Promise<boolean> {
+export async function postPredict(roundId: string, agentId: string): Promise<boolean> {
   try {
     const r = await fetch(`${RUNNER_URL}/api/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roundId, side, visitorId: visitorId() }),
+      body: JSON.stringify({ roundId, agentId, visitorId: visitorId() }),
     });
     return r.ok;
   } catch {
