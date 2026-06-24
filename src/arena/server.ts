@@ -112,6 +112,10 @@ interface ArenaState {
     wired: { label: string; serviceId: string; ours: boolean }[];
     /** Structured per-provider stats from real hires: count, avg latency (ms), USDC paid. */
     providerStats?: { label: string; serviceId: string; hires: number; avgMs: number | null; paidUSDC: number }[];
+    /** "The store evolves" timeline — REAL deltas only: a provider newly appearing in the public CROO
+     *  catalog ('joined'), or an agent hiring a provider for the first time ('adopted'). No causation
+     *  claimed, no fabricated entries; backfilled from real history at boot so the view is never empty. */
+    events?: { ts: number; kind: 'joined' | 'adopted'; text: string }[];
   };
 }
 
@@ -146,8 +150,35 @@ const predictVisitors = new Set<string>();                       // unique visit
 const predictPending = new Map<string, { side: 'over' | 'under' }[]>(); // roundId → unresolved guesses
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
+// "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
+// catalog as "new". knownProviderIds = serviceIds seen in past censuses; seenPairs = (agent|provider)
+// hires we've already counted; storeEvents = the readable evolution timeline (real deltas only).
+const knownProviderIds = new Set<string>();
+const seenPairs = new Set<string>();
+let storeEvents: { ts: number; kind: 'joined' | 'adopted'; text: string }[] = [];
+
 function personaMeta(id: string): { label: string; blurb: string } {
   return metaById.get(id) ?? { label: id, blurb: '' };
+}
+
+/** Append a real store-evolution event (newest first, capped). No causation, no fabrication. */
+function pushStoreEvent(kind: 'joined' | 'adopted', text: string, ts = Date.now()): void {
+  storeEvents.unshift({ ts, kind, text });
+  storeEvents = storeEvents.slice(0, 14);
+  if (state.dataMarket) state.dataMarket.events = storeEvents;
+}
+
+/** Record first-time (agent → provider) hires from a settled round as 'adopted' events (third
+ *  parties only — adopting our own seed agents isn't ecosystem motion). Honest: only genuinely
+ *  new pairs emit; the pair set is persisted + baseline-seeded so nothing double-counts. */
+function detectAdoptions(edges: { competitor: string; label: string; ours: boolean }[], ts: number, emit: boolean): void {
+  for (const e of edges) {
+    if (e.ours) continue;
+    const pair = `${e.competitor}|${e.label}`;
+    if (seenPairs.has(pair)) continue;
+    seenPairs.add(pair);
+    if (emit) pushStoreEvent('adopted', `🔗 ${personaMeta(e.competitor).label} hired ${e.label} for the first time`, ts);
+  }
 }
 
 /** Recent real volatility: average |move| over WINDOW seconds across the live Pyth series (2s apart). */
@@ -191,12 +222,21 @@ const SEED_FILE = process.env.ARENA_SEED_FILE ?? 'arena-seed.json';
 async function loadHistory(): Promise<void> {
   // Durable Upstash store first (survives restarts, free); else runtime file; else committed seed so
   // a FRESH deploy still shows a populated, verifiable world (real past rounds) — never a dead arena.
-  type Persisted = { history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'] };
+  type Persisted = {
+    history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'];
+    knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
+  };
+  const restoreMeta = (d: Persisted): void => {
+    for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
+    for (const p of d.seenPairs ?? []) seenPairs.add(p);
+    if (d.storeEvents?.length) storeEvents = d.storeEvents.slice(0, 14);
+  };
   const fromStore = await loadState<Persisted>();
   if (fromStore) {
     state.history = fromStore.history ?? [];
     state.leaderboard = fromStore.leaderboard ?? [];
     if (fromStore.predictStats) state.predictStats = fromStore.predictStats;
+    restoreMeta(fromStore);
     console.log(`[arena-server] loaded durable state (Upstash): ${state.history.length} rounds`);
   } else {
     const file = existsSync(HISTORY_FILE) ? HISTORY_FILE : existsSync(SEED_FILE) ? SEED_FILE : null;
@@ -206,10 +246,22 @@ async function loadHistory(): Promise<void> {
         state.history = data.history ?? [];
         state.leaderboard = data.leaderboard ?? [];
         if (data.predictStats) state.predictStats = data.predictStats;
+        restoreMeta(data);
       } catch {
         /* ignore corrupt history */
       }
     }
+  }
+  // First ever run (no persisted timeline): backfill the evolution view from REAL history — the
+  // chronological first hire of each third-party provider by each agent. Oldest→newest so the
+  // newest adoptions sort to the top. Not fabricated: every entry is a real settled on-chain hire.
+  if (!storeEvents.length && seenPairs.size === 0) {
+    for (const h of [...state.history].sort((a, b) => Date.parse(a.settledAt) - Date.parse(b.settledAt))) {
+      detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(h.settledAt) || Date.now(), true);
+    }
+  } else {
+    // Ensure every historical pair is marked seen (so we never re-emit an old adoption as "new").
+    for (const h of state.history) detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), 0, false);
   }
   // Replay the last settled round so the track + feed are populated on every visit (not "no rounds yet").
   const last = state.history[0];
@@ -232,7 +284,10 @@ async function loadHistory(): Promise<void> {
 }
 
 function saveHistory(): void {
-  const blob = { history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats };
+  const blob = {
+    history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats,
+    knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
+  };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
   } catch {
@@ -275,6 +330,20 @@ function refreshUsdcBet(): void {
 async function refreshDataMarket(wired?: { label: string; serviceId: string; ours: boolean }[]): Promise<void> {
   try {
     const pool = await discoverProviders();
+    // "Joined the store" deltas — REAL: a serviceId now in the public CROO catalog that wasn't before.
+    // First census ever seeds the baseline SILENTLY (no 32-event spam); after that, only true newcomers
+    // emit. The known set is persisted so a restart never re-floods the timeline.
+    let newJoins = 0;
+    if (knownProviderIds.size === 0) {
+      for (const p of pool) knownProviderIds.add(p.serviceId);
+    } else {
+      for (const p of pool) {
+        if (knownProviderIds.has(p.serviceId)) continue;
+        knownProviderIds.add(p.serviceId);
+        if (newJoins < 6) pushStoreEvent('joined', `🆕 ${p.name || 'New data agent'} joined the CROO store · ${p.orders7d} orders/7d`);
+        newJoins++;
+      }
+    }
     // Per-provider stats from real settled history (third parties only): hires, avg latency, USDC paid.
     // ONE structured table the UI can rank by any column — the ecosystem-quality signal.
     const PRICE = Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10; // per-hire order price (USDC)
@@ -301,7 +370,9 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
       top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
       wired: wired ?? state.dataMarket?.wired ?? [],
       providerStats,
+      events: storeEvents,
     };
+    if (newJoins > 0) saveHistory(); // persist the grown known-set + new timeline entries
     broadcast();
   } catch {
     /* discovery is best-effort; the curated roster still drives real hires */
@@ -487,6 +558,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           refreshUsdcBet();
         })();
         pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} vs line $${line.toFixed(2)} → ${side}. Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
+        // "Adopted" deltas: any agent→provider pair hired for the first time this round (real new A2A edge).
+        detectAdoptions(item.edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(item.settledAt) || Date.now(), true);
         saveHistory();
         // Reflect the providers actually wired this round into the live data-market panel.
         void refreshDataMarket(item.edges.map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));

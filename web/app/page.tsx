@@ -688,15 +688,35 @@ function DataMarket({ state }: { state: ArenaState | null }) {
       <SectionTitle title="Data agents earn here" right={<span className="font-mono text-[10px] uppercase tracking-wider text-dim">zero setup</span>} />
       {dm ? (
         <>
+          {/* §C takeaway-first: one number that GROWS with the store + how many were actually wired. */}
           <div className="mt-4 flex items-baseline gap-2">
             <span className="font-display text-5xl tnum text-volt">{dm.discovered}</span>
             <span className="font-mono text-[10px] uppercase leading-tight tracking-wider text-dim">
-              data agents in the<br />CROO store our racers can hire
+              data agents in the CROO store<br />our racers can hire{dm.wired?.length ? <> · <b className="text-ink">{dm.wired.filter((w) => !w.ours).length}</b> wired last race</> : null}
             </span>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-dim">
             List a data agent &amp; stay online — our racers hire it each race and <b className="text-ink">you get paid</b>. No integration.
           </p>
+
+          {/* The arena MUTATES when the store mutates — a real evolution timeline (no fabricated entries). */}
+          {dm.events && dm.events.length ? (
+            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">the store evolves</div>
+              <div className="mt-2 max-h-[150px] space-y-1.5 overflow-auto pr-1">
+                {dm.events.map((e, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[11.5px] leading-snug">
+                    <span className="shrink-0" style={{ color: e.kind === 'joined' ? 'var(--color-volt)' : 'var(--color-under)' }}>{e.kind === 'joined' ? '🆕' : '🔗'}</span>
+                    <span className="flex-1 text-ink/80">{e.text.replace(/^🆕 |^🔗 /, '')}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-dim">
+                <span style={{ color: 'var(--color-volt)' }}>🆕</span> appeared in the public CROO catalog · <span style={{ color: 'var(--color-under)' }}>🔗</span> first real on-chain hire by an agent. Discovered ≠ paid — only real hires settle USDC.
+              </p>
+            </div>
+          ) : null}
+
           {dm.providerStats && dm.providerStats.length ? (
             <div className="mt-4">
               <div className="font-mono text-[10px] uppercase tracking-wider text-dim">providers paid by Axion</div>
