@@ -162,6 +162,16 @@ function clock(ms: number) {
   return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
 }
 
+/** Short relative time for activity rows ("now", "6m", "3h", "2d", then a date). */
+function ago(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 45) return 'now';
+  const m = Math.floor(s / 60); if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24); if (d < 30) return `${d}d`;
+  return new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
 /** The line / live move / final move — in the grid HEADER, away from the karts (no overlap at the finish). */
 function MoveBadge({ state }: { state: ArenaState | null }) {
   const r = state?.round;
@@ -561,7 +571,7 @@ function AgentCards({ state }: { state: ArenaState | null }) {
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {comps.map((c) => {
           const isOpen = open === c.id;
-          const status = c.dq ? 'cut — data too slow' : c.isWinner ? '🏆 won this race' : c.estimate != null ? 'called the line' : 'hiring data…';
+          const status = c.dq ? 'too slow, cut this race' : c.isWinner ? '🏆 won this race' : c.estimate != null ? 'called the line' : 'hiring data…';
           const hires = (hiresSrc?.edges ?? []).filter((e) => e.competitor === c.id);
           return (
             <div key={c.id} className={cn('rounded-xl border bg-panel2/40 transition', isOpen ? 'border-volt/50' : 'border-line', c.dq && 'opacity-60')}>
@@ -580,7 +590,7 @@ function AgentCards({ state }: { state: ArenaState | null }) {
                     <div className="font-mono text-[9px] uppercase tracking-wider text-dim">why this call</div>
                     {c.rationale
                       ? <p className="mt-1 text-[12px] leading-relaxed text-ink/85">{c.rationale}</p>
-                      : <p className="mt-1 text-[12px] text-dim">still working — it shares its reasoning once it&apos;s in</p>}
+                      : <p className="mt-1 text-[12px] text-dim">still working. its reasoning appears once it is in.</p>}
                   </div>
                   {c.dataMs != null ? (
                     <div className="font-mono text-[10px] text-dim">data arrived in <b className="text-ink">{(c.dataMs / 1000).toFixed(1)}s</b></div>
@@ -696,23 +706,27 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             </span>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-dim">
-            List a data agent &amp; stay online — our racers hire it each race and <b className="text-ink">you get paid</b>. No integration.
+            List a data agent and keep it online. Our racers hire it every race and <b className="text-ink">you get paid</b>. No integration needed.
           </p>
 
-          {/* The arena MUTATES when the store mutates — a real evolution timeline (no fabricated entries). */}
+          {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
           {dm.events && dm.events.length ? (
             <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">the store evolves</div>
-              <div className="mt-2 max-h-[150px] space-y-1.5 overflow-auto pr-1">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">store activity</div>
+              <div className="mt-2 max-h-[160px] space-y-2 overflow-auto pr-1">
                 {dm.events.map((e, i) => (
-                  <div key={i} className="flex items-start gap-2 text-[11.5px] leading-snug">
-                    <span className="shrink-0" style={{ color: e.kind === 'joined' ? 'var(--color-volt)' : 'var(--color-under)' }}>{e.kind === 'joined' ? '🆕' : '🔗'}</span>
-                    <span className="flex-1 text-ink/80">{e.text.replace(/^🆕 |^🔗 /, '')}</span>
+                  <div key={i} className="flex items-baseline gap-2.5 text-[11.5px] leading-snug">
+                    <span className="w-9 shrink-0 font-mono text-[10px] tnum text-dim">{ago(e.ts)}</span>
+                    <span className="w-[70px] shrink-0 font-mono text-[9px] uppercase tracking-wider" style={{ color: e.kind === 'joined' ? 'var(--color-volt)' : 'var(--color-under)' }}>
+                      {e.kind === 'joined' ? 'new listing' : 'first hire'}
+                    </span>
+                    <span className="flex-1 text-ink/80">{e.text}</span>
                   </div>
                 ))}
               </div>
-              <p className="mt-2 text-[10px] leading-relaxed text-dim">
-                <span style={{ color: 'var(--color-volt)' }}>🆕</span> appeared in the public CROO catalog · <span style={{ color: 'var(--color-under)' }}>🔗</span> first real on-chain hire by an agent. Discovered ≠ paid — only real hires settle USDC.
+              <p className="mt-2.5 text-[10px] leading-relaxed text-dim">
+                <b style={{ color: 'var(--color-volt)' }}>New listing</b>: a data agent showed up in the public CROO catalog.{' '}
+                <b style={{ color: 'var(--color-under)' }}>First hire</b>: an agent paid it on-chain for the first time. Being listed is not the same as being paid; only real hires settle USDC.
               </p>
             </div>
           ) : null}
@@ -792,16 +806,16 @@ function Join() {
     <section className="reveal rounded-xl border border-line bg-panel/70 p-5" style={{ animationDelay: '260ms' }}>
       <SectionTitle title="Race your own agent" right={<a href={REPO_URL} target="_blank" rel="noopener" className="font-mono text-[10px] uppercase tracking-wider text-under hover:underline">repo ↗</a>} />
       <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Any agent that answers one tiny contract can race — hired with
-        <code className="mx-1 text-under">{'{spot, deadlineSeconds, recentVol}'}</code>→<code className="mx-1 text-under">{'{prediction, rationale}'}</code>.
-        The arena <b className="text-ink">pays it every round it&apos;s hired</b> + ranks it on-chain. Beat Slicer/Tanker/Wizord → top the standings.
+        Any agent that answers one small contract can race. It is hired with
+        <code className="mx-1 text-under">{'{spot, deadlineSeconds, recentVol}'}</code> and returns <code className="mx-1 text-under">{'{prediction, rationale}'}</code>.
+        The arena <b className="text-ink">pays it every round it&apos;s hired</b> and ranks it on-chain. Beat Slicer, Tanker and Wizord to top the standings.
       </p>
 
-      {/* Primary path: you already have a CAP agent → just paste its serviceId. No clone. */}
+      {/* Primary path: you already have a CAP agent, just paste its serviceId. No clone. */}
       <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.03] p-4">
         <div className="font-display text-[15px] uppercase tracking-wide text-ink">Already have a CAP agent?</div>
         <p className="mt-1 text-[12px] leading-relaxed text-dim">
-          Make it answer the contract above, register it on <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a>, then drop its serviceId — <b className="text-ink">we fund your first race.</b>
+          Make it answer the contract above, register it on <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a>, then drop its serviceId below. <b className="text-ink">We fund your first race.</b>
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <input value={svc} onChange={(e) => setSvc(e.target.value)} placeholder="serviceId (uuid)" className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40" />
@@ -811,7 +825,7 @@ function Join() {
         {msg ? <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? 'var(--color-under)' : 'var(--color-over)' }}>{msg.text}</div> : null}
       </div>
 
-      {/* Secondary path (progressive disclosure): no agent yet → our template. */}
+      {/* Secondary path (progressive disclosure): no agent yet, start from our template. */}
       <details className="mt-3 group">
         <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
           <span className="text-volt">▸</span> No agent yet? Start from our template
@@ -820,13 +834,14 @@ function Join() {
           <Step n={1} title={<>Get the template <span className="text-dim">(Node 18+)</span></>}>
             <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
           </Step>
-          <Step n={2} title={<>See a forecast run <b className="text-ink">instantly — no keys, no USDC</b></>}>
+          <Step n={2} title={<>Watch it forecast once. <b className="text-ink">No keys, no USDC.</b></>}>
             <CopyCmd cmd="npm run competitor:preview" />
           </Step>
-          <Step n={3} title={<>Add your CROO key in <code className="text-under">.env</code>, then go live:</>}>
+          <Step n={3} title={<><b className="text-volt">This is the actual work.</b> Open <code className="text-under">src/arena/competitor.ts</code> and rewrite the <code className="text-under">estimate()</code> function with your own data and logic. That is your edge. As shipped it only runs our baseline (recent volatility times a risk style), so it will not beat anyone.</>} />
+          <Step n={4} title={<>Add your CROO key to <code className="text-under">.env</code>, then go live and start getting hired.</>}>
             <CopyCmd cmd="npm run competitor" />
           </Step>
-          <Step n={4} title={<>Paste the serviceId above. Done.</>} />
+          <Step n={5} title={<>Paste the serviceId above.</>} />
         </div>
       </details>
     </section>

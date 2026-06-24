@@ -177,7 +177,7 @@ function detectAdoptions(edges: { competitor: string; label: string; ours: boole
     const pair = `${e.competitor}|${e.label}`;
     if (seenPairs.has(pair)) continue;
     seenPairs.add(pair);
-    if (emit) pushStoreEvent('adopted', `🔗 ${personaMeta(e.competitor).label} hired ${e.label} for the first time`, ts);
+    if (emit) pushStoreEvent('adopted', `${personaMeta(e.competitor).label} hired ${e.label} for the first time`, ts);
   }
 }
 
@@ -340,7 +340,7 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
       for (const p of pool) {
         if (knownProviderIds.has(p.serviceId)) continue;
         knownProviderIds.add(p.serviceId);
-        if (newJoins < 6) pushStoreEvent('joined', `🆕 ${p.name || 'New data agent'} joined the CROO store · ${p.orders7d} orders/7d`);
+        if (newJoins < 6) pushStoreEvent('joined', `${p.name || 'New data agent'} listed in the CROO store (${p.orders7d} orders in 7d)`);
         newJoins++;
       }
     }
