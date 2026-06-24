@@ -55,22 +55,32 @@ volatility view:
 - **Manifest carries `ours` per order**: this round, all six counterparties are genuine third
   parties (`ours:false`).
 
-## Betting — proven on-chain (Base, 2026-06-15)
-Bets are on the **vol outcome**: will realized amplitude land **over/under the agents' consensus
-line** (median estimate)? The vol outcome is genuinely uncertain, so there is no soft-exploit
-(unlike "back the always-conservative agent"); the agents' forecasts become the published line.
-Pari-mutuel with a **house rake** (the economic loop): the bookmaker keeps `rakeBps` (default **3%**)
-of the pool; the winning side splits the rest; an exact tie (push) refunds everyone.
+## Betting — the consumer loop
+The human bet is **parimutuel on which AGENT wins the race** (the agent whose committed forecast
+lands closest to the realized Pyth move; ties = co-winners). Backing an agent is what a newcomer
+gets in 5 seconds, and it makes the agents the stars (on-thesis), matching the tagline.
 
-`npm run bet-slice` settled one real CAP-native bet (fund-transfer) **with the rake, on-chain**: a
-bettor staked **0.05 USDC** (50000) on `over`; on settlement the bookmaker kept **3% = 1500** and paid
-**48500** (0.0485 USDC) to the winner — cast-verified `USDC 48500 → bettor`. Both legs `status: success`:
+Rake is **5%**: the house keeps **3%** (our revenue) and **2%** is paid to the **winning agent
+itself** (bettor-funded, never our treasury). The 2% is only withheld when there is a payable winner
+(an agent with a configured payout address); otherwise bettors keep it. No bets in a round → no
+purse, the winner just takes the standings. If no one backed the winning agent, every stake is
+refunded. So "winning pays", and our only treasury exposure stays the already-capped hire fee.
+
+Human bets ride a **disclosed custodial "house" EOA** (a human can't enter CAP agent↔agent escrow):
+the bettor's USDC transfer is verified on-chain before it counts, and the house EOA pays the winning
+backers + the winning agent at settle. This reuses the proven transfer path; the CAP escrow is
+untouched. The settlement math (`planSettlement`) is a pure, unit-checked function.
+
+### Early on-chain proof of the rake loop (CAP-native bet-slice, 2026-06-15)
+Before the consumer switch, `npm run bet-slice` settled one real CAP-native over/under bet with the
+rake on-chain: a bettor staked **0.05 USDC** on `over`; the bookmaker kept **3% = 1500** and paid
+**48500** to the winner — cast-verified, both legs `status: success`:
 - bet (stake → bookmaker fund addr): `0x1398a798e70cfb5cd061d08f29119b0b838299c514e0070ca2231a11bc3ee48d`
 - payout (pool − rake → bettor fund addr): `0x4815ea5acb3378109dc943f7d96d57bf1db5020f708991d4d8bc338a492bd375`
 
-→ **Real revenue loop verified on-chain**: the rake stays in the bookmaker's wallet. (Honest caveat:
-at tiny stakes the CAP escrow fee dwarfs the 3% rake, so the rake is net-positive only at larger
-stakes — the mechanism is proven; sustainability scales with stake size. No agent entry fees.)
+→ **The revenue loop is real on-chain.** (Honest caveat: at tiny stakes the CAP escrow fee dwarfs the
+rake, so it is net-positive only at larger stakes — the mechanism is proven; sustainability scales
+with stake size.)
 
 Stake/payout ride as the CAP **fund-transfer amount** (arbitrary, variable). All bet flows POLL
 (CROO WS events are unreliable). Demo bettors are **custodial agents operated by the runner**
@@ -130,7 +140,7 @@ implemented. We don't pre-build the staking/marketplace plumbing before real bui
 `npm run arena-server` runs the rounds and serves a live terminal-arcade UI (`http://localhost:8787`):
 agents are racers positioned by their amplitude estimate, a dashed marker is the consensus **line**,
 the finish marker is the realized Pyth amplitude, with a live on-chain tx feed (BaseScan links),
-over/under result, and a leaderboard. Everything is driven by real state (`/api/stream` SSE) — no
+the winning agent, and a leaderboard. Everything is driven by real state (`/api/stream` SSE) — no
 cosmetic data; rounds run on demand (the "Run round" button → `POST /api/round`, spends real USDC).
 One process serves the UI + runs the agents, so it deploys as a single always-on service (Railway/
 Render); a Next.js/Vercel skin is an optional later step.
@@ -139,8 +149,8 @@ Render); a Next.js/Vercel skin is an optional later step.
 - The open-competitor **interface + template + loop support are shipped** (typecheck-green, runnable),
   but a *remote third-party competitor competing on-chain* is not yet demonstrated (needs one CAP
   service registration). Not claimed as proven until it runs.
-- The UI's over/under panel reflects the real line + outcome; live in-browser bet placement is not
-  wired (bets settle via the CAP bookmaker process, proven separately above).
+- In-browser human bets (back an agent) are wired via the disclosed custodial house EOA; they're
+  live only when the house EOA is configured. The CAP agent↔agent bookmaker is proven separately above.
 - Payment release is **not buyer-gated** (CAP releases on delivery); the protection is
   refund-on-expiry. No on-chain reputation routing.
 

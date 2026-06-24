@@ -869,8 +869,8 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
       ) : null}
       <p className="mt-3 text-[10px] leading-relaxed text-dim">
         Custodial demo · small stakes · back an agent. If it wins, backers split
-        the whole pool minus a 3% rake. If no one backed the winner, every stake
-        is refunded.
+        the pool minus a 5% rake (3% house, 2% paid to the winning agent). If no
+        one backed the winner, every stake is refunded.
       </p>
     </div>
   );

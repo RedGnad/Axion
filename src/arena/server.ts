@@ -556,7 +556,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         // Settle human USDC bets: bettors who backed a winning agent split the pool (custodial house EOA; no-op unless configured).
         void (async () => {
           const res = await settleHouseBets(round.id, winners).catch(() => null);
-          if (res && res.paid > 0) pushFeed(`USDC bets settled — paid ${res.total} USDC to ${res.paid} winner(s)`);
+          if (res && res.paid > 0) pushFeed(`USDC bets settled: ${res.total} USDC to ${res.paid} backer(s)${Number(res.agentPurse) > 0 ? `, ${res.agentPurse} to the winning agent` : ''}`);
           refreshUsdcBet();
         })();
         pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} (line $${line.toFixed(2)}). Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);

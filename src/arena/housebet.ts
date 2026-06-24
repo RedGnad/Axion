@@ -18,8 +18,19 @@ const ERC20 = [
   'function balanceOf(address) view returns (uint256)',
   'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
-const RAKE_BPS = BigInt(process.env.BOOKMAKER_RAKE_BPS ?? '300'); // 3% house rake (same as CAP bookmaker)
+// Rake = 5% total: HOUSE keeps 3% (our revenue), 2% is the WINNING-AGENT purse (bettor-funded, never
+// our treasury). The 2% is only withheld from bettors when there is actually a payable winner address
+// to send it to — otherwise bettors aren't charged for a purse we can't pay.
+const HOUSE_RAKE_BPS = BigInt(process.env.BOOKMAKER_RAKE_BPS ?? '300'); // 3% house revenue
+const WINNER_RAKE_BPS = BigInt(process.env.WINNER_RAKE_BPS ?? '200');   // 2% to the winning agent(s)
 export const MAX_BET_USDC = Number(process.env.HOUSE_MAX_BET_USDC ?? '1'); // symbolic cap per bet
+
+/** Configured payout address for an agent (env ARENA_PAYOUT_<ID>), or '' if none. Honest: an agent
+ *  with no configured address gets no purse (we never invent a destination). Start with our personas. */
+export function agentPayoutAddress(agentId: string): string {
+  const v = process.env[`ARENA_PAYOUT_${agentId.toUpperCase()}`];
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : '';
+}
 
 export interface HouseBet {
   roundId: string;
@@ -82,23 +93,27 @@ export function poolFor(roundId: string): { byAgent: Record<string, bigint>; bet
   return { byAgent, bettors: n };
 }
 
+export interface SettlementPlan {
+  /** All transfers to make (bettor winnings + winning-agent purse), pre-aggregation. */
+  payouts: { to: string; amount: bigint; kind: 'bettor' | 'agent' }[];
+  houseRake: bigint;   // smallest-unit USDC the house keeps
+  agentPurse: bigint;  // smallest-unit USDC routed to winning agent(s) (subset of the 5% rake)
+  refunded: boolean;   // true → no winning backers, everyone refunded, no rake/purse
+}
+
 /**
- * Settle the human USDC bets for a round: pari-mutuel on the bettors who backed a WINNING AGENT
- * (ties = co-winners, so a bet on any winning agent pays), minus rake; no winning backers → refund
- * every stake. The house EOA sends the payouts (real USDC tx on Base). Best-effort + logged; a
- * failed payout never throws into the round loop.
+ * PURE settlement math (no I/O) so it can be unit-checked on real money paths.
+ * Pari-mutuel on bettors who backed a WINNING AGENT (ties = co-winners). House keeps 3%; the winning
+ * agent(s) get 2% (only when a payout address exists — else that 2% is NOT withheld from bettors).
+ * No winning backers → refund every stake (no rake, no purse).
  */
-export async function settleHouseBets(
-  roundId: string,
+export function planSettlement(
+  rb: HouseBet[],
   winnerAgentIds: string[],
-): Promise<{ paid: number; total: string } | null> {
-  const rb = bets.filter((b) => b.roundId === roundId);
-  bets = bets.filter((b) => b.roundId !== roundId); // clear this round either way
-  if (!rb.length || !houseEnabled()) return null;
-
-  const signer = new ethers.Wallet(process.env.HOUSE_EOA_PRIVATE_KEY as string, provider());
-  const usdc = new ethers.Contract(USDC, ERC20, signer);
-
+  addrOf: (id: string) => string,
+  houseRakeBps = HOUSE_RAKE_BPS,
+  winnerRakeBps = WINNER_RAKE_BPS,
+): SettlementPlan {
   const winSet = new Set(winnerAgentIds);
   const winners = rb.filter((b) => winSet.has(b.agentId));
   // Weighted stake (decay): a winner's share is proportional to amount × placement-weight, so a
@@ -106,20 +121,47 @@ export async function settleHouseBets(
   const wstake = (b: HouseBet): bigint => (b.amount * BigInt(Math.round(Math.max(0.01, b.weight) * 1000))) / 1000n;
   const winningWeighted = winners.reduce((s, b) => s + wstake(b), 0n);
 
-  // Build a payout list. No one backed a winning agent → refund all stakes (no rake taken).
-  const payouts: { to: string; amount: bigint }[] = [];
   if (winningWeighted === 0n) {
-    for (const b of rb) payouts.push({ to: b.eoa, amount: b.amount });
-  } else {
-    const pool = rb.reduce((s, b) => s + b.amount, 0n);
-    const rake = (pool * RAKE_BPS) / 10000n;
-    const distributable = pool - rake;
-    for (const b of winners) payouts.push({ to: b.eoa, amount: (wstake(b) * distributable) / winningWeighted });
+    return { payouts: rb.map((b) => ({ to: b.eoa, amount: b.amount, kind: 'bettor' as const })), houseRake: 0n, agentPurse: 0n, refunded: true };
   }
 
-  // Aggregate by address (one tx per winner) and pay.
+  const pool = rb.reduce((s, b) => s + b.amount, 0n);
+  const houseRake = (pool * houseRakeBps) / 10000n;
+  // The winning agents we can actually pay (have a configured address). De-dupe ids first.
+  const payable = [...new Set(winnerAgentIds)].map((id) => ({ id, addr: addrOf(id) })).filter((x) => !!x.addr);
+  const purseTotal = payable.length ? (pool * winnerRakeBps) / 10000n : 0n; // only withheld if payable
+  const distributable = pool - houseRake - purseTotal;
+
+  const payouts: { to: string; amount: bigint; kind: 'bettor' | 'agent' }[] = [];
+  for (const b of winners) payouts.push({ to: b.eoa, amount: (wstake(b) * distributable) / winningWeighted, kind: 'bettor' });
+  let agentPurse = 0n;
+  if (purseTotal > 0n) {
+    const each = purseTotal / BigInt(payable.length);
+    if (each > 0n) { for (const w of payable) payouts.push({ to: w.addr, amount: each, kind: 'agent' }); agentPurse = each * BigInt(payable.length); }
+  }
+  return { payouts, houseRake, agentPurse, refunded: false };
+}
+
+/**
+ * Settle the human USDC bets for a round and send the real payouts from the house EOA (Base). Reuses
+ * the proven transfer path (no escrow touched). Best-effort + logged; a failed payout never throws.
+ */
+export async function settleHouseBets(
+  roundId: string,
+  winnerAgentIds: string[],
+): Promise<{ paid: number; total: string; agentPurse: string } | null> {
+  const rb = bets.filter((b) => b.roundId === roundId);
+  bets = bets.filter((b) => b.roundId !== roundId); // clear this round either way
+  if (!rb.length || !houseEnabled()) return null;
+
+  const signer = new ethers.Wallet(process.env.HOUSE_EOA_PRIVATE_KEY as string, provider());
+  const usdc = new ethers.Contract(USDC, ERC20, signer);
+
+  const plan = planSettlement(rb, winnerAgentIds, agentPayoutAddress);
+
+  // Aggregate by address (one tx per recipient) and pay.
   const byAddr = new Map<string, bigint>();
-  for (const p of payouts) byAddr.set(p.to, (byAddr.get(p.to) ?? 0n) + p.amount);
+  for (const p of plan.payouts) byAddr.set(p.to, (byAddr.get(p.to) ?? 0n) + p.amount);
   let paid = 0, total = 0n;
   for (const [to, amount] of byAddr) {
     if (amount <= 0n) continue;
@@ -132,5 +174,5 @@ export async function settleHouseBets(
       console.error(`[housebet] payout FAILED → ${to}:`, (err as Error).message);
     }
   }
-  return { paid, total: ethers.formatUnits(total, 6) };
+  return { paid, total: ethers.formatUnits(total, 6), agentPurse: ethers.formatUnits(plan.agentPurse, 6) };
 }
