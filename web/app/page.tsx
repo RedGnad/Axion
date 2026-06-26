@@ -453,12 +453,12 @@ function RaceControl({
       // The race is live → odds (dropping) is the hero; keep the suspense (no settle countdown).
       kicker = "RACE LIVE · BET NOW";
       big = `×${mult.toFixed(1)}`;
-      note = "odds drop as the move reveals — bet a side below";
+      note = "odds drop as the move reveals. back an agent below.";
     } else if (graceOpen) {
       // Grace: controlled countdown (hero) + odds (secondary, still visible) + red bar.
       kicker = "STRAGGLERS CUT IN";
       big = clock(r.dqAtMs! - now);
-      secondary = { label: "blind odds", value: `×${mult.toFixed(1)}` };
+      secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
       note = `${ready}/${total} agents in · only slow data gets cut`;
       barPct = Math.min(
         0.99,
@@ -468,7 +468,7 @@ function RaceControl({
       // Hiring: BOTH the honest elapsed timer (hero) AND the blind odds (secondary) are visible.
       kicker = "AGENTS HIRING DATA";
       big = clock(now - openMs);
-      secondary = { label: "blind odds", value: `×${mult.toFixed(1)}` };
+      secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
       note = `${ready}/${total} ready · buying real data on-chain`;
     }
   } else {
@@ -690,7 +690,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           </span>
         ) : null}
       </div>
-      <UsdcBet state={state} />
+      <UsdcBet state={state} pickedAgent={mine ? pick!.agentId : null} pickedLabel={myLabel} />
       <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
         Each agent commits its forecast on-chain. The winner is whoever lands closest to the live Pyth ETH/USD move. Nobody controls the outcome.
       </p>
@@ -700,22 +700,20 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
 
 /** Custodial-disclosed real USDC bet from an EOA wallet (only shown if the house is configured).
  *  Wallet via wagmi v2 (EIP-6963 multi-wallet discovery) — no window.ethereum collision. */
-function UsdcBet({ state }: { state: ArenaState | null }) {
+function UsdcBet({ state, pickedAgent, pickedLabel }: { state: ArenaState | null; pickedAgent: string | null; pickedLabel: string }) {
   const ub = state?.usdcBet;
   const r = state?.round;
-  const live = r?.phase === "open" || r?.phase === "betting"; // bet from hiring (blind, top odds) through the race
+  const live = r?.phase === "open" || r?.phase === "betting"; // bet through hiring + the race (odds decay over time)
   const { address, isConnected, chainId } = useAccount();
   const { connectors, connect, isPending: connecting } = useConnect();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const [amount, setAmount] = useState(0.1);
-  const [betAgent, setBetAgent] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [pickWallet, setPickWallet] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   if (!ub?.enabled) return null;
   const max = ub.maxBetUSDC;
-  const comps = (r?.competitors ?? []).filter((c) => !c.dq);
   const poolOf = (id: string) => ub.pool.byAgent.find((p) => p.id === id)?.amount ?? "0.00";
 
   // De-dupe connectors by name (EIP-6963 + injected can both list the same wallet).
@@ -726,7 +724,7 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
 
   const bet = async (agentId: string) => {
     if (!live || !r || !address || !agentId) return;
-    const label = comps.find((c) => c.id === agentId)?.label ?? agentId;
+    const label = pickedLabel || agentId;
     const amt = Math.min(Math.max(0.01, amount), max);
     setBusy(true);
     setMsg(null);
@@ -761,21 +759,21 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
   };
 
   // Live odds multiplier (decays over the race) — bet early for a bigger payout share.
-  const mult = ub.multiplier; // ×odds (4 blind → 2 at race start → 1 at settle); decays with information
+  const mult = ub.multiplier; // ×odds (×4 early → ×2 at race start → ×1 at settle); decays with information
 
   return (
     <div className="mt-5 rounded-xl border border-line bg-panel2/50 p-5">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="font-display text-lg uppercase tracking-wide text-ink">
-            Play for real — USDC
+            Play for real (USDC)
           </div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
             {live ? (
               <>
                 odds{" "}
                 <b style={{ color: "var(--color-volt)" }}>×{mult.toFixed(1)}</b>{" "}
-                — dropping · bet early wins more
+                and dropping · bet early, win a bigger share
               </>
             ) : (
               "back an agent; if it wins you split its pool"
@@ -840,38 +838,26 @@ function UsdcBet({ state }: { state: ArenaState | null }) {
               {address!.slice(0, 6)}…{address!.slice(-4)}
             </span>
           </div>
-          {/* Pick the agent to back, then place the real USDC bet. */}
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {comps.map((c) => {
-              const sel = betAgent === c.id;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => setBetAgent(c.id)}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition",
-                    sel ? "border-volt bg-volt/10" : "border-line hover:border-volt/50",
-                  )}
-                >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: livery(c.id) }} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-display text-[13px] uppercase tracking-wide">{c.label}</span>
-                    <span className="block font-mono text-[9px] uppercase tracking-wider text-dim">pool ${poolOf(c.id)}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {/* Single agent selection: you bet USDC on the SAME agent you picked above (no second chooser). */}
+          {pickedAgent ? (
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-volt/40 bg-volt/[0.06] px-3 py-2.5">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: livery(pickedAgent) }} />
+              <span className="min-w-0 flex-1 truncate font-display text-[13px] uppercase tracking-wide">{pickedLabel}</span>
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-dim">pool ${poolOf(pickedAgent)}</span>
+            </div>
+          ) : null}
           <button
-            disabled={!live || busy || !betAgent}
-            onClick={() => bet(betAgent)}
+            disabled={!live || busy || !pickedAgent}
+            onClick={() => pickedAgent && bet(pickedAgent)}
             className="mt-3 w-full rounded-lg bg-volt py-3 font-display text-base uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
           >
             {busy
               ? "placing…"
-              : betAgent
-                ? `bet ${Math.min(Math.max(0.01, amount), max)} USDC on ${comps.find((c) => c.id === betAgent)?.label ?? ""}`
-                : "pick an agent to back"}
+              : !live
+                ? "opens when a race is live"
+                : pickedAgent
+                  ? `bet ${Math.min(Math.max(0.01, amount), max)} USDC on ${pickedLabel}`
+                  : "tap an agent above to back it"}
           </button>
         </>
       )}

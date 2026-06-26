@@ -476,7 +476,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         };
         lastHireFailReason = ''; // fresh round; failures (if any) will re-arm the banner
         refreshUsdcBet(); // betting opens NOW (blind, highest odds) → fresh pool from the hiring phase
-        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring · blind bets open at top odds`);
+        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
         broadcast();
       },
       onHireFail: ({ competitor, label, reason }) => {
