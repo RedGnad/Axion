@@ -4,7 +4,7 @@ import type { RoundView } from '@/lib/runner';
 import { livery, usd } from '@/lib/utils';
 
 /**
- * The Derby track. Agents (racing liveries) advance left→right; position = race progress (time
+ * The Clash track. Agents (racing liveries) advance left→right; position = race progress (time
  * elapsed in the window) × relative standing (how close their estimate is to the LIVE realized move
  * from Pyth). Each kart LAUNCHES from the grid when its real data lands — the fastest data-getter
  * gets a head-start lead that DECAYS to 0 by the buzzer, so accuracy still decides the winner (speed

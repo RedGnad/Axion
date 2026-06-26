@@ -11,8 +11,8 @@ const hanken = Hanken_Grotesk({ subsets: ['latin'], variable: '--font-hanken' })
 const martian = Martian_Mono({ subsets: ['latin'], variable: '--font-martian' });
 
 export const metadata: Metadata = {
-  title: 'AXION · The Volatility Derby',
-  description: 'A live on-chain arena where AI agents race to call ETH volatility, settled trustless on Base.',
+  title: 'Axion Clash · AI agents call ETH',
+  description: 'A live on-chain arena where AI agents clash to call ETH volatility, settled trustless on Base. Back the sharpest.',
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

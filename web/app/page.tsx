@@ -153,10 +153,10 @@ function Header({
     <header className="reveal flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
       <div>
         <h1 className="font-display text-4xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
-          Axion <span className="text-volt">Derby</span>
+          Axion <span className="text-volt">Clash</span>
         </h1>
         <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
-          AI agents race to predict ETH. You bet on the winner.
+          AI agents clash to call ETH&apos;s next move. You back the winner.
         </p>
       </div>
       <div className="flex items-center gap-2">

@@ -1,189 +1,126 @@
-# Axion — CROO Agent Hackathon build (working title)
+# Axion Clash — CROO Agent Hackathon build
 
-> The general-contractor agent for the CROO economy: one callable CAP agent that, given a
-> goal + USDC budget, discovers (curated roster), hires, escrows, verifies and composes
-> multiple CAP sub-agents into one finished deliverable — becoming by construction the most-
-> connected, highest-order-volume node in the Agent Store, and the demand engine that makes
-> other agents get paid.
+> A live on-chain arena where AI personality agents (Slicer / Tanker / Wizord) clash to call the
+> AMPLITUDE of ETH's next ~60s move. To compete, each agent must HIRE real data agents on CROO
+> (genuine A2A orders, USDC on Base). The outcome is settled by an exogenous oracle nobody controls
+> (Pyth ETH/USD). Spectators bet on WHICH AGENT wins — free and wallet-less, or with real USDC.
+> The players are AI agents and the transactions between them are the show.
 
 @/Users/red.g/CascadeProjects/Master/playbook.md
 
-## Positioning — APEX (iii): picks-and-shovels, consumed BY other agents
-Axion is NOT an end-user product. It is a **composition primitive that OTHER CROO agents call**
-to subcontract a multi-agent task — trustless agent→agent subcontracting with on-chain escrow per
-sub-hire. This is what out-ceils the bare orchestrator: it keeps the 25%+30% strength, sharpens
-Innovation (agents subcontracting trustless on-chain = agent-native), and fixes Adoption with a
-REALIZABLE in-window userbase — the other registered teams' agents — instead of a consumer
-audience we don't have. (Out-of-sample support: playbook picks-and-shovels-win-infra +
-ecosystem-motion-in-window.)
+## Positioning
+Axion Clash is a **consumer spectacle on top of real agent-to-agent commerce**. The A2A is not a
+demo prop: a persona literally cannot forecast without buying data, so every round emits real,
+needed CAP orders (organic by construction). Closest public precedent: Nof1's "Alpha Arena" (LLMs
+trade crypto live, people watch) — we are NOT that: ours is forecasting + an A2A data economy +
+spectator betting on the agents, not autonomous P&L trading. Do not name-collide with them.
 
-**⚠️ SUPERSEDED BY THE ARENA PIVOT (15 Jun) — kept for the red-team reasoning, not the premise.**
-Axion is now THE ARENA: a live on-chain world where personality agents (Slicer/Tanker/Wizord)
-compete to forecast ETH/USD and users bet/sponsor (see `src/arena/`). Two stale premises below are
-CORRECTED: (a) the store is NOT empty — census 15 Jun = 32 services / 19 agents / 19 online; (b) the
-HIRE-side "self-seed only" no longer holds — competitors hire REAL third-party data-agents
-(`roster.DATA_AGENTS`, all `ours:false`), so A2A diversity is organic, not self-manufactured.
+Differentiator to defend (the "10"): the on-chain trust layer makes agent-vs-agent competition
+*verifiable* — per-hire escrow + Pyth-settled outcome + pre-committed estimates (`reasonHash`) —
+which is impossible on a normal API marketplace. The unfakeable Adoption lift is ≥1 INDEPENDENT
+team's agent racing; everything else we can build ourselves, that we cannot.
 
-**LOAD-BEARING PIER — TWO-SIDED ecosystem dependency (red-team 14 Jun; field = 0 BUIDLs / 77
-registered):**
-- HIRE side: with an empty store there is nothing to compose → we self-seed all sub-agents → graph
-  diversity is self-manufactured (judges see aggregated order data → reads as synthetic).
-- DEMAND side: "other agents call Axion" is optimistic — 77 registered / 0 shipped → realistically
-  0–2 integrators, late. Do NOT make this the floor.
+## Economic model — LOCKED (do not reinvent; see memory `economic-model-locked`)
+1. **One human bet: "which AGENT wins"** (parimutuel on the racers). NOT over/under (that bet on ETH,
+   off-thesis, and is removed). The win outcome (`isWinner`, ties = co-winners) is computed in
+   `settle.ts`; betting only changes the pool/odds.
+2. **Winning-agent reward = a share of the betting RAKE only** (bettor-funded). NEVER a treasury
+   guarantee (gameable + reads as wash at an organic-scored event). No bets → no purse, just standings.
+3. **Rake = 5% flat → 3% house / 2% winning agent** (`BOOKMAKER_RAKE_BPS`=300, `WINNER_RAKE_BPS`=200).
+   No probability-scaled curve. The 2% is only withheld when the winner has a configured payout
+   address (`ARENA_PAYOUT_<ID>`), else bettors keep it. Payouts reuse the proven house-EOA path
+   (`housebet.ts`); the CAP escrow is untouched.
+4. **Agent staking (Numerai-style) = ROADMAP, no code.** Real only via an external agent staking its
+   own money (us on both sides = wash). Onboarding effort → recruitment + Garage, not stake code.
+5. **Cold-start subsidy is bounded**: we fund participation (data hires), capped at
+   `ARENA_DAILY_RACES`/day, resets UTC midnight. Subsidize participating, never winning.
 
-**Therefore: FLOOR vs UPSIDE (build to the floor, the field is near-empty so the floor wins/places).**
-- FLOOR (must work even if the ecosystem stays empty): a genuinely useful composer over a coherent
-  set of OUR OWN leaf-agents, labelled `ours`, with on-chain-verifiable orders, listed, crisp demo.
-  In a track with ~0 real submissions this floor already places.
-- UPSIDE (lifts Adoption+Innovation if it lands, never the floor): ≥1–2 INDEPENDENT teams' agents
-  genuinely call Axion, and/or real third-party agents in the roster. Attack early, NEVER fake —
-  CROO scores "organic" + feeds aggregated order data to judges.
-- HONEST MANIFEST: every SubOrderRef carries `ours: boolean`; never claim third-party diversity we
-  don't have. Re-census near deadline for (a) rival orchestrators (duplication — currently none, but
-  orchestrator is the OBVIOUS read of A2A 25% → expect crowding) and (b) hireable third-party agents.
-Confidence LOW (taste unvalidated); reasoned ceiling, not a guaranteed winner.
+## Architecture (the REAL build = `src/arena/*` + `web/`)
+Single Node process (Render) runs the rounds AND serves state; the Next.js app on Vercel is the UI.
+- `src/arena/server.ts` — HTTP/SSE server, round scheduler, `/api/state|round|predict|bet|competitor`,
+  persistence (Upstash + file + committed seed), cold-start budget, health `notice`. `GET /` 302s to
+  `FRONTEND_URL` (the Vercel app).
+- `src/arena/loop.ts` — `runRound`: each competitor estimates in parallel; LOCAL personas buy their
+  data agents directly (real A2A), REMOTE open agents are hired by the arena. DQ cutoff relative to
+  the fastest agent. Hire failures are surfaced via `onHireFail` (never silent).
+- `src/orchestrator.ts` — `hireService` (negotiate → poll order → optional price cap → payOrder →
+  poll completion → delivery). Used by the arena personas. (Polls; CROO WS events are unreliable.)
+- `src/arena/forecast.ts` — persona + purchased data → committed 2-decimal amplitude + rationale (Haiku).
+- `src/arena/personalities.ts` / `src/roster.ts` — 3 personas with disjoint capabilities → 6 distinct
+  third-party data agents (`DATA_AGENTS`, all `ours:false`). `src/arena/discovery.ts` — live public
+  catalog census ("the store evolves").
+- `src/arena/settle.ts` — closest amplitude to the Pyth move wins (ties = co-winners) + pari-mutuel math.
+- `src/arena/housebet.ts` — custodial-disclosed human USDC betting via a house EOA; `planSettlement`
+  is a PURE unit-checked function (bettor split + winning-agent purse). `src/arena/oracle.ts` — Pyth.
+- `web/` — Next 15 App Router + Tailwind v4 + wagmi v2: Play (race + agent cards + bet-on-agent),
+  Garage (join + data market), On-chain proof tabs.
 
-## Consumable interface (the adoption lever — keep it 5-lines-to-integrate)
-Axion registers ONE CAP service (Dashboard) → `AXION_SERVICE_ID`. Any agent hires it via the
-standard verified path: `negotiateOrder({ serviceId: AXION_SERVICE_ID, requirements })`. The
-`requirements` JSON IS Axion's public contract (see `src/contract.ts`):
-```jsonc
-{ "goal": "natural-language composite task",
-  "budgetUSDC": "max smallest-unit Axion may spend across sub-hires",
-  "deliverable": "text" | "file",
-  "constraints": { "maxSubAgents": 6, "deadlineSeconds": 300 } }
-```
-Axion returns the composed result + a **manifest** of every sub-order (orderIds, agents, Base
-txHashes) so the caller (and judges) can verify the A2A graph on-chain. The manifest also lifts the
-CALLER's composability — that mutual benefit is the integration hook.
+## Operational facts (current, verified on-chain 2026-06-26)
+- **Three persona AA wallets, each pays its own data hires** (~0.2 USDC/round each), all currently
+  near-empty → data hires fail → agents forecast on baseline ("no signal"). Fund all three with USDC
+  on Base (gas is paid in USDC via paymaster, no ETH needed). See memory `arena-wallet-funding`:
+  Slicer `0x5B6bEFFbbED35c55a7749f7E594B062B52BFF7FC`, Tanker `0xf398...BF76`, Wizord `0x62aa...F351`.
+- Render `plan: free` spins down when idle (cold start); a cron ping keeps it warm. Any push
+  redeploys Render and KILLS an in-flight round — check `/api/state` is idle before pushing.
+- Human USDC betting + the winning-agent purse need env: `HOUSE_EOA_ADDRESS/PRIVATE_KEY`,
+  `BASE_RPC_URL`, `ARENA_PAYOUT_SLICER/TANKER/WIZORD`.
 
-**Distribution = MCP (re-verified 15 Jun — CORRECTED).** CROO's MCP server **IS published**:
-`npx @croo-network/mcp-server` (env CROO_SDK_KEY/CROO_API_URL/CROO_WS_URL), exposing
-negotiate_order/pay_order/deliver_order/get_order/list_orders/get_delivery/upload_file/… AND a
-discovery surface ("Find me a DeFi data agent on CROO"). So: (1) Axion, being a CAP service, is
-callable via `negotiate_order → AXION_SERVICE_ID` from any MCP client — no separate MCP server
-required; (2) there is no platform-native COMPOSER that duplicates Axion. OPTIONAL upside: a thin
-`compose_task` MCP tool for one-call composition (Stellar x402 winning pattern). Not a milestone-1
-requirement; the on-chain CAP service is the product. **Discovery is also available without the SDK
-via PUBLIC unauthenticated HTTP**: `GET api.croo.network/backend/v1/public/services` (full catalog:
-serviceId, agentId, name, price, orders7d, feeConfig), `/public/agents` (onlineStatus, volume),
-`/public/live-feed`. (The SDK-Key itself canNOT read `/services` — 401; use the public endpoints.)
-
-**Cashflow (real, do not miss):** when hired, Axion is the PROVIDER (caller's USDC escrows into
-Axion's order, releases only after Axion delivers) and simultaneously the REQUESTER paying
-sub-agents DURING delivery → Axion must hold a USDC **float** in its AA wallet to front a batch
-of sub-hires before its parent order clears. Margin = caller payment − Σ(sub-budgets + feeAmount).
-
-## Outreach plan (turn the kill-condition into an attack, in-window)
-1. Ship Axion + public `AXION_SERVICE_ID` + a 5-line integration snippet EARLY.
-2. Post in the CROO community: "subcontract any multi-agent task in 5 lines; your agent gets
-   composability + a richer demo, you skip building orchestration." Offer a small USDC **faucet**
-   so teams test-call for free (removes friction → real organic orders).
-3. Seed the roster with the 2 existing store agents (Chainguard, Web3 Address Intel) as both
-   hireable sub-agents AND reciprocal callers.
-4. Co-demo an integrator (their agent calling Axion live) in the Demo Day video = organic A2A +
-   ecosystem motion. NEVER fabricate this; if no one integrates, report honestly.
-
-## Why this wins (verified against the official rubric)
-Judging (official image, tier [O], verified 13 Jun):
-- **Technical Execution 30%** — robust CAP, reliable A2A, payment-state handling. **Bonus: 10+
-  real CAP orders.** → the orchestrator emits multiple real orders per run; 10+ is organic.
-- **A2A Composability 25%** — number, diversity, AND **depth** of A2A relationships; CROO feeds
-  aggregated order data to judges (semi-objective). → one request → N sub-orders to N distinct
-  agents BY CONSTRUCTION. **Depth ≠ count: re-hire counterparties + chain multi-hop, not just
-  one-shot fan-out.**
-- **Innovation 20%** — "impossible / much worse on a normal API marketplace?" → the answer is
-  **the on-chain trust layer, claimed ONLY as verified in cap-contracts**: per-hop **escrow**
-  with **delivery-window + auto-refund on expiry** (CAPVault) + an **on-chain settlement record**
-  of every hire + optional **trusted-evaluator arbitration** (EVALUATOR_ROLE) + ERC-4337 AA
-  wallet with **owner/executor selector-scoped keys** (CROOValidationModule). NOT "orchestration"
-  alone (that exists on normal marketplaces).
-  **DO-NOT-OVERCLAIM (red-team 13 Jun, verified in code):**
-  - The **buyer is NOT the on-chain evaluator by default.** With `needEvaluation=false`,
-    `deliverOrder` releases payment to the provider immediately (no buyer veto; requestor cannot
-    reject in DELIVER phase). With `needEvaluation=true`, only `EVALUATOR_ROLE` (CROO-gated) can
-    approve/refund. → Axion's quality check is **off-chain, post-delivery**, UNLESS we confirm
-    Axion can hold EVALUATOR_ROLE for its own orders. Never claim "buyer-gated release."
-  - **No on-chain reputation/PTS** in cap-contracts or SDK types. PTS is off-chain/backend. →
-    Do NOT claim "reputation-routed selection." Roster routes on price/availability until a
-    queryable PTS source is verified at source.
-  - **Scoped permissions** = owner/executor selector-whitelist on the agent's OWN AA wallet,
-    NOT per-hire grants to counterparties. Describe it correctly.
-- **Usability & Real Adoption 15%** — real users, **organic** interactions, retention. → orders
-  must be genuinely useful (never wash; CROO sees aggregated order data — integrity IS scored).
-- **Presentation 10%** — demo clarity, README reproducibility, Demo Day. → "one prompt pays six
-  agents and settles on-chain in 5 minutes."
-
-Track target: **Open A2A (Track 6)**. Reveal: build early, list early, run real orders across
-the window (orders accumulate → the 10+ bonus + the 25% axis compound). Deadline: plan **Jul 9**.
-
-## Verified build facts (tier [P], from github.com/CROO-Network/node-sdk, v0.2.1 MIT)
-ONE class `AgentClient` does both roles. Confirmed methods:
-- **Buyer/orchestrator path:** `negotiateOrder({serviceId, requirements})` → on
-  `EventType.OrderCreated` → `payOrder(orderId)` (→ txHash on Base) → on `EventType.OrderCompleted`
-  → `getDelivery(orderId)`.
-- **Provider path (our own leaf service):** on `EventType.NegotiationCreated` →
-  `acceptNegotiation(id)`; on `EventType.OrderPaid` → `deliverOrder(orderId, {deliverableType,
-  deliverableText})`.
+## Verified build facts (tier [P], github.com/CROO-Network/node-sdk v0.2.1 MIT)
+ONE class `AgentClient` does both roles.
+- **Buyer:** `negotiateOrder({serviceId, requirements})` → `payOrder(orderId)` (→ Base txHash) →
+  `getDelivery(orderId)`. **Provider:** `acceptNegotiation(id)` → on paid `deliverOrder(orderId, {...})`.
 - Also: `getNegotiation, listNegotiations, getOrder, listOrders, rejectNegotiation, rejectOrder,
-  uploadFile, getDownloadURL, connectWebSocket`.
-- HTTP base used by SDK: `api.croo.network` (paths `/orders`, `/orders/negotiate`,
-  `/objects/upload-url`, `/objects/download-url`). WS: `wss://api.croo.network/ws`.
+  uploadFile, getDownloadURL, connectWebSocket`. HTTP base `api.croo.network`; WS `wss://api.croo.network/ws`.
+- WS event delivery is unreliable → everything POLLS.
 
-### Hard constraints found in-source (do NOT rediscover the slow way)
-1. **Agent creation + service registration + SDK-Key issuance happen in the CROO Dashboard, NOT
-   the SDK.** Seeding N leaf-agents = N manual dashboard registrations (budget the time).
-2. **No discovery in the SDK, but YES via public HTTP (corrected 15 Jun).** The SDK has no
-   search method, but `GET api.croo.network/backend/v1/public/services` + `/public/agents`
-   (unauthenticated) ARE the catalog — used to census the roster. Axion still runs on a curated
-   roster of serviceIds (`src/roster.ts`/`DATA_AGENTS`), now seeded from that public census.
-   **Census 15 Jun: 32 services / 19 agents / 19 online** (the earlier "store empty / only VERIS
-   live" finding is STALE — marketplace is active; "online" still ≠ accepts negotiation, probe at
-   first hire).
-3. **Pre-fund the agent's AA (ERC-4337) wallet with USDC** before `payOrder` (the SDK checks the
-   agent-wallet balance, not the controller address). Base mainnet.
+### Hard constraints (do NOT rediscover the slow way)
+1. Agent creation + service registration + SDK-Key issuance happen in the CROO Dashboard, not the SDK.
+2. No discovery in the SDK, but YES via PUBLIC unauthenticated HTTP:
+   `GET api.croo.network/backend/v1/public/services` + `/public/agents`. (The SDK-Key canNOT read
+   `/services` — 401.) The roster (`src/roster.ts/DATA_AGENTS`) is a curated subset of that catalog.
+3. Pre-fund the agent's AA (ERC-4337) wallet with USDC before `payOrder` (the SDK checks the
+   agent-wallet balance, not the controller). Base mainnet.
 
-### On-chain lifecycle + payment (tier [P], github.com/CROO-Network/cap-contracts)
-State machine (ICAPCore): `NEGOTIATION ──payOrder──► LOCK ──deliverOrder──► DELIVER
-──evaluateOrder──► CLEAR` (reject/expire → REJECTED/refund). Contracts: `CAPCore`,
-`CAPVault` (pure escrow), `IERC8004IdentityRegistry`, `CROOValidationModule` (ERC-7579
-owner/executor selector scoping), `CROOExchange` (sells the AGENT itself — NOT order flow, don't
-confuse), `CAPSwapExecutor` (fund-order execution).
-- **Escrow is real:** `payOrder`→`CAPVault.setupEscrow` (`transferFrom`) OR `payOrderX402`→
-  `setupEscrowX402` (EIP-3009 `transferWithAuthorization`, gasless USDC). Standard path needs the
-  requestor to **approve CAPVault for `budget` first** — confirm whether the node-sdk `payOrder`
-  does approve+pay or uses the x402 path before funding.
-- **Escrow service FEE:** SDK `Order.feeAmount` = on-chain escrow fee in USDC. Axion must charge
-  caller > Σ(sub-budget + feeAmount) + margin, or it loses USDC per hire. Bake fee into the math.
-- **Evaluation:** `needEvaluation=false` → `deliverOrder` auto-`releasePayment(provider)` →CLEAR
-  (no buyer veto). `needEvaluation=true` → `evaluateOrder(isApproved)` is `onlyRole(EVALUATOR_ROLE)`.
-  Decide per order; verify whether Axion can hold EVALUATOR_ROLE for its hires. `rejectOrder`
-  reverts in DELIVER phase.
-- **Refund safety:** on expiry past `deliveryWindow`, escrow refunds the requestor — this is the
-  real buyer protection (not buyer-gated release). Verify every hire on-chain (`cast`) for the demo.
+### On-chain lifecycle + payment (tier [P], cap-contracts)
+`NEGOTIATION ──payOrder──► LOCK ──deliverOrder──► DELIVER ──evaluateOrder──► CLEAR` (reject/expire →
+refund). `payOrder`→`CAPVault.setupEscrow` (real escrow). `Order.feeAmount` = on-chain escrow fee in
+USDC (bake into the margin; ~10% per hire). DO-NOT-OVERCLAIM (verified in code):
+- **No buyer-gated release.** `needEvaluation=false` → `deliverOrder` auto-releases to the provider;
+  the buyer cannot reject in DELIVER. The real buyer protection is **refund-on-expiry**, not a veto.
+- **No on-chain reputation/PTS** in cap-contracts or SDK. Routing is price/availability, not reputation.
+- Scoped permissions = selector-whitelist on the agent's OWN AA wallet, NOT per-hire grants.
 
 ## Integrity rules (binding — from Master)
-- Never mark a feature live/ready without end-to-end implementation. README says scaffold/
-  coming-soon until the code path works.
+- Never mark a feature live/ready without an end-to-end implementation. Say scaffold/coming-soon until
+  the code path works. Trace every user/judge-visible claim to code before claiming it works.
 - No dependency in package.json that isn't imported in a source file.
-- No hardcoded data shown as live (no fake "ACTIVE" badges, no fake order counts).
-- Orders must be ORGANIC: Axion hires a sub-agent only when it genuinely needs that output.
-  Never wash-trade to inflate the order count — CROO feeds aggregated order data to judges and
-  scores "organic"; faking it loses on the 15% axis and breaks our rules.
-- New branch + care before anything touches real USDC. Bounded budget per run.
-- Git: one-line commit messages; no Co-Authored-By / Claude mentions.
+- No hardcoded data shown as live (no fake badges, counts, or "paid" states).
+- Orders must be ORGANIC: an agent hires only when it genuinely needs the output. Never wash-trade to
+  inflate counts — CROO feeds aggregated order data to judges and scores "organic".
+- Real USDC: bounded budget; check the live runner is idle before pushing (push kills a round).
+- Writing style: no em-dashes, no decorative emojis, label feed/list rows with time + a clear tag
+  (see memory `writing-style-feedback`). Git: one-line commit messages; no Co-Authored-By / Claude mentions.
 
-## Architecture (the build)
-`src/index.ts` entrypoint → `src/orchestrator.ts` core loop:
-1. **Plan** — decompose the incoming goal into typed subtasks (LLM).
-2. **Route** — for each subtask pick a serviceId from `src/roster.ts` (reputation/price aware).
-3. **Hire (parallel)** — `negotiateOrder` → `payOrder` (escrow LOCK) → await `OrderCompleted` →
-   `getDelivery`, per subtask, with delivery-window/expiry-refund handling. Axion's quality
-   check on each deliverable is OFF-CHAIN (post-delivery) — see DO-NOT-OVERCLAIM above; do not
-   claim on-chain buyer-gated release.
-4. **Compose** — assemble verified sub-deliverables into one result.
-5. **Sell** — Axion is itself a registered service; it delivers the composed result to its
-   caller and settles (price > Σ sub-costs = margin). Builds its own PTS.
+## Why this wins (official rubric, tier [O])
+- **Technical Execution 30%** — robust CAP lifecycle, polling resilience, real payment-state handling,
+  pure unit-checked settlement. Bonus: 10+ real CAP orders (organic, several per funded round).
+- **A2A Composability 25%** — one round → 6 distinct third-party data hires by construction; depth via
+  re-hiring the same providers across rounds. Lives only when the persona wallets are funded.
+- **Innovation 20%** — verifiable agent-vs-agent competition: per-hire escrow + Pyth-settled outcome +
+  pre-committed `reasonHash` + spectator betting ON the agents. Not orchestration alone.
+- **Usability & Real Adoption 15%** — free wallet-less prediction (top of funnel) + real USDC bets;
+  the unfakeable lift = ≥1 independent agent racing (Discord + Garage). WEAKEST axis today.
+- **Presentation 10%** — one-tap demo, README reproducibility, on-chain proof tab, Demo Day.
 
-Status: **scaffold**. The vertical slice (one real multi-hire run on Base, settled on-chain) is
-the first milestone; nothing is "working" until that run is verifiable on-chain.
+Track: **Open A2A (Track 6)**. Deadline: plan **Jul 9**. Build early, run real rounds across the window.
+
+## Status & known gaps (2026-06-26)
+- WORKING: round lifecycle, leaderboard, on-chain proof, store-evolves feed, cold-start cap, health
+  banner, bet-on-agent (free + USDC), winner-purse math (unit-checked). Verified live + via Playwright.
+- BLOCKED on funding: real data hires (3 persona wallets empty) → the core A2A. Now surfaced, not silent.
+- NOT built (roadmap): agent staking; bounded field/league for scale (100 agents); ≥1 external agent.
+- LEGACY to quarantine: an older "general-contractor" codebase still exists (`src/index.ts`,
+  `serve.ts`, `slice.ts`, `contract.ts`, `provider.ts`, `leafs/*`, `bookmaker.ts`, `src/arena/ui.html`)
+  and the `dev/start/slice/serve` npm scripts point at it. It is NOT the product (the Arena is). Remove
+  or clearly mark legacy so a judge/builder who clones doesn't land on the old thesis. `orchestrator.ts`
+  is still used by the arena — keep it.
