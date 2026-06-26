@@ -97,6 +97,9 @@ interface ArenaState {
   history: HistoryItem[];
   leaderboard: { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }[];
   feed: FeedItem[];
+  /** The agents that will race next — so visitors can free-predict the NEXT race during the idle gap
+   *  (at a low cadence the arena is idle most of the time; this is the main engagement lever). */
+  roster?: { id: string; label: string }[];
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
@@ -153,7 +156,10 @@ let racesToday = 0;  // bounded daily subsidy counter (resets at UTC midnight)
 let racesDayKey = '';
 // Free guest predictions, kept server-side so the usage counter is real (not localStorage-only).
 const predictVisitors = new Set<string>();                       // unique visitor ids seen this instance
-const predictPending = new Map<string, { agentId: string }[]>(); // roundId → unresolved guesses (which agent)
+const predictPending = new Map<string, { agentId: string; visitorId: string }[]>(); // roundId → unresolved guesses
+// Free predictions placed during the IDLE gap, for the NEXT race. Migrated into the round at open.
+// Deduped by visitorId so one visitor = one prediction per race (honest stats, no inflation).
+let nextPredictPending: { agentId: string; visitorId: string }[] = [];
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
@@ -165,6 +171,11 @@ let storeEvents: { ts: number; kind: 'joined' | 'adopted'; text: string }[] = []
 
 function personaMeta(id: string): { label: string; blurb: string } {
   return metaById.get(id) ?? { label: id, blurb: '' };
+}
+
+/** Publish the upcoming racers so the UI can let visitors free-predict the NEXT race while idle. */
+function refreshRoster(): void {
+  state.roster = competitors.map((c) => ({ id: c.id, label: personaMeta(c.id).label }));
 }
 
 /** Append a real store-evolution event (newest first, capped). No causation, no fabrication. */
@@ -475,7 +486,14 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
         };
         lastHireFailReason = ''; // fresh round; failures (if any) will re-arm the banner
-        refreshUsdcBet(); // betting opens NOW (blind, highest odds) → fresh pool from the hiring phase
+        // Carry over predictions placed during the idle gap (on the now-racing roster), deduped.
+        if (nextPredictPending.length) {
+          const racing = new Set(competitors.map((c) => c.id));
+          const carried = nextPredictPending.filter((g) => racing.has(g.agentId)); // drop picks on agents not racing
+          predictPending.set(id, carried);
+          nextPredictPending = [];
+        }
+        refreshUsdcBet(); // betting opens NOW (early, highest odds) → fresh pool from the hiring phase
         pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
         broadcast();
       },
@@ -696,6 +714,7 @@ async function main(): Promise<void> {
       console.warn(`[arena-server] could not restore community roster: ${(err as Error).message}`);
     }
   }
+  refreshRoster(); // publish the upcoming racers (for idle free-prediction)
 
   // The runner is API-only now: ONE interface = the Vercel front. Redirect / there (no 2nd site).
   const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';
@@ -758,6 +777,7 @@ async function main(): Promise<void> {
             joinedRoster = joinedRoster.slice(-50);
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
+            refreshRoster(); // the new agent is now bettable for the next race (idle predictions)
             pushFeed(`New competitor joined the arena: ${name}`);
             broadcast();
             const wr = tryRunRound(cfg, `welcome:${name}`); // demand trigger: a new agent → a welcome round
@@ -776,13 +796,24 @@ async function main(): Promise<void> {
       req.on('data', (c) => { body += c; if (body.length > 2000) req.destroy(); });
       req.on('end', () => {
         try {
-          const { roundId, agentId, visitorId } = JSON.parse(body || '{}') as { roundId?: string; agentId?: string; visitorId?: string };
+          const { agentId, visitorId } = JSON.parse(body || '{}') as { agentId?: string; visitorId?: string };
           if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 64) return reply(400, { error: 'visitorId required' });
-          if (!roundId || roundId !== state.round?.id || (state.round?.phase !== 'open' && state.round?.phase !== 'betting')) return reply(409, { error: 'betting is closed for this round' });
-          if (!agentId || !state.round.competitors.some((c) => c.id === agentId)) return reply(400, { error: 'agentId must be a racer in this round' });
-          const arr = predictPending.get(roundId) ?? [];
-          arr.push({ agentId });
-          predictPending.set(roundId, arr);
+          if (!agentId) return reply(400, { error: 'agentId required' });
+          const r = state.round;
+          const live = r && (r.phase === 'open' || r.phase === 'betting');
+          if (live) {
+            // Predict the CURRENT race.
+            if (!r!.competitors.some((c) => c.id === agentId)) return reply(400, { error: 'agentId must be a racer in this round' });
+            const arr = predictPending.get(r!.id) ?? [];
+            if (arr.some((g) => g.visitorId === visitorId)) return reply(409, { error: 'already predicted this race' });
+            arr.push({ agentId, visitorId });
+            predictPending.set(r!.id, arr);
+          } else {
+            // Idle gap → predict the NEXT race (from the published roster). Migrated in at round open.
+            if (!(state.roster ?? []).some((a) => a.id === agentId)) return reply(400, { error: 'agentId must be in the next-race roster' });
+            if (nextPredictPending.some((g) => g.visitorId === visitorId)) return reply(409, { error: 'already predicted the next race' });
+            nextPredictPending.push({ agentId, visitorId });
+          }
           if (!predictVisitors.has(visitorId)) { predictVisitors.add(visitorId); state.predictStats.visitors++; }
           state.predictStats.total++;
           saveHistory(); // persist the tally (history blob carries predictStats)

@@ -74,6 +74,7 @@ export interface ArenaState {
   history: HistoryItem[];
   leaderboard: LeaderRow[];
   feed: FeedItem[];
+  roster?: { id: string; label: string }[];
   predictStats?: { total: number; correct: number; visitors: number };
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   budget?: { used: number; cap: number; resetsAt: number };
@@ -97,13 +98,13 @@ export function visitorId(): string {
   return id;
 }
 
-/** Record a free guest prediction on the runner (counts toward the public usage tally). */
-export async function postPredict(roundId: string, agentId: string): Promise<boolean> {
+/** Record a free guest prediction (current race if live, else the NEXT race). Server dedupes by visitor. */
+export async function postPredict(agentId: string): Promise<boolean> {
   try {
     const r = await fetch(`${RUNNER_URL}/api/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roundId, agentId, visitorId: visitorId() }),
+      body: JSON.stringify({ agentId, visitorId: visitorId() }),
     });
     return r.ok;
   } catch {

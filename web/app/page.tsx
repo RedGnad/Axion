@@ -557,8 +557,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const r = state?.round;
   const comps = r?.competitors ?? [];
   const [pick, setPick] = useState<{
-    round: string;
+    round: string; // a real round id (live pick) or "next" (placed during the idle gap)
     agentId: string;
+    afterRound?: string; // for a "next" pick: the settled round showing when picked (don't resolve against it)
     resolved?: boolean;
     correct?: boolean;
   } | null>(null);
@@ -571,8 +572,19 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     } catch {}
   }, []);
 
+  const live = r?.phase === "open" || r?.phase === "betting"; // current race accepts predictions
+  const roster = state?.roster ?? [];
+  const idlePickable = !live && roster.length > 0; // between races → predict the NEXT race
+  // The cards to show: the live racers, or (idle) the upcoming roster.
+  const cards: { id: string; label: string; estimate?: number; isWinner?: boolean; dq?: boolean }[] =
+    live ? comps : roster.map((a) => ({ id: a.id, label: a.label }));
+
   useEffect(() => {
-    if (!r || r.phase !== "settled" || !pick || pick.round !== r.id || pick.resolved) return;
+    if (!r || r.phase !== "settled" || !pick || pick.resolved) return;
+    // A live pick resolves when its round settles; a "next" pick resolves when a DIFFERENT round settles
+    // (not the one that was already on screen when it was placed).
+    const applies = pick.round === r.id || (pick.round === "next" && r.id !== pick.afterRound);
+    if (!applies) return;
     const won = (r.competitors ?? []).some((c) => c.id === pick.agentId && c.isWinner);
     const next = { c: rec.c + (won ? 1 : 0), t: rec.t + 1 };
     setRec(next);
@@ -582,16 +594,19 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     setPick({ ...pick, resolved: true, correct: won });
   }, [r?.phase, r?.id, pick, rec]);
 
-  const live = r?.phase === "open" || r?.phase === "betting"; // betting open from hiring (blind) through the race
+  const mine = !!pick && (pick.round === "next" || (!!r && pick.round === r.id));
   const choose = (agentId: string) => {
-    if (r && live && !(pick && pick.round === r.id)) {
+    if (mine && !pick!.resolved) return; // one pick per race
+    if (live && r) {
       setPick({ round: r.id, agentId });
-      void postPredict(r.id, agentId); // count it toward the public usage tally (no wallet, no signup)
+      void postPredict(agentId);
+    } else if (idlePickable) {
+      setPick({ round: "next", agentId, afterRound: r?.id });
+      void postPredict(agentId);
     }
   };
-  const mine = pick && r && pick.round === r.id;
   const ps = state?.predictStats;
-  const myLabel = mine ? (comps.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId) : "";
+  const myLabel = mine ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId) : "";
 
   return (
     <div>
@@ -605,6 +620,8 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             no wallet · no signup ·{" "}
             {live ? (
               <b className="text-ink">betting open now</b>
+            ) : idlePickable ? (
+              <b className="text-ink">pick the next race&apos;s winner</b>
             ) : (
               "one tap when a race is live"
             )}
@@ -622,29 +639,29 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           </div>
         ) : null}
       </div>
-      {comps.length ? (
+      {cards.length ? (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {comps.map((c) => {
+          {cards.map((c) => {
             const won = !!c.isWinner;
             const picked = mine && pick!.agentId === c.id;
-            const bettable = live && !mine && !c.dq; // tappable right now
-            const boxed = bettable || picked || won;
+            const pickable = !mine && (live ? !c.dq : idlePickable); // tappable now (live race or next-race pre-pick)
+            const boxed = pickable || picked || won;
             const col = "var(--color-volt)";
             return (
               <button
                 key={c.id}
                 onClick={() => choose(c.id)}
-                disabled={!bettable && !picked}
+                disabled={!pickable && !picked}
                 className={cn(
                   "relative rounded-2xl px-3 py-5 text-center transition-transform",
                   boxed ? "border-2" : "border border-line",
-                  bettable ? "cursor-pointer hover:-translate-y-0.5" : "cursor-default",
+                  pickable ? "cursor-pointer hover:-translate-y-0.5" : "cursor-default",
                   c.dq && "opacity-50",
                 )}
                 style={{
-                  borderColor: picked ? "#fff" : won ? "var(--color-gold)" : bettable ? col : undefined,
+                  borderColor: picked ? "#fff" : won ? "var(--color-gold)" : pickable ? col : undefined,
                   background: boxed ? `color-mix(in srgb, ${won ? "var(--color-gold)" : col} 12%, transparent)` : "transparent",
-                  boxShadow: bettable ? `0 0 22px ${col}55` : won ? "0 0 22px rgba(255,200,60,.3)" : "none",
+                  boxShadow: pickable ? `0 0 22px ${col}55` : won ? "0 0 22px rgba(255,200,60,.3)" : "none",
                 }}
               >
                 <span className="mx-auto mb-2 block h-3 w-3 rounded-sm" style={{ background: livery(c.id) }} />
@@ -652,13 +669,13 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   {c.label}
                 </div>
                 <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-                  {c.estimate != null ? <>calls {usd(c.estimate)}</> : c.dq ? "cut this race" : "forecasting…"}
+                  {live ? (c.estimate != null ? <>calls {usd(c.estimate)}</> : c.dq ? "cut this race" : "forecasting…") : "races next"}
                 </div>
                 <div
                   className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
-                  style={{ color: won ? "var(--color-gold)" : picked ? "#fff" : bettable ? col : "var(--color-dim)" }}
+                  style={{ color: won ? "var(--color-gold)" : picked ? "#fff" : pickable ? col : "var(--color-dim)" }}
                 >
-                  {won ? "🏆 won" : picked ? "✓ your pick" : bettable ? "▸ back" : "opens at race start"}
+                  {won ? "🏆 won" : picked ? "✓ your pick" : pickable ? (live ? "▸ back" : "▸ back · next race") : "opens at race start"}
                 </div>
               </button>
             );
@@ -679,10 +696,13 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           </span>
         ) : mine ? (
           <>
-            you backed <b className="text-ink">{myLabel}</b>. waiting for the race to settle…
+            you backed <b className="text-ink">{myLabel}</b>
+            {pick!.round === "next" ? " for the next race" : ""}. waiting for the race to settle…
           </>
         ) : live ? (
           <span className="text-ink">tap the agent you think wins. it&apos;s free.</span>
+        ) : idlePickable ? (
+          <span className="text-ink">back the next race&apos;s winner. it&apos;s free.</span>
         ) : null}
         {rec.t > 0 ? (
           <span className="ml-2 text-volt">
