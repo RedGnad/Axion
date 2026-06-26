@@ -4,9 +4,9 @@ import type { Forecast, RoundOutcome } from './types.js';
 /**
  * Round settlement — purely objective, riggable by no one.
  *
- * The winner is whoever's committed forecast is closest to the Chainlink ETH/USD reading at
- * settle time. The settlement price is read from the on-chain feed (see leafs/price.ts) by the
- * caller; this module only does the comparison + the integrity hash. No USDC here.
+ * The winner is whoever's committed forecast is closest to the realized Pyth ETH/USD move at
+ * settle time. The settlement price is read from the signed feed (see oracle.ts) by the caller;
+ * this module only does the comparison + the integrity hash. No USDC here.
  */
 
 /** The betting line = the agents' consensus (median) amplitude estimate. Bettors bet over/under it. */
