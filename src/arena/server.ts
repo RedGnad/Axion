@@ -143,6 +143,9 @@ const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], histo
 const clients = new Set<import('node:http').ServerResponse>();
 let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
+// Community agents that joined via /api/competitor — PERSISTED (Upstash) so the open roster survives
+// restarts/redeploys; re-instantiated as remote competitors at boot.
+let joinedRoster: { serviceId: string; label: string }[] = [];
 let running = false;
 let lastRoundStartMs = 0;
 let roundOpenMs = 0; // when the current round opened (for per-agent data latency + ETA calibration)
@@ -238,11 +241,13 @@ async function loadHistory(): Promise<void> {
   type Persisted = {
     history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'];
     knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
+    joinedRoster?: { serviceId: string; label: string }[];
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
     for (const p of d.seenPairs ?? []) seenPairs.add(p);
     if (d.storeEvents?.length) storeEvents = d.storeEvents.slice(0, 14);
+    if (d.joinedRoster?.length) joinedRoster = d.joinedRoster.slice(0, 50);
   };
   const fromStore = await loadState<Persisted>();
   if (fromStore) {
@@ -300,6 +305,7 @@ function saveHistory(): void {
   const blob = {
     history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats,
     knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
+    joinedRoster,
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
@@ -581,7 +587,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         predictPending.delete(round.id);
         // Settle human USDC bets: bettors who backed a winning agent split the pool (custodial house EOA; no-op unless configured).
         void (async () => {
-          const res = await settleHouseBets(round.id, winners).catch(() => null);
+          const racedAgentIds = round.forecasts.map((f) => f.competitor); // agents that delivered (DQ'd/absent → bets refunded)
+          const res = await settleHouseBets(round.id, winners, racedAgentIds).catch(() => null);
           if (res && res.paid > 0) pushFeed(`USDC bets settled: ${res.total} USDC to ${res.paid} backer(s)${Number(res.agentPurse) > 0 ? `, ${res.agentPurse} to the winning agent` : ''}`);
           refreshUsdcBet();
         })();
@@ -671,6 +678,25 @@ async function main(): Promise<void> {
     console.warn(`[arena-server] view-only (no competitors configured): ${(err as Error).message}`);
   }
 
+  // Re-instantiate the DURABLE community roster (joins persisted in Upstash) so the open roster
+  // survives restarts/redeploys. Needs ARENA_SDK_KEY (the arena buyer that hires remotes).
+  if (joinedRoster.length) {
+    try {
+      if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
+      let restored = 0;
+      for (const j of joinedRoster) {
+        if (competitors.some((c) => c.kind === 'remote' && c.serviceId === j.serviceId)) continue;
+        competitors.push(makeRemoteCompetitor(remoteBuyer, j.serviceId, j.label));
+        metaById.set(j.label, { label: j.label, blurb: 'community agent' });
+        restored++;
+      }
+      if (competitors.length && state.status === 'view-only') state.status = 'idle';
+      console.log(`[arena-server] restored ${restored} community competitor(s) from durable roster`);
+    } catch (err) {
+      console.warn(`[arena-server] could not restore community roster: ${(err as Error).message}`);
+    }
+  }
+
   // The runner is API-only now: ONE interface = the Vercel front. Redirect / there (no 2nd site).
   const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';
 
@@ -728,6 +754,9 @@ async function main(): Promise<void> {
             while (metaById.has(name)) name += '*';
             competitors.push(makeRemoteCompetitor(remoteBuyer, serviceId, name));
             metaById.set(name, { label: name, blurb: 'community agent' });
+            joinedRoster.push({ serviceId, label: name });
+            joinedRoster = joinedRoster.slice(-50);
+            saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
             pushFeed(`New competitor joined the arena: ${name}`);
             broadcast();

@@ -94,8 +94,8 @@ export function poolFor(roundId: string): { byAgent: Record<string, bigint>; bet
 }
 
 export interface SettlementPlan {
-  /** All transfers to make (bettor winnings + winning-agent purse), pre-aggregation. */
-  payouts: { to: string; amount: bigint; kind: 'bettor' | 'agent' }[];
+  /** All transfers to make (bettor winnings + winning-agent purse + refunds), pre-aggregation. */
+  payouts: { to: string; amount: bigint; kind: 'bettor' | 'agent' | 'refund' }[];
   houseRake: bigint;   // smallest-unit USDC the house keeps
   agentPurse: bigint;  // smallest-unit USDC routed to winning agent(s) (subset of the 5% rake)
   refunded: boolean;   // true → no winning backers, everyone refunded, no rake/purse
@@ -103,36 +103,48 @@ export interface SettlementPlan {
 
 /**
  * PURE settlement math (no I/O) so it can be unit-checked on real money paths.
- * Pari-mutuel on bettors who backed a WINNING AGENT (ties = co-winners). House keeps 3%; the winning
- * agent(s) get 2% (only when a payout address exists — else that 2% is NOT withheld from bettors).
- * No winning backers → refund every stake (no rake, no purse).
+ * Bets on an agent that did NOT race this round (DQ'd or never showed) are REFUNDED — you can't lose
+ * for backing an agent the arena failed to run. The rest is pari-mutuel on bettors who backed a
+ * WINNING AGENT (ties = co-winners): house keeps 3%; the winning agent(s) get 2% (only when a payout
+ * address exists, else that 2% is NOT withheld). No winning backers among racers → refund those too.
  */
 export function planSettlement(
   rb: HouseBet[],
   winnerAgentIds: string[],
+  racedAgentIds: string[],
   addrOf: (id: string) => string,
   houseRakeBps = HOUSE_RAKE_BPS,
   winnerRakeBps = WINNER_RAKE_BPS,
 ): SettlementPlan {
+  const raced = new Set(racedAgentIds);
+  const payouts: { to: string; amount: bigint; kind: 'bettor' | 'agent' | 'refund' }[] = [];
+  // Refund every bet on an agent that didn't actually race (fairness: not the bettor's fault).
+  const inPlay: HouseBet[] = [];
+  for (const b of rb) {
+    if (raced.has(b.agentId)) inPlay.push(b);
+    else payouts.push({ to: b.eoa, amount: b.amount, kind: 'refund' });
+  }
+
   const winSet = new Set(winnerAgentIds);
-  const winners = rb.filter((b) => winSet.has(b.agentId));
+  const winners = inPlay.filter((b) => winSet.has(b.agentId));
   // Weighted stake (decay): a winner's share is proportional to amount × placement-weight, so a
   // last-second winner gets a small slice (its forgone share boosts the early bettors).
   const wstake = (b: HouseBet): bigint => (b.amount * BigInt(Math.round(Math.max(0.01, b.weight) * 1000))) / 1000n;
   const winningWeighted = winners.reduce((s, b) => s + wstake(b), 0n);
 
   if (winningWeighted === 0n) {
-    return { payouts: rb.map((b) => ({ to: b.eoa, amount: b.amount, kind: 'bettor' as const })), houseRake: 0n, agentPurse: 0n, refunded: true };
+    // No winning backers among the agents that raced → refund their stakes too (no rake, no purse).
+    for (const b of inPlay) payouts.push({ to: b.eoa, amount: b.amount, kind: 'refund' });
+    return { payouts, houseRake: 0n, agentPurse: 0n, refunded: true };
   }
 
-  const pool = rb.reduce((s, b) => s + b.amount, 0n);
+  const pool = inPlay.reduce((s, b) => s + b.amount, 0n);
   const houseRake = (pool * houseRakeBps) / 10000n;
   // The winning agents we can actually pay (have a configured address). De-dupe ids first.
   const payable = [...new Set(winnerAgentIds)].map((id) => ({ id, addr: addrOf(id) })).filter((x) => !!x.addr);
   const purseTotal = payable.length ? (pool * winnerRakeBps) / 10000n : 0n; // only withheld if payable
   const distributable = pool - houseRake - purseTotal;
 
-  const payouts: { to: string; amount: bigint; kind: 'bettor' | 'agent' }[] = [];
   for (const b of winners) payouts.push({ to: b.eoa, amount: (wstake(b) * distributable) / winningWeighted, kind: 'bettor' });
   let agentPurse = 0n;
   if (purseTotal > 0n) {
@@ -149,6 +161,7 @@ export function planSettlement(
 export async function settleHouseBets(
   roundId: string,
   winnerAgentIds: string[],
+  racedAgentIds: string[],
 ): Promise<{ paid: number; total: string; agentPurse: string } | null> {
   const rb = bets.filter((b) => b.roundId === roundId);
   bets = bets.filter((b) => b.roundId !== roundId); // clear this round either way
@@ -157,7 +170,7 @@ export async function settleHouseBets(
   const signer = new ethers.Wallet(process.env.HOUSE_EOA_PRIVATE_KEY as string, provider());
   const usdc = new ethers.Contract(USDC, ERC20, signer);
 
-  const plan = planSettlement(rb, winnerAgentIds, agentPayoutAddress);
+  const plan = planSettlement(rb, winnerAgentIds, racedAgentIds, agentPayoutAddress);
 
   // Aggregate by address (one tx per recipient) and pay.
   const byAddr = new Map<string, bigint>();
