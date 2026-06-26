@@ -26,4 +26,25 @@ services:
         sync: false
       - key: ARENA_WINDOW_SECONDS
         value: "60"
-      # Optional: COMPETITOR_ROSTER, ARENA_SDK_KEY, ARENA_AUTORUN
+      # ── Optional env (set in the Render dashboard, sync:false; each enables a feature) ──
+      # CADENCE / COLD-START:
+      #   ARENA_AUTO_ROUND_MS   — ms between scheduled rounds (the "NEXT RACE IN" countdown). Keep it
+      #                           high while funds are low; lower it once the persona wallets are funded.
+      #   ARENA_DAILY_RACES     — bounded free races/day from our treasury (default 12; resets UTC).
+      #   ARENA_AUTORUN=1       — run one round immediately at boot (demo only).
+      # OPEN ROSTER (external agents):
+      #   ALLOW_AGENT_SUBMIT=1  — enable the Garage "join" endpoint (/api/competitor).
+      #   ARENA_SDK_KEY         — SDK-Key of the "arena buyer" agent (CROO Dashboard) that HIRES external
+      #                           agents + re-instantiates the durable roster at boot. Falls back to
+      #                           CROO_SDK_KEY. Its AA wallet needs USDC (it pays each external hire).
+      #                           REQUIRED to actually run external agents; until then, leave unset.
+      #   COMPETITOR_ROSTER     — comma-separated "label=serviceId" seed roster (alternative to joins).
+      # HUMAN USDC BETTING + WINNING-AGENT PURSE:
+      #   HOUSE_EOA_ADDRESS / HOUSE_EOA_PRIVATE_KEY — dedicated throwaway EOA (small Base ETH) that
+      #                           receives bettor USDC and pays winners + the winning-agent purse.
+      #   HOUSE_MAX_BET_USDC    — per-bet cap (default 1).
+      #   BOOKMAKER_RAKE_BPS    — house rake (default 300 = 3%).
+      #   WINNER_RAKE_BPS       — winning-agent purse (default 200 = 2%); only withheld when payable.
+      #   ARENA_PAYOUT_SLICER / ARENA_PAYOUT_TANKER / ARENA_PAYOUT_WIZORD — payout address per persona
+      #                           (the 2% purse goes here when that agent wins). No address → no purse.
+      # FRONTEND_URL            — where GET / redirects (the Vercel app).
