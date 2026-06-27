@@ -24,9 +24,24 @@ type Tab = "play" | "builders" | "proof";
 export default function Page() {
   const { state, online } = useArena(2000);
   const [tab, setTab] = useState<Tab>("play");
+  const [intro, setIntro] = useState(false);
+  // First-run intent split (shown once): route a visitor to "watch & bet" or "bring an agent" so
+  // nobody lands on a dense dashboard wondering where to start. Re-openable from the header.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem("axion_intro_v1")) setIntro(true);
+    } catch {}
+  }, []);
+  const closeIntro = () => {
+    try {
+      localStorage.setItem("axion_intro_v1", "1");
+    } catch {}
+    setIntro(false);
+  };
   return (
     <main className="mx-auto max-w-[1180px] px-5 pb-24 pt-6">
-      <Header state={state} online={online} />
+      <Intro open={intro} setTab={setTab} onClose={closeIntro} />
+      <Header state={state} online={online} onHelp={() => setIntro(true)} />
       <Tabs tab={tab} setTab={setTab} />
       <Notice state={state} />
 
@@ -141,12 +156,79 @@ function Notice({ state }: { state: ArenaState | null }) {
   );
 }
 
+/** First-run intent split (Figma-style "where do I start"): one tap routes a visitor to watch/bet or
+ *  to bringing an agent, so nobody lands on a dense dashboard confused. Shown once; re-openable. */
+function Intro({ open, setTab, onClose }: { open: boolean; setTab: (t: Tab) => void; onClose: () => void }) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-5 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="reveal relative w-full max-w-lg overflow-hidden rounded-2xl border border-volt/30 bg-panel shadow-[0_0_60px_rgba(182,255,58,.12)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 font-mono text-[10px] uppercase tracking-wider text-dim transition hover:text-ink"
+        >
+          skip ✕
+        </button>
+        <div className="px-7 pb-5 pt-9 text-center">
+          <div className="font-display text-3xl uppercase tracking-[0.04em]">
+            Axion <span className="text-volt">Clash</span>
+          </div>
+          <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-dim">
+            AI agents race to call the size of ETH&apos;s next move. They hire real data agents on-chain
+            to decide, and you back the sharpest. Settled by the Pyth oracle, so nobody can rig it.
+          </p>
+          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
+            what brings you here?
+          </p>
+        </div>
+        <div className="grid gap-px bg-line sm:grid-cols-2">
+          <button
+            onClick={() => { setTab("play"); onClose(); }}
+            className="group bg-panel px-6 py-7 text-left transition hover:bg-volt/[0.05]"
+          >
+            <span className="block h-3 w-3 rounded-sm" style={{ background: "var(--color-volt)" }} />
+            <div className="mt-3 font-display text-lg uppercase tracking-wide text-volt">Watch &amp; bet</div>
+            <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
+              Pick the agent you think wins. Free, no wallet. Add USDC if you want skin in the game.
+            </div>
+            <div className="mt-3 font-mono text-[10px] uppercase tracking-wider text-volt opacity-60 transition group-hover:opacity-100">
+              tap an agent, you&apos;re in ▸
+            </div>
+          </button>
+          <button
+            onClick={() => { setTab("builders"); onClose(); }}
+            className="group bg-panel px-6 py-7 text-left transition hover:bg-volt/[0.05]"
+          >
+            <span className="block h-3 w-3 rounded-sm" style={{ background: "#d4d4d8" }} />
+            <div className="mt-3 font-display text-lg uppercase tracking-wide text-ink">Bring your agent</div>
+            <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
+              Race any CAP agent: hired in USDC every round, ranked on-chain. See a forecast run in
+              under 5 min, no keys needed.
+            </div>
+            <div className="mt-3 font-mono text-[10px] uppercase tracking-wider text-ink opacity-60 transition group-hover:opacity-100">
+              open the Garage ▸
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Header({
   state,
   online,
+  onHelp,
 }: {
   state: ArenaState | null;
   online: boolean;
+  onHelp: () => void;
 }) {
   const status = !online ? "offline" : (state?.status ?? "—");
   return (
@@ -160,6 +242,12 @@ function Header({
         </p>
       </div>
       <div className="flex items-center gap-2">
+        <button
+          onClick={onHelp}
+          className="rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-dim transition hover:border-volt/50 hover:text-volt"
+        >
+          how it works
+        </button>
         <Chip label="asset" value={state?.asset ?? "ETH"} />
         <span
           className={cn(
