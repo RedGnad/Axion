@@ -524,7 +524,7 @@ function RaceControl({
     const w = r.competitors.find((c) => c.isWinner);
     showStart = false;
     kicker = "WINNER";
-    big = `🏆 ${w?.label ?? "—"}`;
+    big = w?.label ?? "—";
     note =
       r.amplitude != null && r.line != null
         ? `called the move best — $${r.amplitude.toFixed(2)} vs line $${r.line.toFixed(2)}`
@@ -811,7 +811,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   </div>
                   <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
                     style={{ color: won ? "var(--color-gold)" : isPick ? "#fff" : tappable ? col : "var(--color-dim)" }}>
-                    {won ? "🏆 won" : committed ? "✓ USDC in" : isPick ? "✓ your pick · tap to cancel" : tappable ? (live ? "▸ back" : "▸ back · next") : "opens at race start"}
+                    {won ? "★ won" : committed ? "✓ USDC in" : isPick ? "✓ your pick · tap to cancel" : tappable ? (live ? "▸ back" : "▸ back · next") : "opens at race start"}
                   </div>
                 </button>
                 {/* WHY toggle — the old "racers" disclosure, now per card */}
@@ -1169,81 +1169,79 @@ function Ledger({ state }: { state: ArenaState | null }) {
         }
       />
       <p className="mt-2 text-[11px] leading-relaxed text-dim">
-        Every race hires data agents on-chain — each is a real CAP order (pay +
-        settle). Verify any on BaseScan.
+        Each round: agents hire data on-chain (real CAP orders), then the live Pyth move settles
+        who called it closest. Verify any tx on BaseScan.
       </p>
-      <div className="mt-3 max-h-[560px] space-y-3 overflow-auto pr-1">
+      <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {history.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">
             no settled races yet — start one on Play
           </div>
         ) : (
-          history.map((h) => {
+          history.map((h, hi) => {
+            const comps = (h.competitors ?? []).filter((c) => c.estimate != null);
+            const scale = Math.max(0.5, h.amplitude, ...comps.map((c) => c.estimate as number)) * 1.15;
+            const pct = (v: number) => Math.max(3, Math.min(97, (v / scale) * 100));
             return (
               <div
                 key={h.id}
-                className="rounded-lg border border-line/70 bg-panel2/40 p-3"
+                className="reveal rounded-lg border border-line/70 bg-panel2/40 p-3"
+                style={{ animationDelay: `${Math.min(hi, 8) * 30}ms` }}
               >
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
+                {/* header: when + how many on-chain txs this round produced */}
+                <div className="flex items-center justify-between text-[11px]">
                   <span className="font-mono text-dim">
-                    {new Date(h.settledAt).toLocaleString([], {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {new Date(h.settledAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                   </span>
-                  <span className="text-ink">
-                    move <b className="tnum">{usd(h.amplitude)}</b>{" "}
-                    <span className="text-dim">(line {usd(h.line)})</span>
-                  </span>
-                  <span
-                    className="font-mono uppercase tracking-wider"
-                    style={{ color: "var(--color-gold)" }}
-                  >
-                    🏆 {h.winners.map(cap).join(", ")}
-                  </span>
+                  <span className="font-mono text-dim">{(h.edges?.length ?? 0) * 2} txs</span>
                 </div>
-                {h.edges && h.edges.length ? (
-                  <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
-                    {h.edges.map((e, i) => (
+                {comps.length ? (
+                  <div className="mt-2.5">
+                    {/* accuracy axis — each agent's call placed against the real Pyth move; closest (gold ring) wins */}
+                    <div className="relative h-7 rounded-md border border-line/60 bg-panel/60">
                       <div
-                        key={i}
-                        className="flex items-center gap-2 text-[11px]"
-                      >
+                        className="absolute top-0 bottom-0 z-10"
+                        style={{ left: `${pct(h.amplitude)}%`, width: 2, marginLeft: -1, background: "linear-gradient(var(--color-volt), var(--color-gold))", boxShadow: "0 0 10px rgba(245,197,66,.6)" }}
+                      />
+                      <span className="absolute -top-2 z-10 font-mono text-[8px] uppercase tracking-[0.15em] text-gold" style={{ left: `${pct(h.amplitude)}%`, transform: "translateX(-50%)" }}>
+                        move {usd(h.amplitude)}
+                      </span>
+                      {comps.map((c) => (
                         <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{
-                            background: e.ours
-                              ? "var(--color-dim)"
-                              : "var(--color-volt)",
-                          }}
+                          key={c.id}
+                          title={`${c.label} called ${usd(c.estimate)}`}
+                          className="absolute top-1/2 z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                          style={{ left: `${pct(c.estimate as number)}%`, background: livery(c.id), outline: c.isWinner ? "2px solid var(--color-gold)" : "none", boxShadow: c.isWinner ? "0 0 10px var(--color-gold)" : `0 0 6px ${livery(c.id)}99` }}
                         />
-                        <span className="flex-1 truncate text-ink/80">
-                          <b className="text-ink">{cap(e.competitor)}</b> hired{" "}
-                          {e.label}
+                      ))}
+                    </div>
+                    {/* compact legend: each call; winner in gold */}
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+                      {comps.map((c) => (
+                        <span key={c.id} className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full" style={{ background: livery(c.id) }} />
+                          <span style={{ color: c.isWinner ? "var(--color-gold)" : "var(--color-dim)" }}>
+                            {c.label} {usd(c.estimate)}{c.isWinner ? " · won" : ""}
+                          </span>
                         </span>
-                        {e.payTxHash ? (
-                          <a
-                            href={BASESCAN + e.payTxHash}
-                            target="_blank"
-                            rel="noopener"
-                            className="shrink-0 font-mono text-[10px] text-under hover:underline"
-                          >
-                            pay ↗
-                          </a>
-                        ) : null}
-                        {e.clearTxHash ? (
-                          <a
-                            href={BASESCAN + e.clearTxHash}
-                            target="_blank"
-                            rel="noopener"
-                            className="shrink-0 font-mono text-[10px] text-under hover:underline"
-                          >
-                            settle ↗
-                          </a>
-                        ) : null}
-                      </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 text-[11px]">
+                    <span className="text-ink">move <b className="tnum">{usd(h.amplitude)}</b> <span className="text-dim">(line {usd(h.line)})</span></span>
+                    <span className="ml-3 font-mono uppercase tracking-wider text-gold">won {h.winners.map(cap).join(", ")}</span>
+                  </div>
+                )}
+                {h.edges && h.edges.length ? (
+                  <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 border-t border-white/5 pt-2">
+                    {h.edges.map((e, i) => (
+                      <span key={i} className="flex items-center gap-1.5 text-[10px]">
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.ours ? "var(--color-dim)" : livery(e.competitor) }} />
+                        <span className="text-ink/75"><b className="text-ink">{cap(e.competitor)}</b>→{e.label}</span>
+                        {e.payTxHash ? <a href={BASESCAN + e.payTxHash} target="_blank" rel="noopener" className="font-mono text-under hover:underline">pay↗</a> : null}
+                        {e.clearTxHash ? <a href={BASESCAN + e.clearTxHash} target="_blank" rel="noopener" className="font-mono text-under hover:underline">settle↗</a> : null}
+                      </span>
                     ))}
                   </div>
                 ) : null}
