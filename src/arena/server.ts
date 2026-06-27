@@ -260,12 +260,17 @@ async function loadHistory(): Promise<void> {
     history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'];
     knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
     joinedRoster?: { serviceId: string; label: string; payout?: string }[];
+    racesToday?: number; racesDayKey?: string;
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
     for (const p of d.seenPairs ?? []) seenPairs.add(p);
     if (d.storeEvents?.length) storeEvents = d.storeEvents.slice(0, 14);
     if (d.joinedRoster?.length) joinedRoster = d.joinedRoster.slice(0, 50);
+    // Restore the daily subsidy counter so the cap HOLDS across restarts (else a redeploy/spin-down
+    // resets it to 0 and a bot could drain us). refreshBudget() rolls it over if the UTC day changed.
+    if (typeof d.racesToday === 'number') racesToday = d.racesToday;
+    if (d.racesDayKey) racesDayKey = d.racesDayKey;
   };
   const fromStore = await loadState<Persisted>();
   if (fromStore) {
@@ -317,13 +322,14 @@ async function loadHistory(): Promise<void> {
     }
     pushFeed(`Last round: amplitude $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)}. Winner(s): ${last.winners.map((w) => personaMeta(w).label).join(', ')}`);
   }
+  refreshBudget(); // publish the (restored, rolled-over) daily subsidy so the UI shows it at boot
 }
 
 function saveHistory(): void {
   const blob = {
     history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats,
     knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
-    joinedRoster,
+    joinedRoster, racesToday, racesDayKey,
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
@@ -466,6 +472,7 @@ function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, r
   if (racesToday >= DAILY_RACES) return { started: false, reason: `today's free races are used up (${DAILY_RACES}/day). Back at UTC midnight`, nextAtMs: nextUtcMidnightMs() };
   racesToday++;
   refreshBudget();
+  saveHistory(); // persist the subsidy counter immediately so the cap survives a restart mid-round
   console.log(`[arena-server] round trigger: ${reason} (${racesToday}/${DAILY_RACES} today)`);
   void runOneRound(cfg);
   return { started: true };
@@ -475,7 +482,9 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
   if (running || competitors.length === 0) return;
   running = true;
   lastRoundStartMs = Date.now();
-  if (AUTO_MS) state.nextRoundAtMs = lastRoundStartMs + AUTO_MS; // next heartbeat after this round
+  // Honest "next race in" = when a race can NEXT run (the cooldown), not the slow heartbeat. Demand
+  // (start/predict/bet) triggers the actual race; after the cooldown the UI shows "arena ready".
+  state.nextRoundAtMs = lastRoundStartMs + MIN_ROUND_MS;
   state.status = 'running';
   try {
     await runRound(competitors, cfg, WINDOW, {
@@ -919,11 +928,11 @@ async function main(): Promise<void> {
 
   if (process.env.ARENA_AUTORUN === '1') void runOneRound(cfg);
 
-  // Heartbeat: a scheduled round every AUTO_MS gives a predictable "next race in MM:SS" countdown
-  // (UI shows nextRoundAtMs). Cost is bounded by the cadence + the cooldown; demand (predict/bet,
-  // new agent) can advance it via tryRunRound. Off unless ARENA_AUTO_ROUND_MS is set.
+  // Heartbeat: a slow background safety-net round every AUTO_MS so the arena never goes fully silent
+  // without demand. It is NOT shown as the "next race in" countdown (that would be misleading: it
+  // would reset on every restart and ignore that demand triggers races much sooner). The UI countdown
+  // reflects the cooldown after a real race; otherwise it shows "arena ready". Off unless AUTO_MS set.
   if (AUTO_MS >= 60_000 && competitors.length) {
-    state.nextRoundAtMs = Date.now() + AUTO_MS;
     console.log(`[arena-server] heartbeat: a round every ${Math.round(AUTO_MS / 60000)}min (cooldown ${Math.round(MIN_ROUND_MS / 60000)}min)`);
     setInterval(() => tryRunRound(cfg, 'heartbeat'), AUTO_MS);
   }
