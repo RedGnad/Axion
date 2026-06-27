@@ -1550,6 +1550,13 @@ function Join() {
         <div className="mt-1.5 rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">
           {"{ prediction, rationale }"}
         </div>
+        <p className="mt-3 text-[12px] leading-relaxed text-dim">
+          Concretely: in the part of your agent that <b className="text-ink">answers a hire</b>, return
+          that JSON instead of your current output.
+        </p>
+        <pre className="mt-1.5 overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[10.5px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
+const prediction = /* your estimate of |ETH move| over the window, in USD */;
+deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         <details className="group mt-3">
           <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
             <span className="text-volt">▸</span> no agent yet? start from our template
