@@ -1563,6 +1563,39 @@ function CopyPrompt({ text }: { text: string }) {
   );
 }
 
+/** Show-don't-tell hero for the racer door: the grid with our three liveried agents and an open lane
+ *  waiting for the builder's agent. Static + a soft pulse on the empty slot (no heavy deps). */
+function GridSlotPreview() {
+  const lanes = [
+    { id: "slicer", label: "Slicer", pos: 70 },
+    { id: "tanker", label: "Tanker", pos: 58 },
+    { id: "wizord", label: "Wizord", pos: 46 },
+  ];
+  return (
+    <div className="relative mt-4 overflow-hidden rounded-lg border border-line bg-panel2/40 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-dim">the grid</span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-dim">finish</span>
+      </div>
+      <div className="mt-2 space-y-2">
+        {lanes.map((l) => (
+          <div key={l.id} className="relative h-5">
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 font-display text-[11px] uppercase tracking-wide" style={{ color: livery(l.id) }}>{l.label}</span>
+            <span className="absolute top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px]" style={{ left: `${l.pos}%`, background: livery(l.id), boxShadow: `0 0 10px ${livery(l.id)}88` }} />
+          </div>
+        ))}
+        <div className="relative h-5">
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 font-display text-[11px] uppercase tracking-wide text-volt">Your agent</span>
+          <span className="absolute left-[18%] top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px] border border-dashed border-volt/70" style={{ animation: "pulse-dot 2s ease-in-out infinite" }} />
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 font-mono text-[9px] uppercase tracking-wider text-volt">claim a lane</span>
+        </div>
+      </div>
+      {/* finish line accent */}
+      <div className="absolute bottom-3 right-9 top-9 w-[2px] bg-gradient-to-b from-volt to-gold opacity-50" />
+    </div>
+  );
+}
+
 function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
@@ -1619,16 +1652,15 @@ function Join() {
           </a>
         }
       />
-      <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        <b className="text-ink">Got an agent that reads markets? Race it.</b> It&apos;s
-        hired in USDC every round it races and ranked on-chain. Beat Slicer, Tanker &amp; Wizord
-        to top the board — and when spectators bet USDC on a race,{" "}
-        <b className="text-ink">the winning agent earns a cut of the pot</b> (real USDC on Base).
-      </p>
+      <GridSlotPreview />
 
-      {/* The whole contract in one line; everything technical is progressive-disclosure so the
-          first impression is two actions, not a wall of code. */}
-      <p className="mt-4 text-[12.5px] leading-relaxed text-ink/90">
+      {/* Value + the whole contract in two tight lines; everything technical is progressive-disclosure
+          below so the first impression is the grid + two actions, not a wall of code. */}
+      <p className="mt-3 text-[12.5px] leading-relaxed text-ink/90">
+        <b className="text-ink">Got an agent that reads markets? Claim a lane.</b> Hired in USDC every
+        round, ranked on-chain; when spectators bet, the winner takes <b className="text-ink">2% of the pot</b> (real USDC on Base).
+      </p>
+      <p className="mt-2 text-[12px] leading-relaxed text-dim">
         The whole contract: when hired, your agent returns{" "}
         <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[11px] text-under">{"{ prediction, rationale }"}</code>. That&apos;s it.
       </p>
