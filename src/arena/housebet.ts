@@ -25,11 +25,32 @@ const HOUSE_RAKE_BPS = BigInt(process.env.BOOKMAKER_RAKE_BPS ?? '300'); // 3% ho
 const WINNER_RAKE_BPS = BigInt(process.env.WINNER_RAKE_BPS ?? '200');   // 2% to the winning agent(s)
 export const MAX_BET_USDC = Number(process.env.HOUSE_MAX_BET_USDC ?? '1'); // symbolic cap per bet
 
-/** Configured payout address for an agent (env ARENA_PAYOUT_<ID>), or '' if none. Honest: an agent
- *  with no configured address gets no purse (we never invent a destination). Start with our personas. */
+const PAYOUT_RE = /^0x[0-9a-fA-F]{40}$/;
+export function isPayoutAddress(a: string): boolean {
+  return PAYOUT_RE.test(a);
+}
+
+// COMMUNITY agents register a payout address when they join the Garage, so the winning-agent purse can
+// be routed to them too. Kept in memory and repopulated at boot from the durable roster (so it survives
+// restarts). Our OWN personas are intentionally NOT in here: rewarding our own agents is a wash, so we
+// leave ARENA_PAYOUT_<persona> unset and the 2% stays with the bettors when a persona wins.
+const externalPayouts = new Map<string, string>();
+export function setAgentPayout(agentId: string, address: string): boolean {
+  if (!PAYOUT_RE.test(address)) return false;
+  externalPayouts.set(agentId, address);
+  return true;
+}
+export function clearAgentPayout(agentId: string): void {
+  externalPayouts.delete(agentId);
+}
+
+/** Where an agent's winning purse is sent, or '' if none (then the 2% is NOT withheld from bettors).
+ *  Resolution: env ARENA_PAYOUT_<ID> first (our personas, normally unset), then the community registry
+ *  (external agents that gave an address at join). We never invent a destination. */
 export function agentPayoutAddress(agentId: string): string {
   const v = process.env[`ARENA_PAYOUT_${agentId.toUpperCase()}`];
-  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : '';
+  if (v && PAYOUT_RE.test(v)) return v;
+  return externalPayouts.get(agentId) ?? '';
 }
 
 export interface HouseBet {

@@ -6,7 +6,7 @@ import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
 import { discoverProviders } from './discovery.js';
-import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC } from './housebet.js';
+import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
 
 /**
@@ -149,7 +149,7 @@ let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
 // Community agents that joined via /api/competitor — PERSISTED (Upstash) so the open roster survives
 // restarts/redeploys; re-instantiated as remote competitors at boot.
-let joinedRoster: { serviceId: string; label: string }[] = [];
+let joinedRoster: { serviceId: string; label: string; payout?: string }[] = [];
 let running = false;
 let lastRoundStartMs = 0;
 let roundOpenMs = 0; // when the current round opened (for per-agent data latency + ETA calibration)
@@ -259,7 +259,7 @@ async function loadHistory(): Promise<void> {
   type Persisted = {
     history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'];
     knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
-    joinedRoster?: { serviceId: string; label: string }[];
+    joinedRoster?: { serviceId: string; label: string; payout?: string }[];
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
@@ -520,6 +520,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             competitors = competitors.filter((x) => x.id !== competitor);
             joinedRoster = joinedRoster.filter((j) => j.label !== competitor);
             metaById.delete(competitor);
+            clearAgentPayout(competitor);
             refreshRoster();
             saveHistory();
             pushFeed(`${competitor} removed from the grid — it must return {prediction, rationale}. Fix the contract and re-register in the Garage.`);
@@ -728,6 +729,7 @@ async function main(): Promise<void> {
         if (competitors.some((c) => c.kind === 'remote' && c.serviceId === j.serviceId)) continue;
         competitors.push(makeRemoteCompetitor(remoteBuyer, j.serviceId, j.label));
         metaById.set(j.label, { label: j.label, blurb: 'community agent' });
+        if (j.payout && isPayoutAddress(j.payout)) setAgentPayout(j.label, j.payout); // re-arm winning-purse routing
         restored++;
       }
       if (competitors.length && state.status === 'view-only') state.status = 'idle';
@@ -810,15 +812,18 @@ async function main(): Promise<void> {
       req.on('end', () => {
         void (async () => {
           try {
-            const { serviceId, label } = JSON.parse(body || '{}') as { serviceId?: string; label?: string };
+            const { serviceId, label, payoutAddress } = JSON.parse(body || '{}') as { serviceId?: string; label?: string; payoutAddress?: string };
             if (!serviceId || !/^[0-9a-f-]{36}$/i.test(serviceId)) return reply(400, { error: 'valid serviceId (uuid) required' });
             if (competitors.some((c) => c.kind === 'remote' && c.serviceId === serviceId)) return reply(409, { error: 'agent already in the arena' });
+            const payout = (payoutAddress || '').trim();
+            if (payout && !isPayoutAddress(payout)) return reply(400, { error: 'payout address must be a 0x… Base address (40 hex chars)' });
             if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
             let name = (label || `agent-${serviceId.slice(0, 4)}`).replace(/[^\w -]/g, '').slice(0, 24) || `agent-${serviceId.slice(0, 4)}`;
             while (metaById.has(name)) name += '*';
             competitors.push(makeRemoteCompetitor(remoteBuyer, serviceId, name));
             metaById.set(name, { label: name, blurb: 'community agent' });
-            joinedRoster.push({ serviceId, label: name });
+            if (payout) setAgentPayout(name, payout); // route this agent's winning purse on-chain
+            joinedRoster.push({ serviceId, label: name, payout: payout || undefined });
             joinedRoster = joinedRoster.slice(-50);
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
@@ -826,7 +831,7 @@ async function main(): Promise<void> {
             pushFeed(`New competitor joined the arena: ${name}`);
             broadcast();
             const wr = tryRunRound(cfg, `welcome:${name}`); // demand trigger: a new agent → a welcome round
-            reply(202, { ok: true, name, welcomeRound: wr.started, nextAtMs: wr.nextAtMs });
+            reply(202, { ok: true, name, payout: !!payout, welcomeRound: wr.started, nextAtMs: wr.nextAtMs });
           } catch (e) {
             reply(400, { error: (e as Error).message });
           }

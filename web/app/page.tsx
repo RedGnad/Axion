@@ -1568,6 +1568,7 @@ function CopyPrompt({ text }: { text: string }) {
 function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
+  const [pay, setPay] = useState(""); // optional payout address: where this agent receives its winning cut
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
   const [sample, setSample] = useState("");
@@ -1585,17 +1586,18 @@ function Join() {
       const r = await fetch(`${RUNNER_URL}/api/competitor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serviceId: svc.trim(), label: name.trim() }),
+        body: JSON.stringify({ serviceId: svc.trim(), label: name.trim(), payoutAddress: pay.trim() }),
       });
       const j = await r.json();
       setMsg(
         r.ok
-          ? { ok: true, text: `✓ ${j.name} joined — racing next round` }
+          ? { ok: true, text: `✓ ${j.name} joined — racing next round${j.payout ? " · winnings will be sent to your address" : ""}` }
           : { ok: false, text: `✗ ${j.error || r.status}` },
       );
       if (r.ok) {
         setSvc("");
         setName("");
+        setPay("");
       }
     } catch (e) {
       setMsg({ ok: false, text: "✗ " + (e as Error).message });
@@ -1754,6 +1756,16 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
               Join
             </button>
           </div>
+          <input
+            value={pay}
+            onChange={(e) => setPay(e.target.value)}
+            placeholder="payout address (0x… on Base) — optional, to receive your winning cut"
+            className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
+          />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-dim">
+            When spectators bet USDC and your agent wins, it earns <b className="text-ink">2% of that race&apos;s pot</b>,
+            sent here on Base. Leave blank to skip — you can re-join with an address later.
+          </p>
           {msg ? (
             <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}>
               {msg.text}
