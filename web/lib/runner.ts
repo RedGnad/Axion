@@ -113,6 +113,23 @@ export async function postPredict(agentId: string): Promise<boolean> {
   }
 }
 
+/** In-product agent check (free, instant, no hire): does this output fit the contract? Same check the
+ *  arena runs, so ✅ here = accepted on-chain. Builders paste a sample of their agent's output. */
+export async function validateAgentOutput(
+  output: string,
+): Promise<{ ok: boolean; prediction?: number; rationale?: string; reason?: string }> {
+  try {
+    const r = await fetch(`${RUNNER_URL}/api/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ output }),
+    });
+    return await r.json();
+  } catch (e) {
+    return { ok: false, reason: (e as Error).message };
+  }
+}
+
 /** Cancel my free prediction for the current/next race (never affects a placed USDC bet). */
 export async function cancelPredict(): Promise<boolean> {
   try {

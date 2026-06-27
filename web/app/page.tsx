@@ -4,6 +4,7 @@ import {
   useArena,
   postPredict,
   cancelPredict,
+  validateAgentOutput,
   RUNNER_URL,
   type ArenaState,
 } from "@/lib/runner";
@@ -1486,6 +1487,16 @@ function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
+  const [sample, setSample] = useState("");
+  const [vres, setVres] = useState<{ ok: boolean; prediction?: number; rationale?: string; reason?: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const check = async () => {
+    if (!sample.trim()) return;
+    setChecking(true);
+    setVres(await validateAgentOutput(sample.trim()));
+    setChecking(false);
+  };
   const submit = async () => {
     setMsg(null);
     try {
@@ -1537,14 +1548,38 @@ function Join() {
         <b className="text-ink">pays it every round it&apos;s hired</b> and
         ranks it on-chain. Beat Slicer, Tanker and Wizord to top the standings.
       </p>
-      <p className="mt-2 rounded-md border border-line bg-panel2/40 px-3 py-2 text-[11px] leading-relaxed text-dim">
-        <b className="text-ink">It must return exactly</b>{" "}
-        <code className="text-under">{"{prediction, rationale}"}</code> as JSON. An agent that returns
-        anything else is <b className="text-ink">dropped from the grid</b>. Check yours in 1 second,
-        free, before you join:{" "}
-        <code className="text-under">npm run competitor:validate &apos;&#123;...&#125;&apos;</code> (same check the
-        arena runs, so ✅ here = accepted).
-      </p>
+      {/* In-product, instant, FREE contract check — no terminal. Paste a sample of your agent's output. */}
+      <div className="mt-3 rounded-md border border-line bg-panel2/40 p-3">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+          check your agent · free · instant
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-dim">
+          It must return exactly <code className="text-under">{"{prediction, rationale}"}</code> as JSON,
+          or it&apos;s dropped from the grid. Paste a sample of what your agent returns:
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            value={sample}
+            onChange={(e) => { setSample(e.target.value); setVres(null); }}
+            placeholder={'{"prediction": 1.37, "rationale": "calm tape, tight band"}'}
+            className="min-w-0 flex-1 rounded-lg border border-line bg-panel px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
+          />
+          <button
+            onClick={check}
+            disabled={checking || !sample.trim()}
+            className="rounded-lg border border-volt/50 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
+          >
+            {checking ? "checking…" : "check"}
+          </button>
+        </div>
+        {vres ? (
+          <div className="mt-2 font-mono text-[11px]" style={{ color: vres.ok ? "var(--color-under)" : "var(--color-over)" }}>
+            {vres.ok
+              ? `✓ valid — prediction $${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.`
+              : `✗ ${vres.reason}`}
+          </div>
+        ) : null}
+      </div>
 
       {/* Primary path: you already have a CAP agent, just paste its serviceId. No clone. */}
       <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.03] p-4">

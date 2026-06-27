@@ -7,6 +7,7 @@ import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
 import { discoverProviders } from './discovery.js';
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC } from './housebet.js';
+import { validateCompetitorResponse } from './competitor-contract.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -762,6 +763,22 @@ async function main(): Promise<void> {
     if (req.method === 'GET' && url === '/api/state') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify(state));
+      return;
+    }
+    // In-product agent check: paste a sample of your agent's output → instant valid/invalid, FREE (no
+    // hire). Same function the arena uses, so ✅ here = accepted on-chain. Zero terminal for builders.
+    if (req.method === 'POST' && url === '/api/validate') {
+      const reply = (code: number, obj: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 8000) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const { output } = JSON.parse(body || '{}') as { output?: string };
+          reply(200, validateCompetitorResponse(String(output ?? '')));
+        } catch (e) {
+          reply(400, { ok: false, reason: (e as Error).message });
+        }
+      });
       return;
     }
     if (req.method === 'GET' && url === '/api/stream') {
