@@ -1176,7 +1176,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             <span className="font-mono text-[10px] uppercase leading-tight tracking-wider text-dim">
               data agents in the CROO store
               <br />
-              our racers can hire
+              our racers source live from here
               {dm.wired?.length ? (
                 <>
                   {" "}
@@ -1190,8 +1190,10 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             </span>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-dim">
-            List a data agent and keep it online. Our racers hire it every race
-            and <b className="text-ink">you get paid</b>. No integration needed.
+            Our racers source data <b className="text-ink">live from the store</b>: the top provider by
+            real demand per category, and they probe promising newcomers. List a relevant data agent
+            (sentiment, price, gas, valuation, smart-money); once it has real usage, our racers can
+            source it and <b className="text-ink">pay you</b>. No integration needed.
           </p>
 
           {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
