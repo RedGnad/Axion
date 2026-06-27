@@ -1521,7 +1521,7 @@ function Join() {
   };
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-5"
+      className="reveal rounded-xl border border-line bg-panel/70 p-6"
       style={{ animationDelay: "260ms" }}
     >
       <SectionTitle
@@ -1538,152 +1538,134 @@ function Join() {
         }
       />
       <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Any agent that answers one small contract can race. It is hired with
-        <code className="mx-1 text-under">
-          {"{spot, deadlineSeconds, recentVol}"}
-        </code>
-        and returns
-        <code className="mx-1 text-under">{"{prediction, rationale}"}</code>.
-        The arena{" "}
-        <b className="text-ink">pays it every round it&apos;s hired</b> and
-        ranks it on-chain. Beat Slicer, Tanker and Wizord to top the standings.
+        Any CAP agent can compete. It&apos;s{" "}
+        <b className="text-ink">hired in USDC every round</b> it races and ranked
+        on-chain. Beat Slicer, Tanker &amp; Wizord to top the board.
       </p>
-      {/* In-product, instant, FREE contract check — no terminal. Paste a sample of your agent's output. */}
-      <div className="mt-3 rounded-md border border-line bg-panel2/40 p-3">
+
+      {/* The contract — codes on their own lines so they breathe (separate concept from code). */}
+      <div className="mt-5 rounded-lg border border-line bg-panel2/40 p-4">
         <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-          check your agent · free · instant
+          the contract
         </div>
-        <p className="mt-1 text-[11px] leading-relaxed text-dim">
-          It must return exactly <code className="text-under">{"{prediction, rationale}"}</code> as JSON,
-          or it&apos;s dropped from the grid. Paste a sample of what your agent returns:
+        <p className="mt-2 text-[12px] leading-relaxed text-dim">
+          Each round, the arena hires your agent with:
         </p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <input
-            value={sample}
-            onChange={(e) => { setSample(e.target.value); setVres(null); }}
-            placeholder={'{"prediction": 1.37, "rationale": "calm tape, tight band"}'}
-            className="min-w-0 flex-1 rounded-lg border border-line bg-panel px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
-          />
-          <button
-            onClick={check}
-            disabled={checking || !sample.trim()}
-            className="rounded-lg border border-volt/50 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
-          >
-            {checking ? "checking…" : "check"}
-          </button>
+        <div className="mt-1.5 rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">
+          {"{ spot, deadlineSeconds, recentVol }"}
         </div>
-        {vres ? (
-          <div className="mt-2 font-mono text-[11px]" style={{ color: vres.ok ? "var(--color-under)" : "var(--color-over)" }}>
-            {vres.ok
-              ? `✓ valid — prediction $${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.`
-              : `✗ ${vres.reason}`}
+        <p className="mt-2.5 text-[12px] leading-relaxed text-dim">
+          and it must reply with <b className="text-ink">exactly</b>:
+        </p>
+        <div className="mt-1.5 rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">
+          {"{ prediction, rationale }"}
+        </div>
+        <details className="group mt-3">
+          <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
+            <span className="text-volt">▸</span> no agent yet? start from our template
+          </summary>
+          <div className="mt-3 space-y-3 border-l border-line pl-4">
+            <Step n={1} title={<>Get the template <span className="text-dim">(Node 18+)</span></>}>
+              <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
+            </Step>
+            <Step n={2} title={<>Watch it forecast once. <b className="text-ink">No keys, no USDC.</b></>}>
+              <CopyCmd cmd="npm run competitor:preview" />
+            </Step>
+            <Step n={3} title={<><b className="text-volt">The actual work:</b> open <code className="text-under">src/arena/competitor.ts</code> and rewrite <code className="text-under">estimate()</code> with your own data and logic.</>} />
+            <Step n={4} title={<>Add your CROO key to <code className="text-under">.env</code>, then go live.</>}>
+              <CopyCmd cmd="npm run competitor" />
+            </Step>
           </div>
-        ) : null}
+        </details>
+      </div>
+      {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
+      <div className="mt-7">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-volt/40 font-display text-[12px] text-volt">1</span>
+          <span className="font-display text-[15px] uppercase tracking-wide text-ink">Check it works</span>
+          <span className="font-mono text-[9px] uppercase tracking-wider text-dim">free · instant</span>
+        </div>
+        <div className="mt-2 pl-8">
+          <p className="text-[12px] leading-relaxed text-dim">Paste a sample of what your agent returns:</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              value={sample}
+              onChange={(e) => { setSample(e.target.value); setVres(null); }}
+              placeholder={'{"prediction": 1.37, "rationale": "calm tape"}'}
+              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
+            />
+            <button
+              onClick={check}
+              disabled={checking || !sample.trim()}
+              className="rounded-lg border border-volt/50 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
+            >
+              {checking ? "checking…" : "check"}
+            </button>
+          </div>
+          {vres ? (
+            vres.ok ? (
+              <div className="mt-2 font-mono text-[11px] text-under">
+                ✓ valid — prediction ${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.
+              </div>
+            ) : (
+              <div
+                className="mt-2 rounded-md border px-3 py-2"
+                style={{ borderColor: "color-mix(in srgb, var(--color-over) 40%, transparent)", background: "color-mix(in srgb, var(--color-over) 6%, transparent)" }}
+              >
+                <div className="font-mono text-[11px]" style={{ color: "var(--color-over)" }}>✗ {vres.reason}</div>
+                <div className="mt-1 text-[11px] leading-relaxed text-dim">
+                  Fix what your agent returns <b className="text-ink">in your backend code</b>, redeploy it,
+                  then check again. Your serviceId never changes.
+                </div>
+              </div>
+            )
+          ) : null}
+        </div>
       </div>
 
-      {/* Primary path: you already have a CAP agent, just paste its serviceId. No clone. */}
-      <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.03] p-4">
-        <div className="font-display text-[15px] uppercase tracking-wide text-ink">
-          Already have a CAP agent?
+      {/* STEP 2 — join (paste serviceId). */}
+      <div className="mt-7">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-volt/40 font-display text-[12px] text-volt">2</span>
+          <span className="font-display text-[15px] uppercase tracking-wide text-ink">Join the grid</span>
         </div>
-        <p className="mt-1 text-[12px] leading-relaxed text-dim">
-          Make it answer the contract above, register it on{" "}
-          <a
-            href={CROO_DASHBOARD}
-            target="_blank"
-            rel="noopener"
-            className="text-under hover:underline"
-          >
-            CROO ↗
-          </a>
-          , then drop its serviceId below.{" "}
-          <b className="text-ink">We fund your first race.</b>
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <input
-            value={svc}
-            onChange={(e) => setSvc(e.target.value)}
-            placeholder="serviceId (uuid)"
-            className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40"
-          />
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="name"
-            className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40"
-          />
-          <button
-            onClick={submit}
-            className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110"
-          >
-            Join the grid
-          </button>
-        </div>
-        {msg ? (
-          <div
-            className="mt-2 font-mono text-[11px]"
-            style={{
-              color: msg.ok ? "var(--color-under)" : "var(--color-over)",
-            }}
-          >
-            {msg.text}
+        <div className="mt-2 pl-8">
+          <p className="text-[12px] leading-relaxed text-dim">
+            Register your agent on{" "}
+            <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a>, then drop its serviceId. <b className="text-ink">We fund your first race.</b>
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              value={svc}
+              onChange={(e) => setSvc(e.target.value)}
+              placeholder="serviceId (uuid)"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40"
+            />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="name"
+              className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40"
+            />
+            <button
+              onClick={submit}
+              className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110"
+            >
+              Join
+            </button>
           </div>
-        ) : null}
+          {msg ? (
+            <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}>
+              {msg.text}
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {/* Secondary path (progressive disclosure): no agent yet, start from our template. */}
-      <details className="mt-3 group">
-        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> No agent yet? Start from our
-          template
-        </summary>
-        <div className="mt-3 space-y-3 border-l border-line pl-4">
-          <Step
-            n={1}
-            title={
-              <>
-                Get the template <span className="text-dim">(Node 18+)</span>
-              </>
-            }
-          >
-            <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
-          </Step>
-          <Step
-            n={2}
-            title={
-              <>
-                Watch it forecast once.{" "}
-                <b className="text-ink">No keys, no USDC.</b>
-              </>
-            }
-          >
-            <CopyCmd cmd="npm run competitor:preview" />
-          </Step>
-          <Step
-            n={3}
-            title={
-              <>
-                <b className="text-volt">This is the actual work.</b> Open{" "}
-                <code className="text-under">src/arena/competitor.ts</code> and
-                rewrite the <code className="text-under">estimate()</code>{" "}
-                function with your own data and logic. Make it good.
-              </>
-            }
-          />
-          <Step
-            n={4}
-            title={
-              <>
-                Add your CROO key to <code className="text-under">.env</code>,
-                then go live and start getting hired.
-              </>
-            }
-          >
-            <CopyCmd cmd="npm run competitor" />
-          </Step>
-          <Step n={5} title={<>Paste the serviceId above.</>} />
-        </div>
-      </details>
+      <p className="mt-7 border-t border-line pt-4 text-[11px] leading-relaxed text-dim">
+        Dropped later for a bad response? Fix it in your backend → redeploy →
+        re-check above → re-join. Your serviceId stays the same.
+      </p>
     </section>
   );
 }
