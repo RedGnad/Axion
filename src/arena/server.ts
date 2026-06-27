@@ -796,26 +796,31 @@ async function main(): Promise<void> {
       req.on('data', (c) => { body += c; if (body.length > 2000) req.destroy(); });
       req.on('end', () => {
         try {
-          const { agentId, visitorId } = JSON.parse(body || '{}') as { agentId?: string; visitorId?: string };
+          const { agentId, visitorId, cancel } = JSON.parse(body || '{}') as { agentId?: string; visitorId?: string; cancel?: boolean };
           if (!visitorId || typeof visitorId !== 'string' || visitorId.length > 64) return reply(400, { error: 'visitorId required' });
-          if (!agentId) return reply(400, { error: 'agentId required' });
           const r = state.round;
-          const live = r && (r.phase === 'open' || r.phase === 'betting');
-          if (live) {
-            // Predict the CURRENT race.
-            if (!r!.competitors.some((c) => c.id === agentId)) return reply(400, { error: 'agentId must be a racer in this round' });
-            const arr = predictPending.get(r!.id) ?? [];
-            if (arr.some((g) => g.visitorId === visitorId)) return reply(409, { error: 'already predicted this race' });
-            arr.push({ agentId, visitorId });
-            predictPending.set(r!.id, arr);
+          const live = !!r && (r.phase === 'open' || r.phase === 'betting');
+          // The bucket for this race: the live round's, or the next-race bucket while idle.
+          let bucket: { agentId: string; visitorId: string }[];
+          if (live) { bucket = predictPending.get(r!.id) ?? []; predictPending.set(r!.id, bucket); }
+          else bucket = nextPredictPending;
+          const idx = bucket.findIndex((g) => g.visitorId === visitorId);
+          if (cancel) {
+            // Cancel my vote (free prediction only; never touches a placed USDC bet).
+            if (idx >= 0) { bucket.splice(idx, 1); state.predictStats.total = Math.max(0, state.predictStats.total - 1); }
+            saveHistory(); broadcast();
+            return reply(202, { ok: true, predictStats: state.predictStats });
+          }
+          if (!agentId) return reply(400, { error: 'agentId required' });
+          const validIds = live ? r!.competitors.map((c) => c.id) : (state.roster ?? []).map((a) => a.id);
+          if (!validIds.includes(agentId)) return reply(400, { error: 'agentId not in the race' });
+          if (idx >= 0) {
+            bucket[idx].agentId = agentId; // CHANGE my pick (one prediction per visitor; no double-count)
           } else {
-            // Idle gap → predict the NEXT race (from the published roster). Migrated in at round open.
-            if (!(state.roster ?? []).some((a) => a.id === agentId)) return reply(400, { error: 'agentId must be in the next-race roster' });
-            if (nextPredictPending.some((g) => g.visitorId === visitorId)) return reply(409, { error: 'already predicted the next race' });
-            nextPredictPending.push({ agentId, visitorId });
+            bucket.push({ agentId, visitorId });
+            state.predictStats.total++;
           }
           if (!predictVisitors.has(visitorId)) { predictVisitors.add(visitorId); state.predictStats.visitors++; }
-          state.predictStats.total++;
           saveHistory(); // persist the tally (history blob carries predictStats)
           broadcast();
           reply(202, { ok: true, predictStats: state.predictStats });

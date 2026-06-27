@@ -98,13 +98,28 @@ export function visitorId(): string {
   return id;
 }
 
-/** Record a free guest prediction (current race if live, else the NEXT race). Server dedupes by visitor. */
+/** Set/CHANGE the free guest prediction (current race if live, else the NEXT race). One per visitor:
+ *  calling again with a different agent replaces it (the server upserts, no double-count). */
 export async function postPredict(agentId: string): Promise<boolean> {
   try {
     const r = await fetch(`${RUNNER_URL}/api/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agentId, visitorId: visitorId() }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Cancel my free prediction for the current/next race (never affects a placed USDC bet). */
+export async function cancelPredict(): Promise<boolean> {
+  try {
+    const r = await fetch(`${RUNNER_URL}/api/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancel: true, visitorId: visitorId() }),
     });
     return r.ok;
   } catch {

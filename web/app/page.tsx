@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   useArena,
   postPredict,
+  cancelPredict,
   RUNNER_URL,
   type ArenaState,
 } from "@/lib/runner";
@@ -59,7 +60,6 @@ export default function Page() {
                 <Race round={state?.round ?? null} />
               </div>
             </div>
-            <AgentCards state={state} />
             <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
               <ToteBoard state={state} />
             </div>
@@ -553,36 +553,45 @@ function RaceControl({
   );
 }
 
+/** The single agent panel: see each racer (call + why it called + who it paid), back it FREE (one tap,
+ *  changeable, cancelable), and optionally put USDC on your pick. Merges the old "racers" cards +
+ *  free grid + USDC widget so the agents appear in ONE place, not three. */
 function ToteBoard({ state }: { state: ArenaState | null }) {
   const r = state?.round;
   const comps = r?.competitors ?? [];
+  const history = state?.history ?? [];
   const [pick, setPick] = useState<{
     round: string; // a real round id (live pick) or "next" (placed during the idle gap)
     agentId: string;
     afterRound?: string; // for a "next" pick: the settled round showing when picked (don't resolve against it)
+    committed?: boolean; // a real USDC bet was placed on this pick → locked (can't change/cancel)
     resolved?: boolean;
     correct?: boolean;
   } | null>(null);
+  const [open, setOpen] = useState<string | null>(null); // which agent's "why" is expanded
   const [rec, setRec] = useState<{ c: number; t: number }>({ c: 0, t: 0 });
   useEffect(() => {
     try {
-      setRec(
-        JSON.parse(localStorage.getItem("axion_predict") || '{"c":0,"t":0}'),
-      );
+      setRec(JSON.parse(localStorage.getItem("axion_predict") || '{"c":0,"t":0}'));
     } catch {}
   }, []);
 
   const live = r?.phase === "open" || r?.phase === "betting"; // current race accepts predictions
   const roster = state?.roster ?? [];
   const idlePickable = !live && roster.length > 0; // between races → predict the NEXT race
-  // The cards to show: the live racers, or (idle) the upcoming roster.
   const cards: { id: string; label: string; estimate?: number; isWinner?: boolean; dq?: boolean }[] =
     live ? comps : roster.map((a) => ({ id: a.id, label: a.label }));
 
+  // Expand data (the old "racers" content): rationale/latency from the round (live or last settled),
+  // hires from the matching settled record. Honest: "this race" only when the shown round is in history.
+  const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
+  const thisRound = history.find((h) => h.id === r?.id);
+  const hiresSrc = thisRound ?? history[0];
+  const hiresLabel = thisRound ? "paid this race" : history[0] ? "paid last race" : "";
+  const detail = (id: string) => comps.find((x) => x.id === id);
+
   useEffect(() => {
     if (!r || r.phase !== "settled" || !pick || pick.resolved) return;
-    // A live pick resolves when its round settles; a "next" pick resolves when a DIFFERENT round settles
-    // (not the one that was already on screen when it was placed).
     const applies = pick.round === r.id || (pick.round === "next" && r.id !== pick.afterRound);
     if (!applies) return;
     const won = (r.competitors ?? []).some((c) => c.id === pick.agentId && c.isWinner);
@@ -594,123 +603,132 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     setPick({ ...pick, resolved: true, correct: won });
   }, [r?.phase, r?.id, pick, rec]);
 
-  const mine = !!pick && (pick.round === "next" || (!!r && pick.round === r.id));
+  const active = !!pick && !pick.resolved && (pick.round === "next" || (!!r && pick.round === r.id));
   const choose = (agentId: string) => {
-    if (mine && !pick!.resolved) return; // one pick per race
-    if (live && r) {
-      setPick({ round: r.id, agentId });
-      void postPredict(agentId);
-    } else if (idlePickable) {
-      setPick({ round: "next", agentId, afterRound: r?.id });
-      void postPredict(agentId);
-    }
+    if (pick?.committed || pick?.resolved) return; // locked once you bet real money / race is over
+    if (active && pick!.agentId === agentId) { setPick(null); void cancelPredict(); return; } // tap again = cancel
+    if (live && r) { setPick({ round: r.id, agentId }); void postPredict(agentId); } // pick or change
+    else if (idlePickable) { setPick({ round: "next", agentId, afterRound: r?.id }); void postPredict(agentId); }
   };
   const ps = state?.predictStats;
-  const myLabel = mine ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId) : "";
+  const myLabel = active ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId) : "";
 
   return (
     <div>
-      {/* Guest mode — the no-wallet on-ramp, made the loud thing. The bet is on the AGENT. */}
+      {/* Free no-wallet on-ramp; USDC is an optional upgrade on the SAME pick (one decision). */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-volt/30 bg-volt/[0.04] px-4 py-3">
         <div>
-          <div className="font-display text-lg uppercase tracking-wide text-volt">
-            Back the winner. Free.
-          </div>
+          <div className="font-display text-lg uppercase tracking-wide text-volt">Back the winner. Free.</div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
             no wallet · no signup ·{" "}
-            {live ? (
-              <b className="text-ink">betting open now</b>
-            ) : idlePickable ? (
-              <b className="text-ink">pick the next race&apos;s winner</b>
-            ) : (
-              "one tap when a race is live"
-            )}
+            {live ? <b className="text-ink">betting open now</b> : idlePickable ? <b className="text-ink">pick the next race&apos;s winner</b> : "one tap when a race is live"}
           </div>
         </div>
         {ps && ps.total > 0 ? (
           <div className="text-right font-mono text-[11px] text-dim">
             <b className="text-ink tnum">{ps.total.toLocaleString()}</b> picks ·{" "}
-            <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b>{" "}
-            visitors ·{" "}
-            <b className="text-volt tnum">
-              {ps.total ? Math.round((100 * ps.correct) / ps.total) : 0}%
-            </b>{" "}
-            called right
+            <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b> visitors ·{" "}
+            <b className="text-volt tnum">{ps.total ? Math.round((100 * ps.correct) / ps.total) : 0}%</b> called right
           </div>
         ) : null}
       </div>
       {cards.length ? (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {cards.map((c) => {
             const won = !!c.isWinner;
-            const picked = mine && pick!.agentId === c.id;
-            const pickable = !mine && (live ? !c.dq : idlePickable); // tappable now (live race or next-race pre-pick)
-            const boxed = pickable || picked || won;
+            const isPick = active && pick!.agentId === c.id;
+            const committed = isPick && !!pick!.committed;
+            const tappable = !pick?.committed && !pick?.resolved && (live ? !c.dq : idlePickable); // pick/change/cancel
+            const boxed = tappable || isPick || won;
             const col = "var(--color-volt)";
+            const isOpen = open === c.id;
+            const d = detail(c.id);
+            const hires = (hiresSrc?.edges ?? []).filter((e) => e.competitor === c.id);
             return (
-              <button
+              <div
                 key={c.id}
-                onClick={() => choose(c.id)}
-                disabled={!pickable && !picked}
-                className={cn(
-                  "relative rounded-2xl px-3 py-5 text-center transition-transform",
-                  boxed ? "border-2" : "border border-line",
-                  pickable ? "cursor-pointer hover:-translate-y-0.5" : "cursor-default",
-                  c.dq && "opacity-50",
-                )}
+                className={cn("overflow-hidden rounded-2xl border bg-panel2/30 transition", boxed ? "border-2" : "border border-line", c.dq && "opacity-50")}
                 style={{
-                  borderColor: picked ? "#fff" : won ? "var(--color-gold)" : pickable ? col : undefined,
+                  borderColor: isPick ? "#fff" : won ? "var(--color-gold)" : tappable ? col : undefined,
                   background: boxed ? `color-mix(in srgb, ${won ? "var(--color-gold)" : col} 12%, transparent)` : "transparent",
-                  boxShadow: pickable ? `0 0 22px ${col}55` : won ? "0 0 22px rgba(255,200,60,.3)" : "none",
+                  boxShadow: tappable && !isPick ? `0 0 18px ${col}44` : won ? "0 0 18px rgba(255,200,60,.3)" : "none",
                 }}
               >
-                <span className="mx-auto mb-2 block h-3 w-3 rounded-sm" style={{ background: livery(c.id) }} />
-                <div className="font-display text-lg uppercase leading-none tracking-wide" style={{ opacity: boxed ? 1 : 0.75 }}>
-                  {c.label}
-                </div>
-                <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-                  {live ? (c.estimate != null ? <>calls {usd(c.estimate)}</> : c.dq ? "cut this race" : "forecasting…") : "races next"}
-                </div>
-                <div
-                  className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
-                  style={{ color: won ? "var(--color-gold)" : picked ? "#fff" : pickable ? col : "var(--color-dim)" }}
+                {/* BACK face — tap to back free (tap again to cancel, tap another to change) */}
+                <button
+                  onClick={() => choose(c.id)}
+                  disabled={!tappable && !isPick}
+                  className={cn("w-full px-3 py-4 text-center", tappable ? "cursor-pointer" : "cursor-default")}
                 >
-                  {won ? "🏆 won" : picked ? "✓ your pick" : pickable ? (live ? "▸ back" : "▸ back · next race") : "opens at race start"}
-                </div>
-              </button>
+                  <span className="mx-auto mb-2 block h-3 w-3 rounded-sm" style={{ background: livery(c.id) }} />
+                  <div className="font-display text-lg uppercase leading-none tracking-wide" style={{ opacity: boxed ? 1 : 0.78 }}>{c.label}</div>
+                  <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                    {live ? (c.estimate != null ? <>calls {usd(c.estimate)}</> : c.dq ? "cut this race" : "forecasting…") : "races next"}
+                  </div>
+                  <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
+                    style={{ color: won ? "var(--color-gold)" : isPick ? "#fff" : tappable ? col : "var(--color-dim)" }}>
+                    {won ? "🏆 won" : committed ? "✓ USDC in" : isPick ? "✓ your pick · tap to cancel" : tappable ? (live ? "▸ back" : "▸ back · next") : "opens at race start"}
+                  </div>
+                </button>
+                {/* WHY toggle — the old "racers" disclosure, now per card */}
+                <button onClick={() => setOpen(isOpen ? null : c.id)} className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[9px] uppercase tracking-wider text-dim hover:text-ink">
+                  why this call {isOpen ? "▾" : "▸"}
+                </button>
+                {isOpen ? (
+                  <div className="space-y-2.5 border-t border-line/40 px-3.5 py-3 text-left">
+                    <div>
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-dim">why this call</div>
+                      {d?.rationale ? <p className="mt-1 text-[12px] leading-relaxed text-ink/85">{d.rationale}</p> : <p className="mt-1 text-[12px] text-dim">no recent call yet.</p>}
+                    </div>
+                    {d?.dataMs != null ? <div className="font-mono text-[10px] text-dim">data arrived in <b className="text-ink">{(d.dataMs / 1000).toFixed(1)}s</b></div> : null}
+                    {hires.length ? (
+                      <div>
+                        <div className="font-mono text-[9px] uppercase tracking-wider text-dim">{cap(c.id)} {hiresLabel}</div>
+                        <div className="mt-1 space-y-1">
+                          {hires.map((e, i) => (
+                            <div key={i} className="flex items-center gap-2 text-[11px]">
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.ours ? "var(--color-dim)" : "var(--color-volt)" }} title={e.ours ? "our data agent" : "independent data agent"} />
+                              <span className="flex-1 truncate text-ink/80">{e.label}</span>
+                              {e.payTxHash ? <a href={BASESCAN + e.payTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">pay ↗</a> : null}
+                              {e.clearTxHash ? <a href={BASESCAN + e.clearTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">settle ↗</a> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
       ) : (
-        <div className="mt-4 py-6 text-center font-mono text-sm text-dim">
-          racers line up when a race starts
-        </div>
+        <div className="mt-4 py-6 text-center font-mono text-sm text-dim">racers line up when a race starts</div>
       )}
       <div className="mt-3 text-center font-mono text-[12px] text-dim">
-        {mine && pick!.resolved ? (
-          <span
-            className="text-base"
-            style={{ color: pick!.correct ? "var(--color-under)" : "var(--color-over)" }}
-          >
-            {pick!.correct ? "✓ you backed the winner" : "✗ your agent lost. try the next race."}
+        {pick?.resolved ? (
+          <span className="text-base" style={{ color: pick.correct ? "var(--color-under)" : "var(--color-over)" }}>
+            {pick.correct ? "✓ you backed the winner" : "✗ your agent lost. try the next race."}
           </span>
-        ) : mine ? (
+        ) : active ? (
           <>
-            you backed <b className="text-ink">{myLabel}</b>
-            {pick!.round === "next" ? " for the next race" : ""}. waiting for the race to settle…
+            you backed <b className="text-ink">{myLabel}</b>{pick!.round === "next" ? " for the next race" : ""}.{" "}
+            {pick!.committed ? "USDC is in — locked." : "tap another to change, or it again to cancel."}
           </>
         ) : live ? (
           <span className="text-ink">tap the agent you think wins. it&apos;s free.</span>
         ) : idlePickable ? (
           <span className="text-ink">back the next race&apos;s winner. it&apos;s free.</span>
         ) : null}
-        {rec.t > 0 ? (
-          <span className="ml-2 text-volt">
-            your picks {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)
-          </span>
-        ) : null}
+        {rec.t > 0 ? <span className="ml-2 text-volt">your picks {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
       </div>
-      <UsdcBet state={state} pickedAgent={mine ? pick!.agentId : null} pickedLabel={myLabel} />
+      <UsdcBet
+        state={state}
+        pickedAgent={active ? pick!.agentId : null}
+        pickedLabel={myLabel}
+        committed={!!pick?.committed}
+        onPlaced={() => setPick((p) => (p ? { ...p, committed: true } : p))}
+      />
       <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
         Each agent commits its forecast on-chain. The winner is whoever lands closest to the live Pyth ETH/USD move. Nobody controls the outcome.
       </p>
@@ -720,7 +738,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
 
 /** Custodial-disclosed real USDC bet from an EOA wallet (only shown if the house is configured).
  *  Wallet via wagmi v2 (EIP-6963 multi-wallet discovery) — no window.ethereum collision. */
-function UsdcBet({ state, pickedAgent, pickedLabel }: { state: ArenaState | null; pickedAgent: string | null; pickedLabel: string }) {
+function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { state: ArenaState | null; pickedAgent: string | null; pickedLabel: string; committed: boolean; onPlaced: () => void }) {
   const ub = state?.usdcBet;
   const r = state?.round;
   const live = r?.phase === "open" || r?.phase === "betting"; // bet through hiring + the race (odds decay over time)
@@ -760,12 +778,10 @@ function UsdcBet({ state, pickedAgent, pickedLabel }: { state: ArenaState | null
       });
       setMsg({ ok: true, text: "tx sent — verifying on-chain…" });
       const res = await postUsdcBet(r.id, agentId, amt, address, txHash);
+      if (res.ok) onPlaced(); // lock the pick: real money is down on this agent
       setMsg(
         res.ok
-          ? {
-              ok: true,
-              text: `✓ ${amt} USDC on ${label} — paid out if it wins`,
-            }
+          ? { ok: true, text: `✓ ${amt} USDC on ${label}. paid out if it wins.` }
           : { ok: false, text: `✗ ${res.error}` },
       );
     } catch (e) {
@@ -866,19 +882,25 @@ function UsdcBet({ state, pickedAgent, pickedLabel }: { state: ArenaState | null
               <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-dim">pool ${poolOf(pickedAgent)}</span>
             </div>
           ) : null}
-          <button
-            disabled={!live || busy || !pickedAgent}
-            onClick={() => pickedAgent && bet(pickedAgent)}
-            className="mt-3 w-full rounded-lg bg-volt py-3 font-display text-base uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
-          >
-            {busy
-              ? "placing…"
-              : !live
-                ? "opens when a race is live"
-                : pickedAgent
-                  ? `bet ${Math.min(Math.max(0.01, amount), max)} USDC on ${pickedLabel}`
-                  : "tap an agent above to back it"}
-          </button>
+          {committed ? (
+            <div className="mt-3 w-full rounded-lg border-2 border-volt/50 bg-volt/[0.06] py-3 text-center font-display text-base uppercase tracking-wide text-volt">
+              ✓ USDC placed on {pickedLabel}
+            </div>
+          ) : (
+            <button
+              disabled={!live || busy || !pickedAgent}
+              onClick={() => pickedAgent && bet(pickedAgent)}
+              className="mt-3 w-full rounded-lg bg-volt py-3 font-display text-base uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
+            >
+              {busy
+                ? "placing…"
+                : !live
+                  ? "opens when a race is live"
+                  : pickedAgent
+                    ? `bet ${Math.min(Math.max(0.01, amount), max)} USDC on ${pickedLabel}`
+                    : "tap an agent above to back it"}
+            </button>
+          )}
         </>
       )}
 
@@ -946,172 +968,6 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 }
 
 const BASESCAN = "https://basescan.org/tx/";
-
-/** LAYER 2 (progressive disclosure) — tap an agent to reveal WHY it called the line and WHO it paid.
- *  Honest by construction: the rationale is the agent's own (live), and the hires are labelled
- *  "this race" only when the shown round is the one in history; otherwise "last race". A discovered
- *  provider is NEVER shown as paid — only real on-chain hires (with BaseScan tx) appear here. */
-function AgentCards({ state }: { state: ArenaState | null }) {
-  const r = state?.round;
-  const comps = r?.competitors ?? [];
-  const history = state?.history ?? [];
-  const [open, setOpen] = useState<string | null>(null);
-  if (!comps.length) return null;
-  const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
-  // Match the shown round to a settled record so hires read as "this race"; else fall back to last race.
-  const thisRound = history.find((h) => h.id === r?.id);
-  const hiresSrc = thisRound ?? history[0];
-  const hiresLabel = thisRound
-    ? "paid this race"
-    : history[0]
-      ? "paid last race"
-      : "";
-
-  return (
-    <div className="border-t border-line px-5 py-5">
-      <SectionTitle
-        title="The racers"
-        right={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
-            tap an agent — see why it called the line
-          </span>
-        }
-      />
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {comps.map((c) => {
-          const isOpen = open === c.id;
-          const status = c.dq
-            ? "too slow, cut this race"
-            : c.isWinner
-              ? "🏆 won this race"
-              : c.estimate != null
-                ? "called the line"
-                : "hiring data…";
-          const hires = (hiresSrc?.edges ?? []).filter(
-            (e) => e.competitor === c.id,
-          );
-          return (
-            <div
-              key={c.id}
-              className={cn(
-                "rounded-xl border bg-panel2/40 transition",
-                isOpen ? "border-volt/50" : "border-line",
-                c.dq && "opacity-60",
-              )}
-            >
-              <button
-                onClick={() => setOpen(isOpen ? null : c.id)}
-                className="flex w-full items-center gap-3 px-3.5 py-3 text-left"
-              >
-                <span
-                  className="h-3.5 w-3.5 shrink-0 rounded-sm"
-                  style={{ background: livery(c.id) }}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-sm uppercase tracking-wide">
-                    {c.label}
-                  </span>
-                  <span className="block font-mono text-[10px] uppercase tracking-wider text-dim">
-                    {status}
-                  </span>
-                </span>
-                {c.estimate != null ? (
-                  <span
-                    className="shrink-0 font-mono text-[12px] tnum text-volt"
-                    title="this agent's predicted move"
-                  >
-                    {usd(c.estimate)}
-                  </span>
-                ) : null}
-                <span className="shrink-0 font-mono text-[10px] text-dim">
-                  {isOpen ? "▾" : "▸"}
-                </span>
-              </button>
-              {isOpen ? (
-                <div className="space-y-3 border-t border-line/60 px-3.5 py-3">
-                  <div>
-                    <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
-                      why this call
-                    </div>
-                    {c.rationale ? (
-                      <p className="mt-1 text-[12px] leading-relaxed text-ink/85">
-                        {c.rationale}
-                      </p>
-                    ) : (
-                      <p className="mt-1 text-[12px] text-dim">
-                        still working. its reasoning appears once it is in.
-                      </p>
-                    )}
-                  </div>
-                  {c.dataMs != null ? (
-                    <div className="font-mono text-[10px] text-dim">
-                      data arrived in{" "}
-                      <b className="text-ink">
-                        {(c.dataMs / 1000).toFixed(1)}s
-                      </b>
-                    </div>
-                  ) : null}
-                  {hires.length ? (
-                    <div>
-                      <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
-                        {cap(c.id)} {hiresLabel}
-                      </div>
-                      <div className="mt-1 space-y-1">
-                        {hires.map((e, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center gap-2 text-[11px]"
-                          >
-                            <span
-                              className="h-1.5 w-1.5 shrink-0 rounded-full"
-                              style={{
-                                background: e.ours
-                                  ? "var(--color-dim)"
-                                  : "var(--color-volt)",
-                              }}
-                              title={
-                                e.ours
-                                  ? "our data agent"
-                                  : "independent data agent"
-                              }
-                            />
-                            <span className="flex-1 truncate text-ink/80">
-                              {e.label}
-                            </span>
-                            {e.payTxHash ? (
-                              <a
-                                href={BASESCAN + e.payTxHash}
-                                target="_blank"
-                                rel="noopener"
-                                className="shrink-0 font-mono text-[10px] text-under hover:underline"
-                              >
-                                pay ↗
-                              </a>
-                            ) : null}
-                            {e.clearTxHash ? (
-                              <a
-                                href={BASESCAN + e.clearTxHash}
-                                target="_blank"
-                                rel="noopener"
-                                className="shrink-0 font-mono text-[10px] text-under hover:underline"
-                              >
-                                settle ↗
-                              </a>
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
