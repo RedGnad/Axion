@@ -94,3 +94,30 @@ export async function topProviders(n = 6): Promise<DiscoveredProvider[]> {
 export async function newCandidates(knownServiceIds: Set<string>): Promise<DiscoveredProvider[]> {
   return (await discoverProviders()).filter((p) => !knownServiceIds.has(p.serviceId));
 }
+
+// ── LIVE SOURCING: agents pick their data providers from the evolving store (not a frozen list). ──
+/** Match a provider NAME to a capability, so a persona can source NEW providers of the right kind. */
+const CAP_KEYWORDS: Record<string, RegExp> = {
+  sentiment: /fear|greed|sentiment|social|mood/i,
+  'smart-money': /smart.?money|top.?trader|whale|inflow|netflow|exchange.?flow|flow/i,
+  valuation: /valuation|ahr|mvrv|nupl|rainbow|fair.?value|indicator/i,
+  'dca-signal': /dca|accumulat|bottom|buy.?signal/i,
+  'token-price': /price|quote|spot/i,
+  gas: /gas|\bfees?\b/i,
+};
+
+// In-memory learning cache (resets on restart → re-probes occasionally, bounded). Curated seeds are
+// NEVER blacklisted (protected in loop.ts); only unproven dynamic providers land here.
+const failedProviders = new Set<string>();
+const triedProviders = new Set<string>();
+export function markProviderFailed(serviceId: string): void { if (serviceId) failedProviders.add(serviceId); }
+export function markProviderTried(serviceId: string): void { if (serviceId) triedProviders.add(serviceId); }
+export function isProviderUntried(serviceId: string): boolean { return !!serviceId && !triedProviders.has(serviceId); }
+
+/** Live candidates for a capability: store providers whose name matches the capability, under the
+ *  price cap, not previously failed, ranked by real 7d demand (already sorted by discoverProviders). */
+export async function candidatesForCapability(capability: string): Promise<DiscoveredProvider[]> {
+  const kw = CAP_KEYWORDS[capability];
+  if (!kw) return [];
+  return (await discoverProviders()).filter((p) => kw.test(p.name) && !failedProviders.has(p.serviceId));
+}

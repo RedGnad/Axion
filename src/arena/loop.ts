@@ -1,7 +1,8 @@
 import { AgentClient } from '@croo-network/sdk';
 import { EventBus } from '../events.js';
 import { Orchestrator, type HireResult } from '../orchestrator.js';
-import { getDataAgent } from '../roster.js';
+import { getDataAgent, DATA_AGENTS, type RosterEntry } from '../roster.js';
+import { candidatesForCapability, markProviderFailed, markProviderTried, isProviderUntried } from './discovery.js';
 import { fetchPythPrice } from './oracle.js';
 import { PERSONALITIES, type Personality } from './personalities.js';
 import { forecast, type DataInput } from './forecast.js';
@@ -163,6 +164,25 @@ function buildRequirements(capability: string): string {
   }
 }
 
+// LIVE SOURCING (env-gated): agents pick their data providers from the EVOLVING store instead of a
+// frozen list. OFF by default (curated seeds). On, it sources the top-demand provider per capability
+// from the live catalog, with light exploration to qualify new high-demand providers on-chain.
+const LIVE_SOURCING = process.env.ARENA_LIVE_SOURCING === '1';
+const isCuratedSeed = (serviceId: string): boolean => DATA_AGENTS.some((e) => e.serviceId === serviceId);
+
+/** Choose the data provider for a capability: curated seed by default; with live sourcing on, the best
+ *  store provider by real 7d demand, occasionally an untried high-demand newcomer (to qualify it). */
+async function chooseProvider(capability: string): Promise<RosterEntry | null> {
+  const seed = getDataAgent(capability) ?? null;
+  if (!LIVE_SOURCING) return seed;
+  const cands = await candidatesForCapability(capability); // ranked desc by orders7d, not failed
+  if (!cands.length) return seed;
+  const untried = cands.filter((c) => isProviderUntried(c.serviceId) && c.orders7d >= 5);
+  const pick = untried.length && Math.random() < 0.15 ? untried[Math.floor(Math.random() * untried.length)] : cands[0];
+  markProviderTried(pick.serviceId);
+  return { capability, serviceId: pick.serviceId, label: pick.name, ours: false };
+}
+
 /** Estimate for one competitor (local persona or remote open agent). */
 async function play(c: Competitor, ctx: PlayCtx): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   return c.kind === 'local' ? playLocal(c, ctx) : playRemote(c, ctx);
@@ -176,19 +196,26 @@ async function playLocal(
   // Hire the persona's data-agents IN PARALLEL. (The docs warn against concurrent payOrder from one
   // wallet, but in practice the backend tolerates it and parallel is REQUIRED for acceptable latency:
   // sequential doubled the hiring time and stacked slow-provider timeouts → rounds hung ~4-8min.)
-  const services = c.persona.capabilities.map((cap) => getDataAgent(cap)).filter((s): s is NonNullable<typeof s> => !!s);
+  // Source one provider per capability: curated seed by default, or live from the evolving store.
+  const chosen = await Promise.all(c.persona.capabilities.map((cap) => chooseProvider(cap)));
+  const services = chosen.filter((s): s is RosterEntry => !!s);
   const fails: HireFail[] = [];
   const results = await Promise.all(
     services.map(async (service) => {
       const t0 = Date.now();
+      // Known curated seeds use their verified schema; dynamically-sourced agents get zero-input ({}),
+      // which the read-only data feeds accept. A dud just fails (surfaced) and is blacklisted below.
+      const requirements = isCuratedSeed(service.serviceId) ? buildRequirements(service.capability) : '{}';
       try {
-        const hr = await c.orchestrator.hireService(service, buildRequirements(service.capability));
+        const hr = await c.orchestrator.hireService(service, requirements);
         return { hr, latencyMs: Date.now() - t0 }; // time the hire → provider-speed signal
       } catch (err) {
-        // A hire can fail because the arena AA wallet is out of USDC, a provider is offline/slow, or a
-        // negotiation is rejected. Degrade the round, but SURFACE the reason (never swallow silently).
+        // A hire can fail because the wallet is out of USDC, a provider is offline/slow, or it rejects
+        // the schema. Degrade the round, SURFACE the reason, and (for non-seed dynamic picks) blacklist
+        // it so we don't waste USDC retrying a dud — the arena learns which store agents actually work.
         const reason = (err as Error).message || 'unknown error';
         console.warn(`[arena] ${c.id}: hire '${service.capability}' (${service.label}) failed: ${reason}`);
+        if (!isCuratedSeed(service.serviceId)) markProviderFailed(service.serviceId);
         fails.push({ competitor: c.id, label: service.label, reason });
         return null;
       }
@@ -198,7 +225,8 @@ async function playLocal(
   const hires: HireResult[] = ok.map((r) => r.hr);
   const latencyByService = new Map(ok.map((r) => [r.hr.service.serviceId, r.latencyMs]));
 
-  const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: h.deliverable }));
+  // Truncate each deliverable so a dynamically-sourced agent can't flood the forecast LLM with junk.
+  const inputs: DataInput[] = hires.map((h) => ({ label: h.service.label, text: (h.deliverable || '').slice(0, 1200) }));
   const baseline = ctx.recentVol * c.persona.volMultiplier; // calibrated, persona-distinct
   const draft = await forecast(c.persona, ctx.spot, inputs, ctx.horizonSeconds, baseline);
 
