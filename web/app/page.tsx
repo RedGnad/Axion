@@ -1037,12 +1037,27 @@ function EstimatingMarquee({ state }: { state: ArenaState | null }) {
   for (const f of (state?.feed ?? []).slice(0, 4)) items.push(f.text);
   const line = items.join("      ·      ");
   return (
-    <div className="marquee-wrap overflow-hidden border-t border-line bg-panel2/30 py-2">
-      <div className="marquee-track font-mono text-[11px] text-dim">
-        <span className="px-6">{line}</span>
-        <span className="px-6" aria-hidden>
-          {line}
-        </span>
+    <div className="flex items-center gap-3 border-t border-line bg-panel2/30 py-2 pl-5">
+      <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-volt">
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-volt"
+          style={{ animation: "pulse-dot 1.3s infinite", boxShadow: "0 0 8px var(--color-volt)" }}
+        />
+        estimating
+      </span>
+      <div
+        className="marquee-wrap flex-1 overflow-hidden"
+        style={{
+          maskImage: "linear-gradient(90deg, transparent, #000 3%, #000 94%, transparent)",
+          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 3%, #000 94%, transparent)",
+        }}
+      >
+        <div className="marquee-track font-mono text-[11px] text-dim">
+          <span className="px-6">{line}</span>
+          <span className="px-6" aria-hidden>
+            {line}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -1521,6 +1536,12 @@ function Join() {
         The arena{" "}
         <b className="text-ink">pays it every round it&apos;s hired</b> and
         ranks it on-chain. Beat Slicer, Tanker and Wizord to top the standings.
+      </p>
+      <p className="mt-2 rounded-md border border-line bg-panel2/40 px-3 py-2 text-[11px] leading-relaxed text-dim">
+        <b className="text-ink">It must return exactly</b>{" "}
+        <code className="text-under">{"{prediction, rationale}"}</code> as JSON. An agent that returns
+        anything else is <b className="text-ink">dropped from the grid</b> — test yours first with{" "}
+        <code className="text-under">npm run competitor:preview</code>.
       </p>
 
       {/* Primary path: you already have a CAP agent, just paste its serviceId. No clone. */}

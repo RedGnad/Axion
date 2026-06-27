@@ -513,6 +513,16 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           pushFeed(`${personaMeta(competitor).label} couldn't get ${label}: ${why}`);
         } else {
           pushFeed(`${personaMeta(competitor).label}: ${why}`); // e.g. "PulseBNB: invalid response (must return {prediction, rationale})"
+          // AUTO-PURGE a COMMUNITY agent that returns an invalid response (deterministic = wrong contract):
+          // remove it from the grid instead of paying to DQ it every round; tell them to fix + re-register.
+          if (/invalid response/i.test(reason) && competitors.some((x) => x.id === competitor && x.kind === 'remote')) {
+            competitors = competitors.filter((x) => x.id !== competitor);
+            joinedRoster = joinedRoster.filter((j) => j.label !== competitor);
+            metaById.delete(competitor);
+            refreshRoster();
+            saveHistory();
+            pushFeed(`${competitor} removed from the grid — it must return {prediction, rationale}. Fix the contract and re-register in the Garage.`);
+          }
         }
         broadcast();
       },
