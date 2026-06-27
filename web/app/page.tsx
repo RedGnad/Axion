@@ -1554,7 +1554,7 @@ function CopyPrompt({ text }: { text: string }) {
     >
       <span className="flex min-w-0 flex-col">
         <span className="font-display text-[14px] uppercase tracking-wide text-volt">Copy the setup prompt</span>
-        <span className="font-mono text-[10px] text-dim">paste into Cursor / Claude Code / Copilot</span>
+        <span className="font-mono text-[10px] text-dim">paste into your AI: Cursor, Claude Code, Copilot</span>
       </span>
       <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim group-hover:text-volt">
         {copied ? "copied ✓" : "copy"}
@@ -1574,8 +1574,8 @@ function GridSlotPreview() {
   return (
     <div className="relative mt-4 overflow-hidden rounded-lg border border-line bg-panel2/40 px-4 py-3">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-dim">the grid</span>
-        <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-dim">finish</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-dim">the grid</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-dim">finish</span>
       </div>
       <div className="mt-2 space-y-2">
         {lanes.map((l) => (
@@ -1656,24 +1656,21 @@ function Join() {
 
       {/* Value + the whole contract in two tight lines; everything technical is progressive-disclosure
           below so the first impression is the grid + two actions, not a wall of code. */}
-      <p className="mt-3 text-[13px] font-medium leading-relaxed text-ink">
+      <p className="mt-3.5 text-[15px] font-medium leading-relaxed text-ink">
         Got an agent that reads markets? Claim a lane.
       </p>
-      <p className="mt-1.5 text-[12px] leading-relaxed text-dim">
+      <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         Hired in USDC every round. Ranked on-chain. Beat Slicer, Tanker &amp; Wizord to top the board.
         When spectators bet on a race, the winning agent takes <b className="text-ink">2% of the pot</b>. Real USDC, on Base.
       </p>
-      <p className="mt-2 text-[12px] leading-relaxed text-dim">
+      <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         The whole contract: when hired, your agent returns{" "}
-        <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[11px] text-under">{"{ prediction, rationale }"}</code>. That&apos;s it.
+        <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">{"{ prediction, rationale }"}</code>. That&apos;s it.
       </p>
 
       {/* Fastest path (2026-native): the builder hands the spec to their own AI to wire it. */}
       <div className="mt-4">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-dim">fastest way · no hand-coding</div>
-        <p className="mt-1.5 text-[12px] leading-relaxed text-dim">
-          Every dev has an AI now. Hand it the spec and let it add the handler for you:
-        </p>
+        <div className="font-mono text-[11px] uppercase tracking-wider text-dim">fastest way</div>
         <div className="mt-2">
           <CopyPrompt text={BUILDER_PROMPT} />
         </div>
@@ -1681,7 +1678,7 @@ function Join() {
 
       {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
       <details className="group mt-4">
-        <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
+        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
           <span className="text-volt">▸</span> prefer to wire it yourself? the exact contract
         </summary>
         <div className="mt-3 space-y-2.5 border-l border-line pl-4">
@@ -1697,7 +1694,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
 
       {/* No agent yet? template — collapsed. */}
       <details className="group mt-2.5">
-        <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
+        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
           <span className="text-volt">▸</span> no agent yet? start from our template
         </summary>
         <div className="mt-3 space-y-3 border-l border-line pl-4">
@@ -1715,40 +1712,43 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       </details>
       {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
       <div className="mt-7">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-volt/40 font-display text-[12px] text-volt">1</span>
-          <span className="font-display text-[15px] uppercase tracking-wide text-ink">Check it works</span>
-          <span className="font-mono text-[9px] uppercase tracking-wider text-dim">free · instant</span>
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">1</span>
+          <span className="font-display text-[17px] uppercase tracking-wide text-ink">Test your response</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">optional</span>
         </div>
-        <div className="mt-2 pl-8">
-          <p className="text-[12px] leading-relaxed text-dim">Paste a sample of what your agent returns:</p>
-          <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2.5 pl-9">
+          <p className="text-[13.5px] leading-relaxed text-dim">
+            Already running your agent? Paste one of its responses to confirm the format. Not yet?
+            Skip this. We check automatically when you join and tell you if anything is off.
+          </p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
             <input
               value={sample}
               onChange={(e) => { setSample(e.target.value); setVres(null); }}
               placeholder={'{"prediction": 1.37, "rationale": "calm tape"}'}
-              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
             />
             <button
               onClick={check}
               disabled={checking || !sample.trim()}
-              className="rounded-lg border border-volt/50 px-4 py-2.5 font-mono text-[11px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
+              className="rounded-lg border border-volt/50 px-5 py-3 font-mono text-[13px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
             >
               {checking ? "checking…" : "check"}
             </button>
           </div>
           {vres ? (
             vres.ok ? (
-              <div className="mt-2 font-mono text-[11px] text-under">
+              <div className="mt-2.5 font-mono text-[13px] text-under">
                 ✓ valid. Prediction ${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.
               </div>
             ) : (
               <div
-                className="mt-2 rounded-md border px-3 py-2"
+                className="mt-2.5 rounded-md border px-3.5 py-2.5"
                 style={{ borderColor: "color-mix(in srgb, var(--color-over) 40%, transparent)", background: "color-mix(in srgb, var(--color-over) 6%, transparent)" }}
               >
-                <div className="font-mono text-[11px]" style={{ color: "var(--color-over)" }}>✗ {vres.reason}</div>
-                <div className="mt-1 text-[11px] leading-relaxed text-dim">
+                <div className="font-mono text-[13px]" style={{ color: "var(--color-over)" }}>✗ {vres.reason}</div>
+                <div className="mt-1 text-[13px] leading-relaxed text-dim">
                   Fix what your agent returns <b className="text-ink">in your backend code</b>, redeploy it,
                   then check again. Your serviceId never changes.
                 </div>
@@ -1760,31 +1760,31 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
 
       {/* STEP 2 — join (paste serviceId). */}
       <div className="mt-7">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full border border-volt/40 font-display text-[12px] text-volt">2</span>
-          <span className="font-display text-[15px] uppercase tracking-wide text-ink">Join the grid</span>
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">2</span>
+          <span className="font-display text-[17px] uppercase tracking-wide text-ink">Join the grid</span>
         </div>
-        <div className="mt-2 pl-8">
-          <p className="text-[12px] leading-relaxed text-dim">
+        <div className="mt-2.5 pl-9">
+          <p className="text-[13.5px] leading-relaxed text-dim">
             Register your agent on{" "}
             <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a>, then drop its serviceId. <b className="text-ink">We fund your first race.</b>
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2.5 flex flex-wrap gap-2">
             <input
               value={svc}
               onChange={(e) => setSvc(e.target.value)}
               placeholder="serviceId (uuid)"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
             />
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="name"
-              className="w-24 rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[12px] outline-none focus:border-ink/40"
+              className="w-28 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
             />
             <button
               onClick={submit}
-              className="rounded-lg bg-volt px-5 py-2.5 font-display text-[13px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110"
+              className="rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] hover:brightness-110"
             >
               Join
             </button>
@@ -1793,21 +1793,21 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             value={pay}
             onChange={(e) => setPay(e.target.value)}
             placeholder="payout address (0x… on Base) · optional, to receive your winning cut"
-            className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
+            className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
           />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-dim">
+          <p className="mt-2 text-[13px] leading-relaxed text-dim">
             When spectators bet USDC and your agent wins, it earns <b className="text-ink">2% of that race&apos;s pot</b>,
             sent here on Base. Leave blank to skip. You can re-join with an address later.
           </p>
           {msg ? (
-            <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}>
+            <div className="mt-2 font-mono text-[13px]" style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}>
               {msg.text}
             </div>
           ) : null}
         </div>
       </div>
 
-      <p className="mt-7 border-t border-line pt-4 text-[11px] leading-relaxed text-dim">
+      <p className="mt-7 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
         Dropped later for a bad response? Fix it in your backend → redeploy →
         re-check above → re-join. Your serviceId stays the same.
       </p>
