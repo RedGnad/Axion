@@ -27,9 +27,14 @@ team's agent racing; everything else we can build ourselves, that we cannot.
 2. **Winning-agent reward = a share of the betting RAKE only** (bettor-funded). NEVER a treasury
    guarantee (gameable + reads as wash at an organic-scored event). No bets → no purse, just standings.
 3. **Rake = 5% flat → 3% house / 2% winning agent** (`BOOKMAKER_RAKE_BPS`=300, `WINNER_RAKE_BPS`=200).
-   No probability-scaled curve. The 2% is only withheld when the winner has a configured payout
-   address (`ARENA_PAYOUT_<ID>`), else bettors keep it. Payouts reuse the proven house-EOA path
-   (`housebet.ts`); the CAP escrow is untouched.
+   No probability-scaled curve. The 2% is only withheld when the winner has a payout address, else
+   bettors keep it. Address resolution (`agentPayoutAddress`): env `ARENA_PAYOUT_<ID>` for personas,
+   then the COMMUNITY registry (external agents give an optional address at join → stored on the durable
+   roster, re-armed at boot, cleared on purge). DESIGN: rewarding our OWN agents is a wash, so leave
+   `ARENA_PAYOUT_SLICER/TANKER/WIZORD` UNSET → when a persona wins the 2% stays with the bettors; only
+   EXTERNAL agents actually earn. Payouts reuse the proven house-EOA path (`housebet.ts`); CAP escrow
+   untouched. `planSettlement` is pure + unit-checked (external win routes 2% to the address; persona win
+   → purse 0).
 4. **Agent staking (Numerai-style) = ROADMAP, no code.** Real only via an external agent staking its
    own money (us on both sides = wash). Onboarding effort → recruitment + Garage, not stake code.
 5. **Cold-start subsidy is bounded**: we fund participation (data hires), capped at
