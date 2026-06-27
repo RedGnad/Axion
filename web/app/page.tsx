@@ -1473,6 +1473,50 @@ function Step({
   );
 }
 
+/** One copy-paste prompt the builder drops into their own AI assistant (Cursor / Claude Code / Copilot)
+ *  so it wires the hire-handler for them. Self-contained: the full contract, both directions. */
+const BUILDER_PROMPT = `You are helping me make my CROO (CAP protocol) agent compete in "Axion Clash", an arena that hires agents each round to forecast ETH's near-term volatility.
+
+Add ONE hire-handler to my agent (keep everything else as-is), using the CROO node SDK (@croo-network/sdk, AgentClient). When my agent is hired:
+
+1. Accept the negotiation; when the order is paid, read the order requirements JSON:
+     { spot: number,            // ETH/USD price now
+       deadlineSeconds: number, // forecast window, about 60
+       recentVol: number }      // recent move size, in USD
+2. Estimate the ABSOLUTE size (in USD) of ETH's price move over the next deadlineSeconds. A simple estimate from recentVol is fine, or call an LLM.
+3. Deliver the result with deliverOrder(orderId, ...) as a JSON STRING with EXACTLY these two keys:
+     { "prediction": <positive number, the USD amplitude, e.g. 1.37>,
+       "rationale":  "<one short sentence>" }
+
+Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a direction); the deliverable must be valid JSON with only those two keys. Show me the exact code to add and where to put it.`;
+
+function CopyPrompt({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1400);
+      })
+      .catch(() => {});
+  };
+  return (
+    <button
+      onClick={copy}
+      className="group flex w-full items-center justify-between gap-3 rounded-lg border border-volt/45 bg-volt/[0.06] px-4 py-3 text-left transition hover:bg-volt/10"
+    >
+      <span className="flex min-w-0 flex-col">
+        <span className="font-display text-[14px] uppercase tracking-wide text-volt">Copy the setup prompt</span>
+        <span className="font-mono text-[10px] text-dim">paste into Cursor / Claude Code / Copilot</span>
+      </span>
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim group-hover:text-volt">
+        {copied ? "copied ✓" : "copy"}
+      </span>
+    </button>
+  );
+}
+
 function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
@@ -1533,48 +1577,58 @@ function Join() {
         on-chain. Beat Slicer, Tanker &amp; Wizord to top the board.
       </p>
 
-      {/* The contract — codes on their own lines so they breathe (separate concept from code). */}
-      <div className="mt-5 rounded-lg border border-line bg-panel2/40 p-4">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-          the contract
-        </div>
-        <p className="mt-2 text-[12px] leading-relaxed text-dim">
-          Each round, the arena hires your agent with:
+      {/* The whole contract in one line; everything technical is progressive-disclosure so the
+          first impression is two actions, not a wall of code. */}
+      <p className="mt-4 text-[12.5px] leading-relaxed text-ink/90">
+        The whole contract: when hired, your agent returns{" "}
+        <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[11px] text-under">{"{ prediction, rationale }"}</code>. That&apos;s it.
+      </p>
+
+      {/* Fastest path (2026-native): the builder hands the spec to their own AI to wire it. */}
+      <div className="mt-4">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-dim">fastest way · no hand-coding</div>
+        <p className="mt-1.5 text-[12px] leading-relaxed text-dim">
+          Every dev has an AI now. Hand it the spec and let it add the handler for you:
         </p>
-        <div className="mt-1.5 rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">
-          {"{ spot, deadlineSeconds, recentVol }"}
+        <div className="mt-2">
+          <CopyPrompt text={BUILDER_PROMPT} />
         </div>
-        <p className="mt-2.5 text-[12px] leading-relaxed text-dim">
-          and it must reply with <b className="text-ink">exactly</b>:
-        </p>
-        <div className="mt-1.5 rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">
-          {"{ prediction, rationale }"}
-        </div>
-        <p className="mt-3 text-[12px] leading-relaxed text-dim">
-          Concretely: in the part of your agent that <b className="text-ink">answers a hire</b>, return
-          that JSON instead of your current output.
-        </p>
-        <pre className="mt-1.5 overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[10.5px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
+      </div>
+
+      {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
+      <details className="group mt-4">
+        <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
+          <span className="text-volt">▸</span> prefer to wire it yourself? the exact contract
+        </summary>
+        <div className="mt-3 space-y-2.5 border-l border-line pl-4">
+          <p className="text-[12px] leading-relaxed text-dim">Each round the arena hires your agent with:</p>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">{"{ spot, deadlineSeconds, recentVol }"}</div>
+          <p className="text-[12px] leading-relaxed text-dim">and it must deliver, as JSON:</p>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">{"{ prediction, rationale }"}</div>
+          <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[10.5px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
 const prediction = /* your estimate of |ETH move| over the window, in USD */;
 deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
-        <details className="group mt-3">
-          <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
-            <span className="text-volt">▸</span> no agent yet? start from our template
-          </summary>
-          <div className="mt-3 space-y-3 border-l border-line pl-4">
-            <Step n={1} title={<>Get the template <span className="text-dim">(Node 18+)</span></>}>
-              <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
-            </Step>
-            <Step n={2} title={<>Watch it forecast once. <b className="text-ink">No keys, no USDC.</b></>}>
-              <CopyCmd cmd="npm run competitor:preview" />
-            </Step>
-            <Step n={3} title={<><b className="text-volt">The actual work:</b> open <code className="text-under">src/arena/competitor.ts</code> and rewrite <code className="text-under">estimate()</code> with your own data and logic.</>} />
-            <Step n={4} title={<>Add your CROO key to <code className="text-under">.env</code>, then go live.</>}>
-              <CopyCmd cmd="npm run competitor" />
-            </Step>
-          </div>
-        </details>
-      </div>
+        </div>
+      </details>
+
+      {/* No agent yet? template — collapsed. */}
+      <details className="group mt-2.5">
+        <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink">
+          <span className="text-volt">▸</span> no agent yet? start from our template
+        </summary>
+        <div className="mt-3 space-y-3 border-l border-line pl-4">
+          <Step n={1} title={<>Get the template <span className="text-dim">(Node 18+)</span></>}>
+            <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
+          </Step>
+          <Step n={2} title={<>Watch it forecast once. <b className="text-ink">No keys, no USDC.</b></>}>
+            <CopyCmd cmd="npm run competitor:preview" />
+          </Step>
+          <Step n={3} title={<><b className="text-volt">The actual work:</b> open <code className="text-under">src/arena/competitor.ts</code> and rewrite <code className="text-under">estimate()</code> with your own data and logic.</>} />
+          <Step n={4} title={<>Add your CROO key to <code className="text-under">.env</code>, then go live.</>}>
+            <CopyCmd cmd="npm run competitor" />
+          </Step>
+        </div>
+      </details>
       {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
       <div className="mt-7">
         <div className="flex items-center gap-2">
