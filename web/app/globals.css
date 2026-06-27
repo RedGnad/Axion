@@ -59,6 +59,11 @@ body::after {
 @keyframes swapin { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .swapin { animation: swapin 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
+/* marquee — horizontal scroll for the live "estimating" status during hiring (content duplicated 2× so the loop is seamless) */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.marquee-track { display: inline-flex; white-space: nowrap; animation: marquee 26s linear infinite; }
+.marquee-wrap:hover .marquee-track { animation-play-state: paused; }
+
 /* thin scrollbars */
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: #2a2a33; border-radius: 4px; }

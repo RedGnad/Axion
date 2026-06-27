@@ -217,10 +217,16 @@ let lastHireFailReason = ''; // most recent data-hire failure (human-ish), for t
 /** Turn a raw hire error into a short, honest human cause for the feed + banner. */
 function humanizeHireFail(reason: string): string {
   const r = reason.toLowerCase();
+  if (r.includes('invalid response')) return 'invalid response (must return {prediction, rationale})';
   if (/insufficient|balance|funds/.test(r)) return 'arena wallet out of USDC';
   if (/timed out|timeout/.test(r)) return 'provider too slow (timeout)';
   if (/create_failed|rejected|reject/.test(r)) return 'provider rejected the order';
   return reason.slice(0, 80);
+}
+/** A bad competitor RESPONSE (didn't honor the contract) is the builder's issue, not our infra → it
+ *  should be surfaced to them, but must NOT raise the "fund the arena wallet" health banner. */
+function isInfraFail(reason: string): boolean {
+  return /insufficient|balance|funds|timed out|timeout/i.test(reason);
 }
 
 function broadcast(): void {
@@ -498,12 +504,16 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         broadcast();
       },
       onHireFail: ({ competitor, label, reason }) => {
-        // NEVER silent: surface the real cause in the feed + a health banner (most commonly the arena
-        // AA wallet is out of USDC, so agents can't buy data and forecast on baseline only).
+        // NEVER silent. Distinguish OUR infra (wallet/timeout → raise the funding banner) from a builder's
+        // agent returning a bad response (their contract issue → surface it to them, no banner).
         const why = humanizeHireFail(reason);
-        lastHireFailReason = why;
-        state.notice = { level: 'warn', text: `Data hires are failing: ${why}. Agents are forecasting on baseline only. Fund the arena wallet to restore real data.` };
-        pushFeed(`Data hire failed: ${personaMeta(competitor).label} could not hire ${label} (${why})`);
+        if (isInfraFail(reason)) {
+          lastHireFailReason = why;
+          state.notice = { level: 'warn', text: `Data hires are failing: ${why}. Agents are forecasting on baseline only. Fund the arena wallet to restore real data.` };
+          pushFeed(`${personaMeta(competitor).label} couldn't get ${label}: ${why}`);
+        } else {
+          pushFeed(`${personaMeta(competitor).label}: ${why}`); // e.g. "PulseBNB: invalid response (must return {prediction, rationale})"
+        }
         broadcast();
       },
       onFirstEstimate: ({ dqFromMs, dqAtMs }) => {

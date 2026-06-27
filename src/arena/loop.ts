@@ -264,15 +264,17 @@ async function playRemote(
   const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : undefined;
   const hire = await c.orchestrator.hireService(service, JSON.stringify(request), undefined, { maxPriceSmallestUnit });
 
-  let prediction = 0;
-  let rationale = '(no response)';
-  try {
-    const resp = JSON.parse(hire.deliverable) as Partial<CompetitorResponse>;
-    prediction = Math.abs(Number(resp.prediction)) || 0;
-    if (typeof resp.rationale === 'string' && resp.rationale.trim()) rationale = resp.rationale.trim();
-  } catch {
-    /* malformed competitor response → counts as a 0 estimate */
+  // CONTRACT CHECK: a remote agent must return {"prediction": <usd number > 0>, "rationale": <text>}.
+  // If it doesn't (didn't implement the contract → empty/garbage/0), DON'T let a junk 0-estimate pollute
+  // the race: throw so the round DQs it and tells the BUILDER exactly what's wrong (surfaced in the feed).
+  let parsed: Partial<CompetitorResponse> | null = null;
+  try { parsed = JSON.parse(hire.deliverable) as Partial<CompetitorResponse>; } catch { /* not JSON */ }
+  const prediction = Math.abs(Number(parsed?.prediction));
+  if (!parsed || !Number.isFinite(prediction) || prediction <= 0) {
+    const got = (hire.deliverable || '').trim().slice(0, 60) || 'empty';
+    throw new Error(`invalid response — return {"prediction": <usd number>, "rationale": <text>} (got: ${got})`);
   }
+  const rationale = typeof parsed.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 1200) : '(no rationale provided)';
 
   const f: Forecast = {
     competitor: c.id,
@@ -281,17 +283,10 @@ async function playRemote(
     hiredServiceIds: [c.serviceId],
     reasonHash: reasonHash({ competitor: c.id, prediction, rationale, inputs: `remote:${c.serviceId}` }),
   };
-  const edges: ArenaEdge[] = [{
-    competitor: c.id,
-    capability: 'competitor',
-    serviceId: c.serviceId,
-    label: c.label,
-    orderId: hire.orderId,
-    payTxHash: hire.payTxHash,
-    clearTxHash: hire.clearTxHash,
-    ours: c.ours,
-  }];
-  return { forecast: f, edges, fails: [] as HireFail[] };
+  // A remote composes its data INTERNALLY (multi-hop, not in our manifest), so there is no "who it paid"
+  // edge to show — emitting one rendered the confusing self-hire "X hired X". The arena→remote order is
+  // real on-chain, but it's the race entry, not a data hire, so it doesn't belong in the agent's hires.
+  return { forecast: f, edges: [], fails: [] as HireFail[] };
 }
 
 /**

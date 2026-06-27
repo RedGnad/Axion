@@ -75,6 +75,7 @@ export default function Page() {
                 <Race round={state?.round ?? null} />
               </div>
             </div>
+            <EstimatingMarquee state={state} />
             <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
               <ToteBoard state={state} />
             </div>
@@ -1014,6 +1015,35 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
         the pool minus a 5% rake (3% house, 2% paid to the winning agent). If no
         one backed the winner, every stake is refunded.
       </p>
+    </div>
+  );
+}
+
+/** Live "estimating" marquee during the hiring wait: a scrolling strip of honest per-agent states
+ *  (sourcing on-chain / data in / cut) + recent activity, so the wait feels alive instead of a dead
+ *  timer. Only renders while agents are hiring (phase 'open'). */
+function EstimatingMarquee({ state }: { state: ArenaState | null }) {
+  const r = state?.round;
+  if (!r || r.phase !== "open" || !r.competitors.length) return null;
+  const items = r.competitors.map((c) =>
+    c.dq
+      ? `${c.label} cut`
+      : c.estimate != null
+        ? `${c.label} called ${usd(c.estimate)} ✓`
+        : `${c.label} sourcing data on-chain…`,
+  );
+  const inN = r.competitors.filter((c) => c.estimate != null).length;
+  items.push(`${inN}/${r.competitors.length} agents in`);
+  for (const f of (state?.feed ?? []).slice(0, 4)) items.push(f.text);
+  const line = items.join("      ·      ");
+  return (
+    <div className="marquee-wrap overflow-hidden border-t border-line bg-panel2/30 py-2">
+      <div className="marquee-track font-mono text-[11px] text-dim">
+        <span className="px-6">{line}</span>
+        <span className="px-6" aria-hidden>
+          {line}
+        </span>
+      </div>
     </div>
   );
 }
