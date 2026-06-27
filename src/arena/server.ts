@@ -313,9 +313,9 @@ async function loadHistory(): Promise<void> {
       competitors: last.competitors ?? [],
     };
     for (const e of (last.edges ?? []).slice().reverse()) {
-      pushFeed(`${e.label} hired — round settled`, BASESCAN + e.payTxHash);
+      pushFeed(`${e.label} hired. Round settled`, BASESCAN + e.payTxHash);
     }
-    pushFeed(`Last round: amplitude $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)} — winner(s): ${last.winners.map((w) => personaMeta(w).label).join(', ')}`);
+    pushFeed(`Last round: amplitude $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)}. Winner(s): ${last.winners.map((w) => personaMeta(w).label).join(', ')}`);
   }
 }
 
@@ -430,7 +430,7 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   console.log(`[axion] provider online (arena brief) on service ${serviceId}`);
   const brief = (): string => {
     const last = state.history[0];
-    return `Axion Arena live brief — ETH/USD $${(state.livePrice ?? 0).toFixed(2)}.` +
+    return `Axion Arena live brief. ETH/USD $${(state.livePrice ?? 0).toFixed(2)}.` +
       (last ? ` Last round: realized move $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)}, winner ${last.winners.join(', ')}.` : '') +
       ` Top agent: ${state.leaderboard[0]?.label ?? 'n/a'}. Live: https://axion-arena.onrender.com`;
   };
@@ -463,7 +463,7 @@ function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, r
   const since = Date.now() - lastRoundStartMs;
   if (lastRoundStartMs && since < MIN_ROUND_MS) return { started: false, reason: 'cooldown', nextAtMs: lastRoundStartMs + MIN_ROUND_MS };
   refreshBudget();
-  if (racesToday >= DAILY_RACES) return { started: false, reason: `today's free races are used up (${DAILY_RACES}/day) — back at UTC midnight`, nextAtMs: nextUtcMidnightMs() };
+  if (racesToday >= DAILY_RACES) return { started: false, reason: `today's free races are used up (${DAILY_RACES}/day). Back at UTC midnight`, nextAtMs: nextUtcMidnightMs() };
   racesToday++;
   refreshBudget();
   console.log(`[arena-server] round trigger: ${reason} (${racesToday}/${DAILY_RACES} today)`);
@@ -501,7 +501,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           nextPredictPending = [];
         }
         refreshUsdcBet(); // betting opens NOW (early, highest odds) → fresh pool from the hiring phase
-        pushFeed(`Round open — ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
+        pushFeed(`Round open. ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
         broadcast();
       },
       onHireFail: ({ competitor, label, reason }) => {
@@ -523,7 +523,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             clearAgentPayout(competitor);
             refreshRoster();
             saveHistory();
-            pushFeed(`${competitor} removed from the grid — it must return {prediction, rationale}. Fix the contract and re-register in the Garage.`);
+            pushFeed(`${competitor} removed from the grid. It must return {prediction, rationale}. Fix the contract and re-register in the Garage.`);
           }
         }
         broadcast();
@@ -567,7 +567,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         for (const c of state.round.competitors) if (dqIds.includes(c.id)) c.dq = true;
         refreshUsdcBet(); // new round → fresh (empty) USDC pool
         const dqNote = dqIds.length ? ` · ${dqIds.length} agent(s) cut (too slow)` : '';
-        pushFeed(`They're off! Betting open at line $${line.toFixed(2)} — odds drop as the move reveals${dqNote}`);
+        pushFeed(`They're off! Betting open at line $${line.toFixed(2)}. Odds drop as the move reveals${dqNote}`);
         broadcast();
       },
       onTick: ({ liveAmplitude }) => {
@@ -633,7 +633,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           if (res && res.paid > 0) pushFeed(`USDC bets settled: ${res.total} USDC to ${res.paid} backer(s)${Number(res.agentPurse) > 0 ? `, ${res.agentPurse} to the winning agent` : ''}`);
           refreshUsdcBet();
         })();
-        pushFeed(`Settled — amplitude $${o.actual.toFixed(2)} (line $${line.toFixed(2)}). Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
+        pushFeed(`Settled. Amplitude $${o.actual.toFixed(2)} (line $${line.toFixed(2)}). Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
         // "Adopted" deltas: any agent→provider pair hired for the first time this round (real new A2A edge).
         detectAdoptions(item.edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(item.settledAt) || Date.now(), true);
         saveHistory();
