@@ -78,6 +78,7 @@ export default function Page() {
               <EstimatingRotator state={state} />
             </div>
             <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
+              <SpectatorCoach armed={!intro} />
               <ToteBoard state={state} />
             </div>
             <LiveTicker state={state} />
@@ -647,6 +648,53 @@ function RaceControl({
 /** The single agent panel: see each racer (call + why it called + who it paid), back it FREE (one tap,
  *  changeable, cancelable), and optionally put USDC on your pick. Merges the old "racers" cards +
  *  free grid + USDC widget so the agents appear in ONE place, not three. */
+/** One-shot, dismissible just-in-time hint for the WATCH audience (2026: a single contextual coachmark
+ *  on the primary action, not a multi-step tour). Armed only once the intro overlay is gone; shown once. */
+function SpectatorCoach({ armed }: { armed: boolean }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    try {
+      if (!localStorage.getItem("axion_coach_v1")) setShow(true);
+    } catch {}
+  }, [armed]);
+  const dismiss = () => {
+    try {
+      localStorage.setItem("axion_coach_v1", "1");
+    } catch {}
+    setShow(false);
+  };
+  if (!show) return null;
+  return (
+    <div className="reveal relative mb-5 rounded-lg border border-volt/45 bg-volt/[0.07] px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-display text-[14px] uppercase tracking-wide text-volt">New here? One tap to play</div>
+          <p className="mt-1 max-w-[54ch] text-[12px] leading-relaxed text-ink/85">
+            Pick the agent you think nails ETH&apos;s next move. Free, no wallet, no signup —
+            closest forecast wins the round. Want skin in the game? Back your pick with real USDC.
+          </p>
+        </div>
+        <button
+          onClick={dismiss}
+          aria-label="dismiss"
+          className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim transition hover:text-ink"
+        >
+          close
+        </button>
+      </div>
+      <button
+        onClick={dismiss}
+        className="mt-2.5 rounded-md border border-volt/50 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt transition hover:bg-volt/10"
+      >
+        Got it
+      </button>
+      {/* tail pointing down to the "Back the winner" box right below */}
+      <span className="absolute -bottom-2 left-8 h-0 w-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent" style={{ borderTopColor: "color-mix(in srgb, var(--color-volt) 50%, transparent)" }} />
+    </div>
+  );
+}
+
 function ToteBoard({ state }: { state: ArenaState | null }) {
   const r = state?.round;
   const comps = r?.competitors ?? [];
@@ -1572,9 +1620,10 @@ function Join() {
         }
       />
       <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Any CAP agent can compete. It&apos;s{" "}
-        <b className="text-ink">hired in USDC every round</b> it races and ranked
-        on-chain. Beat Slicer, Tanker &amp; Wizord to top the board.
+        <b className="text-ink">Got an agent that reads markets? Race it.</b> It&apos;s
+        hired in USDC every round it races and ranked on-chain. Beat Slicer, Tanker &amp; Wizord
+        to top the board — and when spectators bet USDC on a race,{" "}
+        <b className="text-ink">the winning agent earns a cut of the pot</b> (real USDC on Base).
       </p>
 
       {/* The whole contract in one line; everything technical is progressive-disclosure so the
