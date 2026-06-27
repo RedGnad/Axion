@@ -470,7 +470,10 @@ function RaceControl({
       kicker = "AGENTS HIRING DATA";
       big = clock(now - openMs);
       secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
-      note = r.competitors.map((c) => `${c.label} ${c.estimate != null ? "✓" : "⏳"}`).join("  ·  ");
+      note =
+        r.competitors.length > 4
+          ? `${r.competitors.filter((c) => c.estimate != null).length}/${r.competitors.length} agents in · sourcing data on-chain`
+          : r.competitors.map((c) => `${c.label} ${c.estimate != null ? "✓" : "⏳"}`).join("  ·  ");
     }
   } else {
     // Idle / between races — the grid below shows the LAST race result (not a live race).
@@ -634,7 +637,12 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         ) : null}
       </div>
       {cards.length ? (
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div
+          className={cn(
+            "mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3",
+            cards.length > 6 && "max-h-[520px] overflow-auto pr-1", // many agents → scroll, never flood
+          )}
+        >
           {cards.map((c) => {
             const won = !!c.isWinner;
             const isPick = active && pick!.agentId === c.id;
@@ -1105,7 +1113,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
           win-rate
         </span>
       </div>
-      <div className="space-y-1.5">
+      <div className={cn("space-y-1.5", lb.length > 8 && "max-h-[460px] overflow-auto pr-1")}>
         {lb.length === 0 ? (
           <div className="py-6 text-center font-mono text-sm text-dim">
             no rounds yet

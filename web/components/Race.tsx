@@ -105,12 +105,15 @@ export default function Race({ round }: { round: RoundView | null }) {
   const withData = round.competitors.filter((c) => c.dataMs != null);
   const fastestId = withData.length ? withData.reduce((a, b) => (a.dataMs! <= b.dataMs! ? a : b)).id : null;
 
+  // Compact the lanes as the field grows so a big roster doesn't flood the track (keeps the start/
+  // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
+  const laneH = round.competitors.length > 10 ? "h-9" : round.competitors.length > 6 ? "h-11" : "h-14";
   return (
     <div ref={wrap} className="relative pr-2">
       {round.competitors.map((c) => {
         const col = livery(c.id);
         return (
-          <div key={c.id} className="relative h-14 border-b border-dashed border-white/5">
+          <div key={c.id} className={`relative ${laneH} border-b border-dashed border-white/5`}>
             <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
               {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 text-volt" title="fastest data this round">⚡</span> : null}
