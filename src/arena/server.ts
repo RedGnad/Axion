@@ -551,6 +551,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
       onTick: ({ liveAmplitude }) => {
         if (!state.round) return;
         state.round.liveAmplitude = liveAmplitude;
+        refreshUsdcBet(); // recompute the decaying odds every tick (×2 at race start → ×1 at settle)
         broadcast();
       },
       onSettled: ({ round, line, edges }) => {

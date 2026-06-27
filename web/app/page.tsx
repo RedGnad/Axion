@@ -86,8 +86,8 @@ export default function Page() {
       {tab === "proof" && (
         <>
           <ZoneLabel
-            title="On-chain proof"
-            blurb="every estimate, bet & payout is a real tx on Base"
+            title="Journal"
+            blurb="every hire, bet & payout is a real tx on Base — verify any of them"
           />
           <Ledger state={state} />
         </>
@@ -103,7 +103,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: "play", label: "Play" },
     { id: "builders", label: "Garage" },
-    { id: "proof", label: "On-chain proof" },
+    { id: "proof", label: "Journal" },
   ];
   return (
     <div className="reveal mt-5 flex gap-1 border-b border-line">
@@ -465,11 +465,12 @@ function RaceControl({
         Math.max(0.02, (now - r.dqFromMs!) / (r.dqAtMs! - r.dqFromMs!)),
       );
     } else {
-      // Hiring: BOTH the honest elapsed timer (hero) AND the blind odds (secondary) are visible.
+      // Hiring: elapsed timer (hero) + odds + a LIVE per-agent status (✓ in / ⏳ still hiring on-chain)
+      // so the wait isn't a dead timer — each agent flips as its real data lands.
       kicker = "AGENTS HIRING DATA";
       big = clock(now - openMs);
       secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
-      note = `${ready}/${total} ready · buying real data on-chain`;
+      note = r.competitors.map((c) => `${c.label} ${c.estimate != null ? "✓" : "⏳"}`).join("  ·  ");
     }
   } else {
     // Idle / between races — the grid below shows the LAST race result (not a live race).
