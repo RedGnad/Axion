@@ -97,7 +97,7 @@ export default function Race({ round }: { round: RoundView | null }) {
   }, []);
 
   if (!round || !round.competitors.length) {
-    return <div className="text-dim font-mono text-sm py-12 text-center">no active round — the grid is warming up…</div>;
+    return <div className="text-dim font-mono text-sm py-12 text-center">no active round. The grid is warming up…</div>;
   }
   const key = round.competitors.map((c) => c.id).join(',');
   if (trackKey.current !== key) { trackKey.current = key; pos.current = {}; }
@@ -122,7 +122,7 @@ export default function Race({ round }: { round: RoundView | null }) {
               data-kart={c.id}
               className="absolute top-4 -translate-x-1/2 flex flex-col items-center gap-1 z-20"
               style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
-              title={c.dq ? 'too slow this round — cut' : c.rationale || ''}
+              title={c.dq ? 'too slow this round, cut' : c.rationale || ''}
             >
               <div
                 className="h-3.5 w-8 rounded-[3px]"
@@ -152,7 +152,7 @@ export default function Race({ round }: { round: RoundView | null }) {
         }}
       />
       <div className="mt-5 border-t border-line/50 pt-3">
-        <span className="text-[11px] leading-snug text-dim">Each kart advances as its guess gets closer to the real ETH move — the closest one crosses the finish.</span>
+        <span className="text-[11px] leading-snug text-dim">Each kart advances as its guess gets closer to the real ETH move. The closest one crosses the finish.</span>
       </div>
     </div>
   );

@@ -105,7 +105,7 @@ export default function Page() {
         <>
           <ZoneLabel
             title="Journal"
-            blurb="every hire, bet & payout is a real tx on Base — verify any of them"
+            blurb="every hire, bet & payout is a real tx on Base. Verify any of them"
           />
           <Ledger state={state} />
         </>
@@ -469,7 +469,7 @@ function RaceControl({
         reason?: string;
         error?: string;
       };
-      if (j.started) setStartMsg("✓ race starting — agents hiring data…");
+      if (j.started) setStartMsg("✓ race starting. Agents hiring data…");
       else if (j.reason) setStartMsg(j.reason);
       else if (j.nextAtMs)
         setStartMsg(
@@ -477,7 +477,7 @@ function RaceControl({
         );
       else setStartMsg(j.error || "a race is already running…");
     } catch {
-      setStartMsg("arena was asleep — waking it, try again in ~20s");
+      setStartMsg("arena was asleep. Waking it, try again in ~20s");
     }
     setTimeout(() => {
       setBusy(false);
@@ -518,7 +518,7 @@ function RaceControl({
     big = "offline";
     accent = false;
     showStart = false;
-    note = "runner unreachable — retrying every 2s";
+    note = "runner unreachable. Retrying every 2s";
   } else if (justSettled && r) {
     // Win flash (a few seconds) right after the race, before the next-race countdown resumes.
     const w = r.competitors.find((c) => c.isWinner);
@@ -527,7 +527,7 @@ function RaceControl({
     big = w?.label ?? "—";
     note =
       r.amplitude != null && r.line != null
-        ? `called the move best — $${r.amplitude.toFixed(2)} vs line $${r.line.toFixed(2)}`
+        ? `called the move best. $${r.amplitude.toFixed(2)} vs line $${r.line.toFixed(2)}`
         : "race settled on-chain";
   } else if (active && r) {
     showStart = false;
@@ -583,7 +583,7 @@ function RaceControl({
     note =
       startMsg ??
       (exhausted
-        ? "today's free races are used up — back at UTC midnight"
+        ? "today's free races are used up. Back at UTC midnight"
         : `${w ? `last race won by ${w.label}` : "one tap runs a real on-chain race"}${budLeft != null ? ` · ${budLeft} free races left today` : ""}`);
   }
 
@@ -671,8 +671,8 @@ function SpectatorCoach({ armed }: { armed: boolean }) {
         <div className="min-w-0">
           <div className="font-display text-[14px] uppercase tracking-wide text-volt">New here? One tap to play</div>
           <p className="mt-1 max-w-[54ch] text-[12px] leading-relaxed text-ink/85">
-            Pick the agent you think nails ETH&apos;s next move. Free, no wallet, no signup —
-            closest forecast wins the round. Want skin in the game? Back your pick with real USDC.
+            Pick the agent you think nails ETH&apos;s next move. Free, no wallet, no signup.
+            Closest forecast wins the round. Want skin in the game? Back your pick with real USDC.
           </p>
         </div>
         <button
@@ -857,7 +857,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         ) : active ? (
           <>
             you backed <b className="text-ink">{myLabel}</b>{pick!.round === "next" ? " for the next race" : ""}.{" "}
-            {pick!.committed ? "USDC is in — locked." : "tap another to change, or it again to cancel."}
+            {pick!.committed ? "USDC is in. Locked." : "tap another to change, or it again to cancel."}
           </>
         ) : live ? (
           <span className="text-ink">tap the agent you think wins. it&apos;s free.</span>
@@ -920,7 +920,7 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
         args: [ub.houseAddress as `0x${string}`, parseUnits(String(amt), 6)],
         chainId: base.id,
       });
-      setMsg({ ok: true, text: "tx sent — verifying on-chain…" });
+      setMsg({ ok: true, text: "tx sent. Verifying on-chain…" });
       const res = await postUsdcBet(r.id, agentId, amt, address, txHash);
       if (res.ok) onPlaced(); // lock the pick: real money is down on this agent
       setMsg(
@@ -981,7 +981,7 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
           <div className="mt-4 flex flex-wrap gap-2">
             {wallets.length === 0 ? (
               <span className="font-mono text-[12px] text-dim">
-                no wallet detected — install MetaMask / Rabby / Phantom
+                no wallet detected. Install MetaMask / Rabby / Phantom
               </span>
             ) : (
               wallets.map((c) => (
@@ -1076,7 +1076,7 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
     c.dq
       ? `${c.label} was cut this race`
       : c.estimate != null
-        ? `${c.label} is in — called ${usd(c.estimate)}`
+        ? `${c.label} is in, called ${usd(c.estimate)}`
         : `${c.label} is sourcing data on-chain`,
   );
   if (comps.length) items.push(`${comps.filter((c) => c.estimate != null).length} of ${comps.length} agents in`);
@@ -1175,7 +1175,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {history.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">
-            no settled races yet — start one on Play
+            no settled races yet. Start one on Play
           </div>
         ) : (
           history.map((h, hi) => {
@@ -1275,7 +1275,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
         <span className="flex-1">agent</span>
         <span
           className="w-14 text-right"
-          title="average error vs the realized move — lower is better"
+          title="average error vs the realized move (lower is better)"
         >
           accuracy
         </span>
@@ -1310,7 +1310,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
                 </span>
                 <span
                   className="w-14 text-right font-mono text-[11px] tnum text-volt"
-                  title="avg error — lower = better"
+                  title="avg error (lower is better)"
                 >
                   {usd(r.avgError)}
                 </span>
@@ -1622,7 +1622,7 @@ function Join() {
       const j = await r.json();
       setMsg(
         r.ok
-          ? { ok: true, text: `✓ ${j.name} joined — racing next round${j.payout ? " · winnings will be sent to your address" : ""}` }
+          ? { ok: true, text: `✓ ${j.name} joined. Racing next round${j.payout ? " · winnings will be sent to your address" : ""}` }
           : { ok: false, text: `✗ ${j.error || r.status}` },
       );
       if (r.ok) {
@@ -1656,9 +1656,12 @@ function Join() {
 
       {/* Value + the whole contract in two tight lines; everything technical is progressive-disclosure
           below so the first impression is the grid + two actions, not a wall of code. */}
-      <p className="mt-3 text-[12.5px] leading-relaxed text-ink/90">
-        <b className="text-ink">Got an agent that reads markets? Claim a lane.</b> Hired in USDC every
-        round, ranked on-chain; when spectators bet, the winner takes <b className="text-ink">2% of the pot</b> (real USDC on Base).
+      <p className="mt-3 text-[13px] font-medium leading-relaxed text-ink">
+        Got an agent that reads markets? Claim a lane.
+      </p>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-dim">
+        Hired in USDC every round. Ranked on-chain. Beat Slicer, Tanker &amp; Wizord to top the board.
+        When spectators bet on a race, the winning agent takes <b className="text-ink">2% of the pot</b>. Real USDC, on Base.
       </p>
       <p className="mt-2 text-[12px] leading-relaxed text-dim">
         The whole contract: when hired, your agent returns{" "}
@@ -1737,7 +1740,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
           {vres ? (
             vres.ok ? (
               <div className="mt-2 font-mono text-[11px] text-under">
-                ✓ valid — prediction ${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.
+                ✓ valid. Prediction ${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.
               </div>
             ) : (
               <div
@@ -1789,12 +1792,12 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
           <input
             value={pay}
             onChange={(e) => setPay(e.target.value)}
-            placeholder="payout address (0x… on Base) — optional, to receive your winning cut"
+            placeholder="payout address (0x… on Base) · optional, to receive your winning cut"
             className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3 py-2.5 font-mono text-[11px] outline-none focus:border-ink/40"
           />
           <p className="mt-1.5 text-[11px] leading-relaxed text-dim">
             When spectators bet USDC and your agent wins, it earns <b className="text-ink">2% of that race&apos;s pot</b>,
-            sent here on Base. Leave blank to skip — you can re-join with an address later.
+            sent here on Base. Leave blank to skip. You can re-join with an address later.
           </p>
           {msg ? (
             <div className="mt-2 font-mono text-[11px]" style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}>
@@ -1900,7 +1903,7 @@ function Footer() {
   return (
     <footer className="mt-10 border-t border-line pt-5 font-mono text-[10px] uppercase tracking-wider text-dim">
       Every estimate, bet and payout is a real transaction on Base. The result
-      is the live Pyth ETH/USD move — nobody can rig it.
+      is the live Pyth ETH/USD move. Nobody can rig it.
     </footer>
   );
 }
