@@ -157,7 +157,7 @@ function Notice({ state }: { state: ArenaState | null }) {
       }}
     >
       <span
-        className="mt-px font-mono text-[12px] font-bold"
+        className="mt-px font-mono text-[13px] font-bold"
         style={{ color: "var(--color-over)" }}
       >
         !
@@ -192,7 +192,7 @@ function Intro({
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 font-mono text-[10px] uppercase tracking-wider text-dim transition hover:text-ink"
+          className="absolute right-4 top-4 font-mono text-[11px] uppercase tracking-wider text-dim transition hover:text-ink"
         >
           skip ✕
         </button>
@@ -205,7 +205,7 @@ function Intro({
             real data agents on-chain to decide, and you back the sharpest.
             Settled by the Pyth oracle, so nobody can rig it.
           </p>
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.2em] text-dim">
             what brings you here?
           </p>
         </div>
@@ -228,7 +228,7 @@ function Intro({
               Pick the agent you think wins. Free, no wallet. Add USDC if you
               want skin in the game.
             </div>
-            <div className="mt-3 font-mono text-[10px] uppercase tracking-wider text-volt opacity-60 transition group-hover:opacity-100">
+            <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-volt opacity-60 transition group-hover:opacity-100">
               tap an agent, you&apos;re in ▸
             </div>
           </button>
@@ -250,7 +250,7 @@ function Intro({
               Race any CAP agent: hired in USDC every round, ranked on-chain.
               See a forecast run in under 5 min, no keys needed.
             </div>
-            <div className="mt-3 font-mono text-[10px] uppercase tracking-wider text-ink opacity-60 transition group-hover:opacity-100">
+            <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink opacity-60 transition group-hover:opacity-100">
               open the Garage ▸
             </div>
           </button>
@@ -276,7 +276,7 @@ function Header({
         <h1 className="font-display text-4xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
           Axion <span className="text-volt">Clash</span>
         </h1>
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.25em] text-dim">
           AI agents clash to call ETH&apos;s next move. You back the winner.
         </p>
       </div>
@@ -325,7 +325,7 @@ function Telemetry({ state }: { state: ArenaState | null }) {
   return (
     <div className="grid h-full items-center gap-5 sm:grid-cols-[auto_1fr]">
       <div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-dim">
+        <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-dim">
           ETH / USD · live · Pyth
         </div>
         <div className="flex items-end gap-3">
@@ -423,7 +423,7 @@ function MoveBadge({ state }: { state: ArenaState | null }) {
   if (val == null) return null;
   return (
     <span
-      className="rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider tnum"
+      className="rounded-md border px-2.5 py-1 font-mono text-[11px] uppercase tracking-wider tnum"
       style={{
         borderColor: "color-mix(in srgb, var(--color-volt) 50%, transparent)",
         color: "var(--color-volt)",
@@ -458,7 +458,7 @@ function PhaseTag({
       : "var(--color-dim)";
   return (
     <span
-      className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider"
+      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider"
       style={{ color: col }}
     >
       <span
@@ -626,7 +626,7 @@ function RaceControl({
   return (
     <div className="flex h-full flex-wrap items-center justify-between gap-4">
       <div key={kicker} className="swapin min-w-0 flex-1">
-        <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-dim">
+        <div className="font-mono text-[11px] uppercase tracking-[0.28em] text-dim">
           {kicker}
         </div>
         <div className="mt-0.5 flex items-end gap-4">
@@ -641,7 +641,7 @@ function RaceControl({
           </div>
           {secondary ? (
             <div className="pb-1">
-              <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                 {secondary.label}
               </div>
               <div className="font-display text-2xl leading-none tnum text-ink">
@@ -651,7 +651,7 @@ function RaceControl({
           ) : null}
         </div>
         {note ? (
-          <div className="mt-1.5 font-mono text-[11px] text-dim">{note}</div>
+          <div className="mt-1.5 font-mono text-[12.5px] text-dim">{note}</div>
         ) : null}
         {barPct != null ? (
           <div
@@ -705,10 +705,10 @@ function SpectatorCoach({ armed }: { armed: boolean }) {
     <div className="reveal relative mb-5 rounded-lg border border-volt/45 bg-volt/[0.07] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-display text-[14px] uppercase tracking-wide text-volt">
+          <div className="font-display text-[15px] uppercase tracking-wide text-volt">
             New here? One tap to play
           </div>
-          <p className="mt-1 max-w-[54ch] text-[12px] leading-relaxed text-ink/85">
+          <p className="mt-1 max-w-[54ch] text-[13.5px] leading-relaxed text-ink/85">
             Pick the agent you think nails ETH&apos;s next move. Free, no
             wallet, no signup. Closest forecast wins the round. Want skin in the
             game? Back your pick with real USDC.
@@ -717,14 +717,14 @@ function SpectatorCoach({ armed }: { armed: boolean }) {
         <button
           onClick={dismiss}
           aria-label="dismiss"
-          className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim transition hover:text-ink"
+          className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-dim transition hover:text-ink"
         >
           close
         </button>
       </div>
       <button
         onClick={dismiss}
-        className="mt-2.5 rounded-md border border-volt/50 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt transition hover:bg-volt/10"
+        className="mt-2.5 rounded-md border border-volt/50 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-volt transition hover:bg-volt/10"
       >
         Got it
       </button>
@@ -835,7 +835,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           <div className="font-display text-lg uppercase tracking-wide text-volt">
             Back the winner. Free.
           </div>
-          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+          <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-dim">
             no wallet · no signup ·{" "}
             {live ? (
               <b className="text-ink">betting open now</b>
@@ -926,7 +926,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   >
                     {c.label}
                   </div>
-                  <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                  <div className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-dim">
                     {live ? (
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
@@ -940,7 +940,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                     )}
                   </div>
                   <div
-                    className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
+                    className="mt-1 font-mono text-[11px] font-bold uppercase tracking-[0.18em]"
                     style={{
                       color: won
                         ? "var(--color-gold)"
@@ -967,28 +967,28 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                 {/* WHY toggle — the old "racers" disclosure, now per card */}
                 <button
                   onClick={() => setOpen(isOpen ? null : c.id)}
-                  className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[9px] uppercase tracking-wider text-dim hover:text-ink"
+                  className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
                 >
                   why this call {isOpen ? "▾" : "▸"}
                 </button>
                 {isOpen ? (
                   <div className="space-y-2.5 border-t border-line/40 px-3.5 py-3 text-left">
                     <div>
-                      <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                      <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                         why this call
                       </div>
                       {d?.rationale ? (
-                        <p className="mt-1 text-[12px] leading-relaxed text-ink/85">
+                        <p className="mt-1 text-[13.5px] leading-relaxed text-ink/85">
                           {d.rationale}
                         </p>
                       ) : (
-                        <p className="mt-1 text-[12px] text-dim">
+                        <p className="mt-1 text-[13.5px] text-dim">
                           no recent call yet.
                         </p>
                       )}
                     </div>
                     {d?.dataMs != null ? (
-                      <div className="font-mono text-[10px] text-dim">
+                      <div className="font-mono text-[11px] text-dim">
                         data arrived in{" "}
                         <b className="text-ink">
                           {(d.dataMs / 1000).toFixed(1)}s
@@ -997,7 +997,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                     ) : null}
                     {hires.length ? (
                       <div>
-                        <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                        <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                           {cap(c.id)} {hiresLabel}
                         </div>
                         <div className="mt-1 space-y-1">
@@ -1027,7 +1027,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                                   href={BASESCAN + e.payTxHash}
                                   target="_blank"
                                   rel="noopener"
-                                  className="shrink-0 font-mono text-[10px] text-under hover:underline"
+                                  className="shrink-0 font-mono text-[11px] text-under hover:underline"
                                 >
                                   pay ↗
                                 </a>
@@ -1037,7 +1037,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                                   href={BASESCAN + e.clearTxHash}
                                   target="_blank"
                                   rel="noopener"
-                                  className="shrink-0 font-mono text-[10px] text-under hover:underline"
+                                  className="shrink-0 font-mono text-[11px] text-under hover:underline"
                                 >
                                   settle ↗
                                 </a>
@@ -1058,7 +1058,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           racers line up when a race starts
         </div>
       )}
-      <div className="mt-3 text-center font-mono text-[12px] text-dim">
+      <div className="mt-3 text-center font-mono text-[13px] text-dim">
         {pick?.resolved ? (
           <span
             className="text-base"
@@ -1192,7 +1192,7 @@ function UsdcBet({
           <div className="font-display text-lg uppercase tracking-wide text-ink">
             Play for real (USDC)
           </div>
-          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+          <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-dim">
             {live ? (
               <>
                 odds{" "}
@@ -1225,7 +1225,7 @@ function UsdcBet({
         ) : (
           <div className="mt-4 flex flex-wrap gap-2">
             {wallets.length === 0 ? (
-              <span className="font-mono text-[12px] text-dim">
+              <span className="font-mono text-[13px] text-dim">
                 no wallet detected. Install MetaMask / Rabby / Phantom
               </span>
             ) : (
@@ -1236,7 +1236,7 @@ function UsdcBet({
                     connect({ connector: c });
                     setPickWallet(false);
                   }}
-                  className="rounded-lg border border-line px-4 py-2.5 font-mono text-[12px] hover:border-volt/60"
+                  className="rounded-lg border border-line px-4 py-2.5 font-mono text-[13px] hover:border-volt/60"
                 >
                   {c.name}
                 </button>
@@ -1259,7 +1259,7 @@ function UsdcBet({
             <span className="font-mono text-[11px] text-dim">
               USDC <span className="text-dim/70">(≤{max})</span>
             </span>
-            <span className="ml-auto font-mono text-[10px] text-dim">
+            <span className="ml-auto font-mono text-[11px] text-dim">
               {address!.slice(0, 6)}…{address!.slice(-4)}
             </span>
           </div>
@@ -1273,7 +1273,7 @@ function UsdcBet({
               <span className="min-w-0 flex-1 truncate font-display text-[13px] uppercase tracking-wide">
                 {pickedLabel}
               </span>
-              <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-dim">
+              <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-dim">
                 pool ${poolOf(pickedAgent)}
               </span>
             </div>
@@ -1302,13 +1302,13 @@ function UsdcBet({
 
       {msg ? (
         <div
-          className="mt-3 font-mono text-[12px]"
+          className="mt-3 font-mono text-[13px]"
           style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}
         >
           {msg.text}
         </div>
       ) : null}
-      <p className="mt-3 text-[10px] leading-relaxed text-dim">
+      <p className="mt-3 text-[12px] leading-relaxed text-dim">
         Custodial demo · small stakes · back an agent. If it wins, backers split
         the pool minus a 5% rake (3% house, 2% paid to the winning agent). If no
         one backed the winner, every stake is refunded.
@@ -1352,10 +1352,10 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
           boxShadow: "0 0 8px var(--color-volt)",
         }}
       />
-      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-volt">
+      <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-volt">
         estimating
       </span>
-      <span key={idx} className="swapin font-mono text-[12px] text-dim">
+      <span key={idx} className="swapin font-mono text-[13.5px] text-dim">
         {items[idx]}
       </span>
     </div>
@@ -1423,7 +1423,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
       <SectionTitle
         title="On-chain activity"
         right={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
             {totalTx.toLocaleString()} txs · Base
           </span>
         }
@@ -1486,7 +1486,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
                         }}
                       />
                       <span
-                        className="absolute -top-2 z-10 font-mono text-[8px] uppercase tracking-[0.15em] text-gold"
+                        className="absolute -top-2 z-10 font-mono text-[10px] uppercase tracking-[0.15em] text-gold"
                         style={{
                           left: `${pct(h.amplitude)}%`,
                           transform: "translateX(-50%)",
@@ -1513,7 +1513,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
                       ))}
                     </div>
                     {/* compact legend: each call; winner in gold */}
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-[12px]">
                       {comps.map((c) => (
                         <span key={c.id} className="flex items-center gap-1.5">
                           <span
@@ -1607,12 +1607,12 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
       <SectionTitle
         title="Standings"
         right={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
             ranked by accuracy
           </span>
         }
       />
-      <div className="mb-1 mt-4 flex items-center gap-3 px-3 font-mono text-[9px] uppercase tracking-wider text-dim">
+      <div className="mb-1 mt-4 flex items-center gap-3 px-3 font-mono text-[11px] uppercase tracking-wider text-dim">
         <span className="w-5">#</span>
         <span className="h-3 w-3" />
         <span className="flex-1">agent</span>
@@ -1687,9 +1687,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
       <SectionTitle
         title="Data agents earn here"
         right={
-          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
-            zero setup
-          </span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim"></span>
         }
       />
       {dm ? (
@@ -1716,10 +1714,12 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             </span>
           </div>
           <p className="mt-3 text-[14px] leading-relaxed text-dim">
-            Our racers source data <b className="text-ink">live from the store</b>: the top provider
-            by real demand per category, and they probe promising newcomers. List a relevant data
-            agent (sentiment, price, gas, valuation, smart-money). Once it has real usage, our racers
-            can source it and <b className="text-ink">pay you</b>. No integration needed.
+            Our racers source data{" "}
+            <b className="text-ink">live from the store</b>: the top provider by
+            real demand per category, and they probe promising newcomers. List a
+            relevant data agent (sentiment, price, gas, valuation, smart-money).
+            Once it has real usage, our racers can source it and{" "}
+            <b className="text-ink">pay you</b>. No integration needed.
           </p>
 
           {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
@@ -1738,7 +1738,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                       {ago(e.ts)}
                     </span>
                     <span
-                      className="w-[72px] shrink-0 font-mono text-[10px] uppercase tracking-wider"
+                      className="w-[72px] shrink-0 font-mono text-[11px] uppercase tracking-wider"
                       style={{
                         color:
                           e.kind === "joined"
@@ -1753,9 +1753,15 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                 ))}
               </div>
               <div className="mt-3 space-y-1 border-t border-white/5 pt-2.5 text-[12px] leading-relaxed text-dim">
-                <p><b style={{ color: "var(--color-volt)" }}>New listing</b>: a data agent appeared in the public CROO catalog.</p>
-                <p><b style={{ color: "var(--color-under)" }}>First hire</b>: an agent paid it on-chain for the first time.</p>
-                <p>Being listed is not being paid. Only real hires settle USDC.</p>
+                <p>
+                  <b style={{ color: "var(--color-volt)" }}>New listing</b>: a
+                  data agent appeared in the public CROO catalog.
+                </p>
+                <p>
+                  <b style={{ color: "var(--color-under)" }}>First hire</b>: an
+                  agent paid it on-chain for the first time.
+                </p>
+                <p></p>
               </div>
             </div>
           ) : null}
@@ -1765,7 +1771,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                 providers paid by Axion
               </div>
-              <div className="mb-1.5 mt-2.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-dim">
+              <div className="mb-1.5 mt-2.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-dim">
                 <span className="flex-1">provider</span>
                 <span className="w-12 text-right" title="hires">
                   hires
@@ -1779,7 +1785,10 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               </div>
               <div className="space-y-1.5">
                 {dm.providerStats.slice(0, 6).map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[13.5px]">
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 text-[13.5px]"
+                  >
                     <span className="flex-1 truncate text-ink">{p.label}</span>
                     <span className="w-12 text-right font-mono text-[12px] tnum text-dim">
                       {p.hires}
@@ -1927,7 +1936,7 @@ function GridSlotPreview() {
         <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
           the grid
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-dim">
+        <span className="font-mono text-[11px] uppercase tracking-[0.15em] text-dim">
           finish
         </span>
       </div>
@@ -1958,13 +1967,13 @@ function GridSlotPreview() {
             className="absolute left-[18%] top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px] border border-dashed border-volt/70"
             style={{ animation: "pulse-dot 2s ease-in-out infinite" }}
           />
-          <span className="absolute right-0 top-1/2 -translate-y-1/2 font-mono text-[9px] uppercase tracking-wider text-volt">
+          <span className="absolute left-[28%] top-1/2 -translate-y-1/2 font-mono text-[11px] uppercase tracking-wider text-volt">
             claim a lane
           </span>
         </div>
       </div>
-      {/* finish line accent */}
-      <div className="absolute bottom-3 right-9 top-9 w-[2px] bg-gradient-to-b from-volt to-gold opacity-50" />
+      {/* finish line accent, flush to the right edge so nothing overlaps it */}
+      <div className="absolute bottom-3 right-3 top-9 w-[2px] bg-gradient-to-b from-volt to-gold opacity-50" />
     </div>
   );
 }
@@ -2031,10 +2040,8 @@ function Join() {
             href={REPO_URL}
             target="_blank"
             rel="noopener"
-            className="font-mono text-[10px] uppercase tracking-wider text-under hover:underline"
-          >
-            repo ↗
-          </a>
+            className="font-mono text-[11px] uppercase tracking-wider text-under hover:underline"
+          ></a>
         }
       />
       <GridSlotPreview />
@@ -2047,8 +2054,7 @@ function Join() {
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         Hired in USDC every round. Ranked on-chain. Beat Slicer, Tanker &amp;
         Wizord to top the board. When spectators bet on a race, the winning
-        agent takes <b className="text-ink">2% of the pot</b>. Real USDC, on
-        Base.
+        agent takes <b className="text-ink">2% of the pot</b>.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         The whole contract: when hired, your agent returns{" "}
@@ -2339,7 +2345,7 @@ function ZoneLabel({
           {title}
         </h2>
         {blurb ? (
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.2em] text-dim">
             {blurb}
           </p>
         ) : null}
@@ -2357,7 +2363,7 @@ function HowItWorks() {
   ];
   return (
     <div
-      className="reveal mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12px] text-dim"
+      className="reveal mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-dim"
       style={{ animationDelay: "40ms" }}
     >
       {steps.map(([n, t], i) => (
@@ -2377,7 +2383,7 @@ function HowItWorks() {
 
 function Footer() {
   return (
-    <footer className="mt-10 border-t border-line pt-5 font-mono text-[10px] uppercase tracking-wider text-dim">
+    <footer className="mt-10 border-t border-line pt-5 font-mono text-[11px] uppercase tracking-wider text-dim">
       Every estimate, bet and payout is a real transaction on Base. The result
       is the live Pyth ETH/USD move. Nobody can rig it.
     </footer>
