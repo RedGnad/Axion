@@ -70,6 +70,33 @@ body::after {
 @keyframes swapin { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .swapin { animation: swapin 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
+/* ── Interaction layer (2026: calm, purposeful motion — feedback, not decoration) ─────────
+   Tokens so timing/easing stay consistent: --ease (standard out), fast/base durations. */
+:root { --ease: cubic-bezier(0.2, 0.8, 0.2, 1); --t-fast: 0.12s; --t-base: 0.18s; }
+
+/* Every enabled button gets tactile press feedback (clarity that the tap registered). */
+button:not(:disabled) {
+  transition: transform var(--t-fast) var(--ease), filter var(--t-fast) ease,
+    background-color var(--t-base) ease, border-color var(--t-base) ease, box-shadow var(--t-base) ease;
+}
+button:not(:disabled):active { transform: translateY(1px) scale(0.992); }
+
+/* Calm hover-lift for genuinely interactive cards only (purposeful, not everywhere). */
+.lift { transition: transform var(--t-base) var(--ease), box-shadow var(--t-base) ease, border-color var(--t-base) ease; }
+.lift:hover { transform: translateY(-2px); }
+
+/* Keyboard accessibility: one visible, on-brand focus ring. */
+:focus-visible { outline: 2px solid var(--color-volt); outline-offset: 2px; border-radius: 2px; }
+
+/* Respect reduced-motion: kill animations/transitions for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* thin scrollbars */
 *::-webkit-scrollbar { width: 8px; height: 8px; }

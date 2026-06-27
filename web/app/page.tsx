@@ -886,6 +886,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                 className={cn(
                   "overflow-hidden rounded-2xl border bg-panel2/30 transition",
                   boxed ? "border-2" : "border border-line",
+                  tappable && "lift",
                   c.dq && "opacity-50",
                 )}
                 style={{
