@@ -151,17 +151,35 @@ function Notice({ state }: { state: ArenaState | null }) {
   return (
     <div
       className="reveal mt-4 flex items-start gap-2.5 rounded-lg border px-4 py-3"
-      style={{ borderColor: "color-mix(in srgb, var(--color-over) 45%, transparent)", background: "color-mix(in srgb, var(--color-over) 8%, transparent)" }}
+      style={{
+        borderColor: "color-mix(in srgb, var(--color-over) 45%, transparent)",
+        background: "color-mix(in srgb, var(--color-over) 8%, transparent)",
+      }}
     >
-      <span className="mt-px font-mono text-[12px] font-bold" style={{ color: "var(--color-over)" }}>!</span>
-      <span className="font-mono text-[11px] leading-relaxed text-ink/85">{n.text}</span>
+      <span
+        className="mt-px font-mono text-[12px] font-bold"
+        style={{ color: "var(--color-over)" }}
+      >
+        !
+      </span>
+      <span className="font-mono text-[11px] leading-relaxed text-ink/85">
+        {n.text}
+      </span>
     </div>
   );
 }
 
 /** First-run intent split (Figma-style "where do I start"): one tap routes a visitor to watch/bet or
  *  to bringing an agent, so nobody lands on a dense dashboard confused. Shown once; re-openable. */
-function Intro({ open, setTab, onClose }: { open: boolean; setTab: (t: Tab) => void; onClose: () => void }) {
+function Intro({
+  open,
+  setTab,
+  onClose,
+}: {
+  open: boolean;
+  setTab: (t: Tab) => void;
+  onClose: () => void;
+}) {
   if (!open) return null;
   return (
     <div
@@ -183,8 +201,9 @@ function Intro({ open, setTab, onClose }: { open: boolean; setTab: (t: Tab) => v
             Axion <span className="text-volt">Clash</span>
           </div>
           <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-dim">
-            AI agents race to call the size of ETH&apos;s next move. They hire real data agents on-chain
-            to decide, and you back the sharpest. Settled by the Pyth oracle, so nobody can rig it.
+            AI agents race to call the size of ETH&apos;s next move. They hire
+            real data agents on-chain to decide, and you back the sharpest.
+            Settled by the Pyth oracle, so nobody can rig it.
           </p>
           <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
             what brings you here?
@@ -192,27 +211,44 @@ function Intro({ open, setTab, onClose }: { open: boolean; setTab: (t: Tab) => v
         </div>
         <div className="grid gap-px bg-line sm:grid-cols-2">
           <button
-            onClick={() => { setTab("play"); onClose(); }}
+            onClick={() => {
+              setTab("play");
+              onClose();
+            }}
             className="group bg-panel px-6 py-7 text-left transition hover:bg-volt/[0.05]"
           >
-            <span className="block h-3 w-3 rounded-sm" style={{ background: "var(--color-volt)" }} />
-            <div className="mt-3 font-display text-lg uppercase tracking-wide text-volt">Watch &amp; bet</div>
+            <span
+              className="block h-3 w-3 rounded-sm"
+              style={{ background: "var(--color-volt)" }}
+            />
+            <div className="mt-3 font-display text-lg uppercase tracking-wide text-volt">
+              Watch &amp; bet
+            </div>
             <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
-              Pick the agent you think wins. Free, no wallet. Add USDC if you want skin in the game.
+              Pick the agent you think wins. Free, no wallet. Add USDC if you
+              want skin in the game.
             </div>
             <div className="mt-3 font-mono text-[10px] uppercase tracking-wider text-volt opacity-60 transition group-hover:opacity-100">
               tap an agent, you&apos;re in ▸
             </div>
           </button>
           <button
-            onClick={() => { setTab("builders"); onClose(); }}
+            onClick={() => {
+              setTab("builders");
+              onClose();
+            }}
             className="group bg-panel px-6 py-7 text-left transition hover:bg-volt/[0.05]"
           >
-            <span className="block h-3 w-3 rounded-sm" style={{ background: "#d4d4d8" }} />
-            <div className="mt-3 font-display text-lg uppercase tracking-wide text-ink">Bring your agent</div>
+            <span
+              className="block h-3 w-3 rounded-sm"
+              style={{ background: "#d4d4d8" }}
+            />
+            <div className="mt-3 font-display text-lg uppercase tracking-wide text-ink">
+              Bring your agent
+            </div>
             <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
-              Race any CAP agent: hired in USDC every round, ranked on-chain. See a forecast run in
-              under 5 min, no keys needed.
+              Race any CAP agent: hired in USDC every round, ranked on-chain.
+              See a forecast run in under 5 min, no keys needed.
             </div>
             <div className="mt-3 font-mono text-[10px] uppercase tracking-wider text-ink opacity-60 transition group-hover:opacity-100">
               open the Garage ▸
@@ -669,10 +705,13 @@ function SpectatorCoach({ armed }: { armed: boolean }) {
     <div className="reveal relative mb-5 rounded-lg border border-volt/45 bg-volt/[0.07] px-4 py-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-display text-[14px] uppercase tracking-wide text-volt">New here? One tap to play</div>
+          <div className="font-display text-[14px] uppercase tracking-wide text-volt">
+            New here? One tap to play
+          </div>
           <p className="mt-1 max-w-[54ch] text-[12px] leading-relaxed text-ink/85">
-            Pick the agent you think nails ETH&apos;s next move. Free, no wallet, no signup.
-            Closest forecast wins the round. Want skin in the game? Back your pick with real USDC.
+            Pick the agent you think nails ETH&apos;s next move. Free, no
+            wallet, no signup. Closest forecast wins the round. Want skin in the
+            game? Back your pick with real USDC.
           </p>
         </div>
         <button
@@ -690,7 +729,13 @@ function SpectatorCoach({ armed }: { armed: boolean }) {
         Got it
       </button>
       {/* tail pointing down to the "Back the winner" box right below */}
-      <span className="absolute -bottom-2 left-8 h-0 w-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent" style={{ borderTopColor: "color-mix(in srgb, var(--color-volt) 50%, transparent)" }} />
+      <span
+        className="absolute -bottom-2 left-8 h-0 w-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent"
+        style={{
+          borderTopColor:
+            "color-mix(in srgb, var(--color-volt) 50%, transparent)",
+        }}
+      />
     </div>
   );
 }
@@ -711,29 +756,44 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const [rec, setRec] = useState<{ c: number; t: number }>({ c: 0, t: 0 });
   useEffect(() => {
     try {
-      setRec(JSON.parse(localStorage.getItem("axion_predict") || '{"c":0,"t":0}'));
+      setRec(
+        JSON.parse(localStorage.getItem("axion_predict") || '{"c":0,"t":0}'),
+      );
     } catch {}
   }, []);
 
   const live = r?.phase === "open" || r?.phase === "betting"; // current race accepts predictions
   const roster = state?.roster ?? [];
   const idlePickable = !live && roster.length > 0; // between races → predict the NEXT race
-  const cards: { id: string; label: string; estimate?: number; isWinner?: boolean; dq?: boolean }[] =
-    live ? comps : roster.map((a) => ({ id: a.id, label: a.label }));
+  const cards: {
+    id: string;
+    label: string;
+    estimate?: number;
+    isWinner?: boolean;
+    dq?: boolean;
+  }[] = live ? comps : roster.map((a) => ({ id: a.id, label: a.label }));
 
   // Expand data (the old "racers" content): rationale/latency from the round (live or last settled),
   // hires from the matching settled record. Honest: "this race" only when the shown round is in history.
   const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
   const thisRound = history.find((h) => h.id === r?.id);
   const hiresSrc = thisRound ?? history[0];
-  const hiresLabel = thisRound ? "paid this race" : history[0] ? "paid last race" : "";
+  const hiresLabel = thisRound
+    ? "paid this race"
+    : history[0]
+      ? "paid last race"
+      : "";
   const detail = (id: string) => comps.find((x) => x.id === id);
 
   useEffect(() => {
     if (!r || r.phase !== "settled" || !pick || pick.resolved) return;
-    const applies = pick.round === r.id || (pick.round === "next" && r.id !== pick.afterRound);
+    const applies =
+      pick.round === r.id ||
+      (pick.round === "next" && r.id !== pick.afterRound);
     if (!applies) return;
-    const won = (r.competitors ?? []).some((c) => c.id === pick.agentId && c.isWinner);
+    const won = (r.competitors ?? []).some(
+      (c) => c.id === pick.agentId && c.isWinner,
+    );
     const next = { c: rec.c + (won ? 1 : 0), t: rec.t + 1 };
     setRec(next);
     try {
@@ -742,32 +802,59 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     setPick({ ...pick, resolved: true, correct: won });
   }, [r?.phase, r?.id, pick, rec]);
 
-  const active = !!pick && !pick.resolved && (pick.round === "next" || (!!r && pick.round === r.id));
+  const active =
+    !!pick &&
+    !pick.resolved &&
+    (pick.round === "next" || (!!r && pick.round === r.id));
   const choose = (agentId: string) => {
     if (pick?.committed || pick?.resolved) return; // locked once you bet real money / race is over
-    if (active && pick!.agentId === agentId) { setPick(null); void cancelPredict(); return; } // tap again = cancel
-    if (live && r) { setPick({ round: r.id, agentId }); void postPredict(agentId); } // pick or change
-    else if (idlePickable) { setPick({ round: "next", agentId, afterRound: r?.id }); void postPredict(agentId); }
+    if (active && pick!.agentId === agentId) {
+      setPick(null);
+      void cancelPredict();
+      return;
+    } // tap again = cancel
+    if (live && r) {
+      setPick({ round: r.id, agentId });
+      void postPredict(agentId);
+    } // pick or change
+    else if (idlePickable) {
+      setPick({ round: "next", agentId, afterRound: r?.id });
+      void postPredict(agentId);
+    }
   };
   const ps = state?.predictStats;
-  const myLabel = active ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId) : "";
+  const myLabel = active
+    ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId)
+    : "";
 
   return (
     <div>
       {/* Free no-wallet on-ramp; USDC is an optional upgrade on the SAME pick (one decision). */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-volt/30 bg-volt/[0.04] px-4 py-3">
         <div>
-          <div className="font-display text-lg uppercase tracking-wide text-volt">Back the winner. Free.</div>
+          <div className="font-display text-lg uppercase tracking-wide text-volt">
+            Back the winner. Free.
+          </div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
             no wallet · no signup ·{" "}
-            {live ? <b className="text-ink">betting open now</b> : idlePickable ? <b className="text-ink">pick the next race&apos;s winner</b> : "one tap when a race is live"}
+            {live ? (
+              <b className="text-ink">betting open now</b>
+            ) : idlePickable ? (
+              <b className="text-ink">pick the next race&apos;s winner</b>
+            ) : (
+              "one tap when a race is live"
+            )}
           </div>
         </div>
         {ps && ps.total > 0 ? (
           <div className="text-right font-mono text-[11px] text-dim">
             <b className="text-ink tnum">{ps.total.toLocaleString()}</b> picks ·{" "}
-            <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b> visitors ·{" "}
-            <b className="text-volt tnum">{ps.total ? Math.round((100 * ps.correct) / ps.total) : 0}%</b> called right
+            <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b>{" "}
+            visitors ·{" "}
+            <b className="text-volt tnum">
+              {ps.total ? Math.round((100 * ps.correct) / ps.total) : 0}%
+            </b>{" "}
+            called right
           </div>
         ) : null}
       </div>
@@ -782,59 +869,179 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             const won = !!c.isWinner;
             const isPick = active && pick!.agentId === c.id;
             const committed = isPick && !!pick!.committed;
-            const tappable = !pick?.committed && !pick?.resolved && (live ? !c.dq : idlePickable); // pick/change/cancel
+            const tappable =
+              !pick?.committed &&
+              !pick?.resolved &&
+              (live ? !c.dq : idlePickable); // pick/change/cancel
             const boxed = tappable || isPick || won;
             const col = "var(--color-volt)";
             const isOpen = open === c.id;
             const d = detail(c.id);
-            const hires = (hiresSrc?.edges ?? []).filter((e) => e.competitor === c.id);
+            const hires = (hiresSrc?.edges ?? []).filter(
+              (e) => e.competitor === c.id,
+            );
             return (
               <div
                 key={c.id}
-                className={cn("overflow-hidden rounded-2xl border bg-panel2/30 transition", boxed ? "border-2" : "border border-line", c.dq && "opacity-50")}
+                className={cn(
+                  "overflow-hidden rounded-2xl border bg-panel2/30 transition",
+                  boxed ? "border-2" : "border border-line",
+                  c.dq && "opacity-50",
+                )}
                 style={{
-                  borderColor: isPick ? "#fff" : won ? "var(--color-gold)" : tappable ? col : undefined,
-                  background: boxed ? `color-mix(in srgb, ${won ? "var(--color-gold)" : col} 12%, transparent)` : "transparent",
-                  boxShadow: tappable && !isPick ? `0 0 18px ${col}44` : won ? "0 0 18px rgba(255,200,60,.3)" : "none",
+                  borderColor: isPick
+                    ? "#fff"
+                    : won
+                      ? "var(--color-gold)"
+                      : tappable
+                        ? col
+                        : undefined,
+                  background: boxed
+                    ? `color-mix(in srgb, ${won ? "var(--color-gold)" : col} 12%, transparent)`
+                    : "transparent",
+                  boxShadow:
+                    tappable && !isPick
+                      ? `0 0 18px ${col}44`
+                      : won
+                        ? "0 0 18px rgba(255,200,60,.3)"
+                        : "none",
                 }}
               >
                 {/* BACK face — tap to back free (tap again to cancel, tap another to change) */}
                 <button
                   onClick={() => choose(c.id)}
                   disabled={!tappable && !isPick}
-                  className={cn("w-full px-3 py-4 text-center", tappable ? "cursor-pointer" : "cursor-default")}
+                  className={cn(
+                    "w-full px-3 py-4 text-center",
+                    tappable ? "cursor-pointer" : "cursor-default",
+                  )}
                 >
-                  <span className="mx-auto mb-2 block h-3 w-3 rounded-sm" style={{ background: livery(c.id) }} />
-                  <div className="font-display text-lg uppercase leading-none tracking-wide" style={{ opacity: boxed ? 1 : 0.78 }}>{c.label}</div>
-                  <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-                    {live ? (c.estimate != null ? <>calls {usd(c.estimate)}</> : c.dq ? "cut this race" : "forecasting…") : "races next"}
+                  <span
+                    className="mx-auto mb-2 block h-3 w-3 rounded-sm"
+                    style={{ background: livery(c.id) }}
+                  />
+                  <div
+                    className="font-display text-lg uppercase leading-none tracking-wide"
+                    style={{ opacity: boxed ? 1 : 0.78 }}
+                  >
+                    {c.label}
                   </div>
-                  <div className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
-                    style={{ color: won ? "var(--color-gold)" : isPick ? "#fff" : tappable ? col : "var(--color-dim)" }}>
-                    {won ? "★ won" : committed ? "✓ USDC in" : isPick ? "✓ your pick · tap to cancel" : tappable ? (live ? "▸ back" : "▸ back · next") : "opens at race start"}
+                  <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                    {live ? (
+                      c.estimate != null ? (
+                        <>calls {usd(c.estimate)}</>
+                      ) : c.dq ? (
+                        "cut this race"
+                      ) : (
+                        "forecasting…"
+                      )
+                    ) : (
+                      "races next"
+                    )}
+                  </div>
+                  <div
+                    className="mt-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em]"
+                    style={{
+                      color: won
+                        ? "var(--color-gold)"
+                        : isPick
+                          ? "#fff"
+                          : tappable
+                            ? col
+                            : "var(--color-dim)",
+                    }}
+                  >
+                    {won
+                      ? "★ won"
+                      : committed
+                        ? "✓ USDC in"
+                        : isPick
+                          ? "✓ your pick · tap to cancel"
+                          : tappable
+                            ? live
+                              ? "▸ back"
+                              : "▸ back · next"
+                            : "opens at race start"}
                   </div>
                 </button>
                 {/* WHY toggle — the old "racers" disclosure, now per card */}
-                <button onClick={() => setOpen(isOpen ? null : c.id)} className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[9px] uppercase tracking-wider text-dim hover:text-ink">
+                <button
+                  onClick={() => setOpen(isOpen ? null : c.id)}
+                  className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[9px] uppercase tracking-wider text-dim hover:text-ink"
+                >
                   why this call {isOpen ? "▾" : "▸"}
                 </button>
                 {isOpen ? (
                   <div className="space-y-2.5 border-t border-line/40 px-3.5 py-3 text-left">
                     <div>
-                      <div className="font-mono text-[9px] uppercase tracking-wider text-dim">why this call</div>
-                      {d?.rationale ? <p className="mt-1 text-[12px] leading-relaxed text-ink/85">{d.rationale}</p> : <p className="mt-1 text-[12px] text-dim">no recent call yet.</p>}
+                      <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                        why this call
+                      </div>
+                      {d?.rationale ? (
+                        <p className="mt-1 text-[12px] leading-relaxed text-ink/85">
+                          {d.rationale}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[12px] text-dim">
+                          no recent call yet.
+                        </p>
+                      )}
                     </div>
-                    {d?.dataMs != null ? <div className="font-mono text-[10px] text-dim">data arrived in <b className="text-ink">{(d.dataMs / 1000).toFixed(1)}s</b></div> : null}
+                    {d?.dataMs != null ? (
+                      <div className="font-mono text-[10px] text-dim">
+                        data arrived in{" "}
+                        <b className="text-ink">
+                          {(d.dataMs / 1000).toFixed(1)}s
+                        </b>
+                      </div>
+                    ) : null}
                     {hires.length ? (
                       <div>
-                        <div className="font-mono text-[9px] uppercase tracking-wider text-dim">{cap(c.id)} {hiresLabel}</div>
+                        <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                          {cap(c.id)} {hiresLabel}
+                        </div>
                         <div className="mt-1 space-y-1">
                           {hires.map((e, i) => (
-                            <div key={i} className="flex items-center gap-2 text-[11px]">
-                              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.ours ? "var(--color-dim)" : "var(--color-volt)" }} title={e.ours ? "our data agent" : "independent data agent"} />
-                              <span className="flex-1 truncate text-ink/80">{e.label}</span>
-                              {e.payTxHash ? <a href={BASESCAN + e.payTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">pay ↗</a> : null}
-                              {e.clearTxHash ? <a href={BASESCAN + e.clearTxHash} target="_blank" rel="noopener" className="shrink-0 font-mono text-[10px] text-under hover:underline">settle ↗</a> : null}
+                            <div
+                              key={i}
+                              className="flex items-center gap-2 text-[11px]"
+                            >
+                              <span
+                                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                style={{
+                                  background: e.ours
+                                    ? "var(--color-dim)"
+                                    : "var(--color-volt)",
+                                }}
+                                title={
+                                  e.ours
+                                    ? "our data agent"
+                                    : "independent data agent"
+                                }
+                              />
+                              <span className="flex-1 truncate text-ink/80">
+                                {e.label}
+                              </span>
+                              {e.payTxHash ? (
+                                <a
+                                  href={BASESCAN + e.payTxHash}
+                                  target="_blank"
+                                  rel="noopener"
+                                  className="shrink-0 font-mono text-[10px] text-under hover:underline"
+                                >
+                                  pay ↗
+                                </a>
+                              ) : null}
+                              {e.clearTxHash ? (
+                                <a
+                                  href={BASESCAN + e.clearTxHash}
+                                  target="_blank"
+                                  rel="noopener"
+                                  className="shrink-0 font-mono text-[10px] text-under hover:underline"
+                                >
+                                  settle ↗
+                                </a>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -847,24 +1054,44 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           })}
         </div>
       ) : (
-        <div className="mt-4 py-6 text-center font-mono text-sm text-dim">racers line up when a race starts</div>
+        <div className="mt-4 py-6 text-center font-mono text-sm text-dim">
+          racers line up when a race starts
+        </div>
       )}
       <div className="mt-3 text-center font-mono text-[12px] text-dim">
         {pick?.resolved ? (
-          <span className="text-base" style={{ color: pick.correct ? "var(--color-under)" : "var(--color-over)" }}>
-            {pick.correct ? "✓ you backed the winner" : "✗ your agent lost. try the next race."}
+          <span
+            className="text-base"
+            style={{
+              color: pick.correct ? "var(--color-under)" : "var(--color-over)",
+            }}
+          >
+            {pick.correct
+              ? "✓ you backed the winner"
+              : "✗ your agent lost. try the next race."}
           </span>
         ) : active ? (
           <>
-            you backed <b className="text-ink">{myLabel}</b>{pick!.round === "next" ? " for the next race" : ""}.{" "}
-            {pick!.committed ? "USDC is in. Locked." : "tap another to change, or it again to cancel."}
+            you backed <b className="text-ink">{myLabel}</b>
+            {pick!.round === "next" ? " for the next race" : ""}.{" "}
+            {pick!.committed
+              ? "USDC is in. Locked."
+              : "tap another to change, or it again to cancel."}
           </>
         ) : live ? (
-          <span className="text-ink">tap the agent you think wins. it&apos;s free.</span>
+          <span className="text-ink">
+            tap the agent you think wins. it&apos;s free.
+          </span>
         ) : idlePickable ? (
-          <span className="text-ink">back the next race&apos;s winner. it&apos;s free.</span>
+          <span className="text-ink">
+            back the next race&apos;s winner. it&apos;s free.
+          </span>
         ) : null}
-        {rec.t > 0 ? <span className="ml-2 text-volt">your picks {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)</span> : null}
+        {rec.t > 0 ? (
+          <span className="ml-2 text-volt">
+            your picks {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)
+          </span>
+        ) : null}
       </div>
       <UsdcBet
         state={state}
@@ -874,7 +1101,8 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         onPlaced={() => setPick((p) => (p ? { ...p, committed: true } : p))}
       />
       <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
-        Each agent commits its forecast on-chain. The winner is whoever lands closest to the live Pyth ETH/USD move. Nobody controls the outcome.
+        Each agent commits its forecast on-chain. The winner is whoever lands
+        closest to the live Pyth ETH/USD move. Nobody controls the outcome.
       </p>
     </div>
   );
@@ -882,7 +1110,19 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
 
 /** Custodial-disclosed real USDC bet from an EOA wallet (only shown if the house is configured).
  *  Wallet via wagmi v2 (EIP-6963 multi-wallet discovery) — no window.ethereum collision. */
-function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { state: ArenaState | null; pickedAgent: string | null; pickedLabel: string; committed: boolean; onPlaced: () => void }) {
+function UsdcBet({
+  state,
+  pickedAgent,
+  pickedLabel,
+  committed,
+  onPlaced,
+}: {
+  state: ArenaState | null;
+  pickedAgent: string | null;
+  pickedLabel: string;
+  committed: boolean;
+  onPlaced: () => void;
+}) {
   const ub = state?.usdcBet;
   const r = state?.round;
   const live = r?.phase === "open" || r?.phase === "betting"; // bet through hiring + the race (odds decay over time)
@@ -896,7 +1136,8 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   if (!ub?.enabled) return null;
   const max = ub.maxBetUSDC;
-  const poolOf = (id: string) => ub.pool.byAgent.find((p) => p.id === id)?.amount ?? "0.00";
+  const poolOf = (id: string) =>
+    ub.pool.byAgent.find((p) => p.id === id)?.amount ?? "0.00";
 
   // De-dupe connectors by name (EIP-6963 + injected can both list the same wallet).
   const seen = new Set<string>();
@@ -925,7 +1166,10 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
       if (res.ok) onPlaced(); // lock the pick: real money is down on this agent
       setMsg(
         res.ok
-          ? { ok: true, text: `✓ ${amt} USDC on ${label}. paid out if it wins.` }
+          ? {
+              ok: true,
+              text: `✓ ${amt} USDC on ${label}. paid out if it wins.`,
+            }
           : { ok: false, text: `✗ ${res.error}` },
       );
     } catch (e) {
@@ -961,7 +1205,8 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
           </div>
         </div>
         <div className="text-right font-mono text-[11px] tnum text-dim">
-          pool <b className="text-ink">${ub.pool.total}</b> · {ub.pool.bettors} in
+          pool <b className="text-ink">${ub.pool.total}</b> · {ub.pool.bettors}{" "}
+          in
         </div>
       </div>
 
@@ -1021,9 +1266,16 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
           {/* Single agent selection: you bet USDC on the SAME agent you picked above (no second chooser). */}
           {pickedAgent ? (
             <div className="mt-3 flex items-center gap-2 rounded-lg border border-volt/40 bg-volt/[0.06] px-3 py-2.5">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: livery(pickedAgent) }} />
-              <span className="min-w-0 flex-1 truncate font-display text-[13px] uppercase tracking-wide">{pickedLabel}</span>
-              <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-dim">pool ${poolOf(pickedAgent)}</span>
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-sm"
+                style={{ background: livery(pickedAgent) }}
+              />
+              <span className="min-w-0 flex-1 truncate font-display text-[13px] uppercase tracking-wide">
+                {pickedLabel}
+              </span>
+              <span className="shrink-0 font-mono text-[9px] uppercase tracking-wider text-dim">
+                pool ${poolOf(pickedAgent)}
+              </span>
             </div>
           ) : null}
           {committed ? (
@@ -1079,7 +1331,10 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
         ? `${c.label} is in, called ${usd(c.estimate)}`
         : `${c.label} is sourcing data on-chain`,
   );
-  if (comps.length) items.push(`${comps.filter((c) => c.estimate != null).length} of ${comps.length} agents in`);
+  if (comps.length)
+    items.push(
+      `${comps.filter((c) => c.estimate != null).length} of ${comps.length} agents in`,
+    );
   const [i, setI] = useState(0);
   useEffect(() => {
     if (!live || items.length === 0) return;
@@ -1092,9 +1347,14 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
     <div className="mt-4 flex items-center justify-center gap-2 border-t border-line/50 pt-3">
       <span
         className="h-1.5 w-1.5 shrink-0 rounded-full bg-volt"
-        style={{ animation: "pulse-dot 1.3s infinite", boxShadow: "0 0 8px var(--color-volt)" }}
+        style={{
+          animation: "pulse-dot 1.3s infinite",
+          boxShadow: "0 0 8px var(--color-volt)",
+        }}
       />
-      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-volt">estimating</span>
+      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-volt">
+        estimating
+      </span>
       <span key={idx} className="swapin font-mono text-[12px] text-dim">
         {items[idx]}
       </span>
@@ -1169,8 +1429,8 @@ function Ledger({ state }: { state: ArenaState | null }) {
         }
       />
       <p className="mt-2 text-[11px] leading-relaxed text-dim">
-        Each round: agents hire data on-chain (real CAP orders), then the live Pyth move settles
-        who called it closest. Verify any tx on BaseScan.
+        Each round: agents hire data on-chain (real CAP orders), then the live
+        Pyth move settles who called it closest. Verify any tx on BaseScan.
       </p>
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {history.length === 0 ? (
@@ -1179,9 +1439,17 @@ function Ledger({ state }: { state: ArenaState | null }) {
           </div>
         ) : (
           history.map((h, hi) => {
-            const comps = (h.competitors ?? []).filter((c) => c.estimate != null);
-            const scale = Math.max(0.5, h.amplitude, ...comps.map((c) => c.estimate as number)) * 1.15;
-            const pct = (v: number) => Math.max(3, Math.min(97, (v / scale) * 100));
+            const comps = (h.competitors ?? []).filter(
+              (c) => c.estimate != null,
+            );
+            const scale =
+              Math.max(
+                0.5,
+                h.amplitude,
+                ...comps.map((c) => c.estimate as number),
+              ) * 1.15;
+            const pct = (v: number) =>
+              Math.max(3, Math.min(97, (v / scale) * 100));
             return (
               <div
                 key={h.id}
@@ -1191,9 +1459,16 @@ function Ledger({ state }: { state: ArenaState | null }) {
                 {/* header: when + how many on-chain txs this round produced */}
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="font-mono text-dim">
-                    {new Date(h.settledAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {new Date(h.settledAt).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
-                  <span className="font-mono text-dim">{(h.edges?.length ?? 0) * 2} txs</span>
+                  <span className="font-mono text-dim">
+                    {(h.edges?.length ?? 0) * 2} txs
+                  </span>
                 </div>
                 {comps.length ? (
                   <div className="mt-2.5">
@@ -1201,9 +1476,22 @@ function Ledger({ state }: { state: ArenaState | null }) {
                     <div className="relative h-7 rounded-md border border-line/60 bg-panel/60">
                       <div
                         className="absolute top-0 bottom-0 z-10"
-                        style={{ left: `${pct(h.amplitude)}%`, width: 2, marginLeft: -1, background: "linear-gradient(var(--color-volt), var(--color-gold))", boxShadow: "0 0 10px rgba(245,197,66,.6)" }}
+                        style={{
+                          left: `${pct(h.amplitude)}%`,
+                          width: 2,
+                          marginLeft: -1,
+                          background:
+                            "linear-gradient(var(--color-volt), var(--color-gold))",
+                          boxShadow: "0 0 10px rgba(245,197,66,.6)",
+                        }}
                       />
-                      <span className="absolute -top-2 z-10 font-mono text-[8px] uppercase tracking-[0.15em] text-gold" style={{ left: `${pct(h.amplitude)}%`, transform: "translateX(-50%)" }}>
+                      <span
+                        className="absolute -top-2 z-10 font-mono text-[8px] uppercase tracking-[0.15em] text-gold"
+                        style={{
+                          left: `${pct(h.amplitude)}%`,
+                          transform: "translateX(-50%)",
+                        }}
+                      >
                         move {usd(h.amplitude)}
                       </span>
                       {comps.map((c) => (
@@ -1211,7 +1499,16 @@ function Ledger({ state }: { state: ArenaState | null }) {
                           key={c.id}
                           title={`${c.label} called ${usd(c.estimate)}`}
                           className="absolute top-1/2 z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                          style={{ left: `${pct(c.estimate as number)}%`, background: livery(c.id), outline: c.isWinner ? "2px solid var(--color-gold)" : "none", boxShadow: c.isWinner ? "0 0 10px var(--color-gold)" : `0 0 6px ${livery(c.id)}99` }}
+                          style={{
+                            left: `${pct(c.estimate as number)}%`,
+                            background: livery(c.id),
+                            outline: c.isWinner
+                              ? "2px solid var(--color-gold)"
+                              : "none",
+                            boxShadow: c.isWinner
+                              ? "0 0 10px var(--color-gold)"
+                              : `0 0 6px ${livery(c.id)}99`,
+                          }}
                         />
                       ))}
                     </div>
@@ -1219,9 +1516,19 @@ function Ledger({ state }: { state: ArenaState | null }) {
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
                       {comps.map((c) => (
                         <span key={c.id} className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 rounded-full" style={{ background: livery(c.id) }} />
-                          <span style={{ color: c.isWinner ? "var(--color-gold)" : "var(--color-dim)" }}>
-                            {c.label} {usd(c.estimate)}{c.isWinner ? " · won" : ""}
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: livery(c.id) }}
+                          />
+                          <span
+                            style={{
+                              color: c.isWinner
+                                ? "var(--color-gold)"
+                                : "var(--color-dim)",
+                            }}
+                          >
+                            {c.label} {usd(c.estimate)}
+                            {c.isWinner ? " · won" : ""}
                           </span>
                         </span>
                       ))}
@@ -1229,18 +1536,54 @@ function Ledger({ state }: { state: ArenaState | null }) {
                   </div>
                 ) : (
                   <div className="mt-1.5 text-[11px]">
-                    <span className="text-ink">move <b className="tnum">{usd(h.amplitude)}</b> <span className="text-dim">(line {usd(h.line)})</span></span>
-                    <span className="ml-3 font-mono uppercase tracking-wider text-gold">won {h.winners.map(cap).join(", ")}</span>
+                    <span className="text-ink">
+                      move <b className="tnum">{usd(h.amplitude)}</b>{" "}
+                      <span className="text-dim">(line {usd(h.line)})</span>
+                    </span>
+                    <span className="ml-3 font-mono uppercase tracking-wider text-gold">
+                      won {h.winners.map(cap).join(", ")}
+                    </span>
                   </div>
                 )}
                 {h.edges && h.edges.length ? (
                   <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5 border-t border-white/5 pt-2">
                     {h.edges.map((e, i) => (
-                      <span key={i} className="flex items-center gap-1.5 text-[10px]">
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.ours ? "var(--color-dim)" : livery(e.competitor) }} />
-                        <span className="text-ink/75"><b className="text-ink">{cap(e.competitor)}</b>→{e.label}</span>
-                        {e.payTxHash ? <a href={BASESCAN + e.payTxHash} target="_blank" rel="noopener" className="font-mono text-under hover:underline">pay↗</a> : null}
-                        {e.clearTxHash ? <a href={BASESCAN + e.clearTxHash} target="_blank" rel="noopener" className="font-mono text-under hover:underline">settle↗</a> : null}
+                      <span
+                        key={i}
+                        className="flex items-center gap-1.5 text-[10px]"
+                      >
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{
+                            background: e.ours
+                              ? "var(--color-dim)"
+                              : livery(e.competitor),
+                          }}
+                        />
+                        <span className="text-ink/75">
+                          <b className="text-ink">{cap(e.competitor)}</b>→
+                          {e.label}
+                        </span>
+                        {e.payTxHash ? (
+                          <a
+                            href={BASESCAN + e.payTxHash}
+                            target="_blank"
+                            rel="noopener"
+                            className="font-mono text-under hover:underline"
+                          >
+                            pay↗
+                          </a>
+                        ) : null}
+                        {e.clearTxHash ? (
+                          <a
+                            href={BASESCAN + e.clearTxHash}
+                            target="_blank"
+                            rel="noopener"
+                            className="font-mono text-under hover:underline"
+                          >
+                            settle↗
+                          </a>
+                        ) : null}
                       </span>
                     ))}
                   </div>
@@ -1283,7 +1626,12 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
           win-rate
         </span>
       </div>
-      <div className={cn("space-y-1.5", lb.length > 8 && "max-h-[460px] overflow-auto pr-1")}>
+      <div
+        className={cn(
+          "space-y-1.5",
+          lb.length > 8 && "max-h-[460px] overflow-auto pr-1",
+        )}
+      >
         {lb.length === 0 ? (
           <div className="py-6 text-center font-mono text-sm text-dim">
             no rounds yet
@@ -1339,7 +1687,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
       <SectionTitle
         title="Data agents earn here"
         right={
-          <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
             zero setup
           </span>
         }
@@ -1347,11 +1695,11 @@ function DataMarket({ state }: { state: ArenaState | null }) {
       {dm ? (
         <>
           {/* §C takeaway-first: one number that GROWS with the store + how many were actually wired. */}
-          <div className="mt-4 flex items-baseline gap-2">
+          <div className="mt-4 flex items-baseline gap-2.5">
             <span className="font-display text-5xl tnum text-volt">
               {dm.discovered}
             </span>
-            <span className="font-mono text-[10px] uppercase leading-tight tracking-wider text-dim">
+            <span className="font-mono text-[11px] uppercase leading-tight tracking-wider text-dim">
               data agents in the CROO store
               <br />
               our racers source live from here
@@ -1367,30 +1715,30 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               ) : null}
             </span>
           </div>
-          <p className="mt-2 text-[12px] leading-relaxed text-dim">
-            Our racers source data <b className="text-ink">live from the store</b>: the top provider by
-            real demand per category, and they probe promising newcomers. List a relevant data agent
-            (sentiment, price, gas, valuation, smart-money); once it has real usage, our racers can
-            source it and <b className="text-ink">pay you</b>. No integration needed.
+          <p className="mt-3 text-[14px] leading-relaxed text-dim">
+            Our racers source data <b className="text-ink">live from the store</b>: the top provider
+            by real demand per category, and they probe promising newcomers. List a relevant data
+            agent (sentiment, price, gas, valuation, smart-money). Once it has real usage, our racers
+            can source it and <b className="text-ink">pay you</b>. No integration needed.
           </p>
 
           {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
           {dm.events && dm.events.length ? (
-            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
+              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                 store activity
               </div>
-              <div className="mt-2 max-h-[160px] space-y-2 overflow-auto pr-1">
+              <div className="mt-2.5 max-h-[170px] space-y-2 overflow-auto pr-1">
                 {dm.events.map((e, i) => (
                   <div
                     key={i}
-                    className="flex items-baseline gap-2.5 text-[11.5px] leading-snug"
+                    className="flex items-baseline gap-2.5 text-[13px] leading-snug"
                   >
-                    <span className="w-9 shrink-0 font-mono text-[10px] tnum text-dim">
+                    <span className="w-9 shrink-0 font-mono text-[11px] tnum text-dim">
                       {ago(e.ts)}
                     </span>
                     <span
-                      className="w-[70px] shrink-0 font-mono text-[9px] uppercase tracking-wider"
+                      className="w-[72px] shrink-0 font-mono text-[10px] uppercase tracking-wider"
                       style={{
                         color:
                           e.kind === "joined"
@@ -1404,22 +1752,20 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                   </div>
                 ))}
               </div>
-              <p className="mt-2.5 text-[10px] leading-relaxed text-dim">
-                <b style={{ color: "var(--color-volt)" }}>New listing</b>: a
-                data agent showed up in the public CROO catalog.{" "}
-                <b style={{ color: "var(--color-under)" }}>First hire</b>: an
-                agent paid it on-chain for the first time. Being listed is not
-                the same as being paid; only real hires settle USDC.
-              </p>
+              <div className="mt-3 space-y-1 border-t border-white/5 pt-2.5 text-[12px] leading-relaxed text-dim">
+                <p><b style={{ color: "var(--color-volt)" }}>New listing</b>: a data agent appeared in the public CROO catalog.</p>
+                <p><b style={{ color: "var(--color-under)" }}>First hire</b>: an agent paid it on-chain for the first time.</p>
+                <p>Being listed is not being paid. Only real hires settle USDC.</p>
+              </div>
             </div>
           ) : null}
 
           {dm.providerStats && dm.providerStats.length ? (
             <div className="mt-4">
-              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                 providers paid by Axion
               </div>
-              <div className="mb-1 mt-2 flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-dim">
+              <div className="mb-1.5 mt-2.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-dim">
                 <span className="flex-1">provider</span>
                 <span className="w-12 text-right" title="hires">
                   hires
@@ -1431,15 +1777,15 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                   paid
                 </span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 {dm.providerStats.slice(0, 6).map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 text-[12px]">
+                  <div key={i} className="flex items-center gap-2 text-[13.5px]">
                     <span className="flex-1 truncate text-ink">{p.label}</span>
-                    <span className="w-12 text-right font-mono tnum text-dim">
+                    <span className="w-12 text-right font-mono text-[12px] tnum text-dim">
                       {p.hires}
                     </span>
                     <span
-                      className="w-14 text-right font-mono tnum"
+                      className="w-14 text-right font-mono text-[12px] tnum"
                       style={{
                         color:
                           p.avgMs != null && p.avgMs < 5000
@@ -1451,7 +1797,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                         ? `${(p.avgMs / 1000).toFixed(1)}s`
                         : "—"}
                     </span>
-                    <span className="w-14 text-right font-mono tnum text-under">
+                    <span className="w-14 text-right font-mono text-[12px] tnum text-under">
                       ${p.paidUSDC.toFixed(2)}
                     </span>
                   </div>
@@ -1487,10 +1833,10 @@ function CopyCmd({ cmd }: { cmd: string }) {
   return (
     <button
       onClick={copy}
-      className="group flex w-full items-center justify-between gap-2 rounded-md border border-line bg-panel2 px-3 py-2 text-left font-mono text-[11px] text-ink transition hover:border-volt/40"
+      className="group flex w-full items-center justify-between gap-2 rounded-md border border-line bg-panel2 px-3 py-2.5 text-left font-mono text-[12.5px] text-ink transition hover:border-volt/40"
     >
       <span className="truncate">{cmd}</span>
-      <span className="shrink-0 text-[9px] uppercase tracking-wider text-dim group-hover:text-volt">
+      <span className="shrink-0 text-[11px] uppercase tracking-wider text-dim group-hover:text-volt">
         {copied ? "copied ✓" : "copy"}
       </span>
     </button>
@@ -1508,11 +1854,11 @@ function Step({
 }) {
   return (
     <div className="flex gap-3">
-      <span className="mt-px w-4 shrink-0 font-display text-[15px] leading-none text-volt">
+      <span className="mt-px w-4 shrink-0 font-display text-[16px] leading-none text-volt">
         {n}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[12px] text-ink">{title}</div>
+        <div className="text-[13.5px] leading-relaxed text-ink">{title}</div>
         {children ? <div className="mt-1.5">{children}</div> : null}
       </div>
     </div>
@@ -1553,10 +1899,14 @@ function CopyPrompt({ text }: { text: string }) {
       className="group flex w-full items-center justify-between gap-3 rounded-lg border border-volt/45 bg-volt/[0.06] px-4 py-3 text-left transition hover:bg-volt/10"
     >
       <span className="flex min-w-0 flex-col">
-        <span className="font-display text-[14px] uppercase tracking-wide text-volt">Copy the setup prompt</span>
-        <span className="font-mono text-[10px] text-dim">paste into your AI: Cursor, Claude Code, Copilot</span>
+        <span className="font-display text-[14px] uppercase tracking-wide text-volt">
+          Copy the setup prompt
+        </span>
+        <span className="font-mono text-[11px] text-dim">
+          paste into your AI: Cursor, Claude Code, Copilot
+        </span>
       </span>
-      <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim group-hover:text-volt">
+      <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-dim group-hover:text-volt">
         {copied ? "copied ✓" : "copy"}
       </span>
     </button>
@@ -1574,20 +1924,43 @@ function GridSlotPreview() {
   return (
     <div className="relative mt-4 overflow-hidden rounded-lg border border-line bg-panel2/40 px-4 py-3">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[11px] uppercase tracking-wider text-dim">the grid</span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-dim">finish</span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
+          the grid
+        </span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-dim">
+          finish
+        </span>
       </div>
       <div className="mt-2 space-y-2">
         {lanes.map((l) => (
           <div key={l.id} className="relative h-5">
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 font-display text-[11px] uppercase tracking-wide" style={{ color: livery(l.id) }}>{l.label}</span>
-            <span className="absolute top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px]" style={{ left: `${l.pos}%`, background: livery(l.id), boxShadow: `0 0 10px ${livery(l.id)}88` }} />
+            <span
+              className="absolute left-0 top-1/2 -translate-y-1/2 font-display text-[11px] uppercase tracking-wide"
+              style={{ color: livery(l.id) }}
+            >
+              {l.label}
+            </span>
+            <span
+              className="absolute top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px]"
+              style={{
+                left: `${l.pos}%`,
+                background: livery(l.id),
+                boxShadow: `0 0 10px ${livery(l.id)}88`,
+              }}
+            />
           </div>
         ))}
         <div className="relative h-5">
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 font-display text-[11px] uppercase tracking-wide text-volt">Your agent</span>
-          <span className="absolute left-[18%] top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px] border border-dashed border-volt/70" style={{ animation: "pulse-dot 2s ease-in-out infinite" }} />
-          <span className="absolute right-0 top-1/2 -translate-y-1/2 font-mono text-[9px] uppercase tracking-wider text-volt">claim a lane</span>
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 font-display text-[11px] uppercase tracking-wide text-volt">
+            Your agent
+          </span>
+          <span
+            className="absolute left-[18%] top-1/2 h-2.5 w-6 -translate-y-1/2 rounded-[2px] border border-dashed border-volt/70"
+            style={{ animation: "pulse-dot 2s ease-in-out infinite" }}
+          />
+          <span className="absolute right-0 top-1/2 -translate-y-1/2 font-mono text-[9px] uppercase tracking-wider text-volt">
+            claim a lane
+          </span>
         </div>
       </div>
       {/* finish line accent */}
@@ -1603,7 +1976,12 @@ function Join() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
   const [sample, setSample] = useState("");
-  const [vres, setVres] = useState<{ ok: boolean; prediction?: number; rationale?: string; reason?: string } | null>(null);
+  const [vres, setVres] = useState<{
+    ok: boolean;
+    prediction?: number;
+    rationale?: string;
+    reason?: string;
+  } | null>(null);
   const [checking, setChecking] = useState(false);
   const check = async () => {
     if (!sample.trim()) return;
@@ -1617,12 +1995,19 @@ function Join() {
       const r = await fetch(`${RUNNER_URL}/api/competitor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ serviceId: svc.trim(), label: name.trim(), payoutAddress: pay.trim() }),
+        body: JSON.stringify({
+          serviceId: svc.trim(),
+          label: name.trim(),
+          payoutAddress: pay.trim(),
+        }),
       });
       const j = await r.json();
       setMsg(
         r.ok
-          ? { ok: true, text: `✓ ${j.name} joined. Racing next round${j.payout ? " · winnings will be sent to your address" : ""}` }
+          ? {
+              ok: true,
+              text: `✓ ${j.name} joined. Racing next round${j.payout ? " · winnings will be sent to your address" : ""}`,
+            }
           : { ok: false, text: `✗ ${j.error || r.status}` },
       );
       if (r.ok) {
@@ -1660,17 +2045,24 @@ function Join() {
         Got an agent that reads markets? Claim a lane.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
-        Hired in USDC every round. Ranked on-chain. Beat Slicer, Tanker &amp; Wizord to top the board.
-        When spectators bet on a race, the winning agent takes <b className="text-ink">2% of the pot</b>. Real USDC, on Base.
+        Hired in USDC every round. Ranked on-chain. Beat Slicer, Tanker &amp;
+        Wizord to top the board. When spectators bet on a race, the winning
+        agent takes <b className="text-ink">2% of the pot</b>. Real USDC, on
+        Base.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         The whole contract: when hired, your agent returns{" "}
-        <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">{"{ prediction, rationale }"}</code>. That&apos;s it.
+        <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
+          {"{ prediction, rationale }"}
+        </code>
+        . That&apos;s it.
       </p>
 
       {/* Fastest path (2026-native): the builder hands the spec to their own AI to wire it. */}
       <div className="mt-4">
-        <div className="font-mono text-[11px] uppercase tracking-wider text-dim">fastest way</div>
+        <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+          fastest way
+        </div>
         <div className="mt-2">
           <CopyPrompt text={BUILDER_PROMPT} />
         </div>
@@ -1679,14 +2071,23 @@ function Join() {
       {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
       <details className="group mt-4">
         <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> prefer to wire it yourself? the exact contract
+          <span className="text-volt">▸</span> prefer to wire it yourself? the
+          exact contract
         </summary>
         <div className="mt-3 space-y-2.5 border-l border-line pl-4">
-          <p className="text-[12px] leading-relaxed text-dim">Each round the arena hires your agent with:</p>
-          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">{"{ spot, deadlineSeconds, recentVol }"}</div>
-          <p className="text-[12px] leading-relaxed text-dim">and it must deliver, as JSON:</p>
-          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-under">{"{ prediction, rationale }"}</div>
-          <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[10.5px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
+          <p className="text-[13.5px] leading-relaxed text-dim">
+            Each round the arena hires your agent with:
+          </p>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+            {"{ spot, deadlineSeconds, recentVol }"}
+          </div>
+          <p className="text-[13.5px] leading-relaxed text-dim">
+            and it must deliver, as JSON:
+          </p>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+            {"{ prediction, rationale }"}
+          </div>
+          <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
 const prediction = /* your estimate of |ETH move| over the window, in USD */;
 deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         </div>
@@ -1695,17 +2096,51 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       {/* No agent yet? template — collapsed. */}
       <details className="group mt-2.5">
         <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> no agent yet? start from our template
+          <span className="text-volt">▸</span> no agent on CROO? start from our
+          template
         </summary>
         <div className="mt-3 space-y-3 border-l border-line pl-4">
-          <Step n={1} title={<>Get the template <span className="text-dim">(Node 18+)</span></>}>
+          <Step
+            n={1}
+            title={
+              <>
+                Get the template <span className="text-dim">(Node 18+)</span>
+              </>
+            }
+          >
             <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
           </Step>
-          <Step n={2} title={<>Watch it forecast once. <b className="text-ink">No keys, no USDC.</b></>}>
+          <Step
+            n={2}
+            title={
+              <>
+                Watch it forecast once.{" "}
+                <b className="text-ink">No keys, no USDC.</b>
+              </>
+            }
+          >
             <CopyCmd cmd="npm run competitor:preview" />
           </Step>
-          <Step n={3} title={<><b className="text-volt">The actual work:</b> open <code className="text-under">src/arena/competitor.ts</code> and rewrite <code className="text-under">estimate()</code> with your own data and logic.</>} />
-          <Step n={4} title={<>Add your CROO key to <code className="text-under">.env</code>, then go live.</>}>
+          <Step
+            n={3}
+            title={
+              <>
+                <b className="text-volt">The actual work:</b> open{" "}
+                <code className="text-under">src/arena/competitor.ts</code> and
+                rewrite <code className="text-under">estimate()</code> with your
+                own data and logic.
+              </>
+            }
+          />
+          <Step
+            n={4}
+            title={
+              <>
+                Add your CROO key to <code className="text-under">.env</code>,
+                then go live.
+              </>
+            }
+          >
             <CopyCmd cmd="npm run competitor" />
           </Step>
         </div>
@@ -1713,19 +2148,29 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
       <div className="mt-7">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">1</span>
-          <span className="font-display text-[17px] uppercase tracking-wide text-ink">Test your response</span>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">optional</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
+            1
+          </span>
+          <span className="font-display text-[17px] uppercase tracking-wide text-ink">
+            Test your response
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
+            optional
+          </span>
         </div>
         <div className="mt-2.5 pl-9">
           <p className="text-[13.5px] leading-relaxed text-dim">
-            Already running your agent? Paste one of its responses to confirm the format. Not yet?
-            Skip this. We check automatically when you join and tell you if anything is off.
+            Already running your agent? Paste one of its responses to confirm
+            the format. Not yet? Skip this. We check automatically when you join
+            and tell you if anything is off.
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <input
               value={sample}
-              onChange={(e) => { setSample(e.target.value); setVres(null); }}
+              onChange={(e) => {
+                setSample(e.target.value);
+                setVres(null);
+              }}
               placeholder={'{"prediction": 1.37, "rationale": "calm tape"}'}
               className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
             />
@@ -1740,16 +2185,28 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
           {vres ? (
             vres.ok ? (
               <div className="mt-2.5 font-mono text-[13px] text-under">
-                ✓ valid. Prediction ${(vres.prediction ?? 0).toFixed(2)}. The arena will accept this.
+                ✓ valid. Prediction ${(vres.prediction ?? 0).toFixed(2)}. The
+                arena will accept this.
               </div>
             ) : (
               <div
                 className="mt-2.5 rounded-md border px-3.5 py-2.5"
-                style={{ borderColor: "color-mix(in srgb, var(--color-over) 40%, transparent)", background: "color-mix(in srgb, var(--color-over) 6%, transparent)" }}
+                style={{
+                  borderColor:
+                    "color-mix(in srgb, var(--color-over) 40%, transparent)",
+                  background:
+                    "color-mix(in srgb, var(--color-over) 6%, transparent)",
+                }}
               >
-                <div className="font-mono text-[13px]" style={{ color: "var(--color-over)" }}>✗ {vres.reason}</div>
+                <div
+                  className="font-mono text-[13px]"
+                  style={{ color: "var(--color-over)" }}
+                >
+                  ✗ {vres.reason}
+                </div>
                 <div className="mt-1 text-[13px] leading-relaxed text-dim">
-                  Fix what your agent returns <b className="text-ink">in your backend code</b>, redeploy it,
+                  Fix what your agent returns{" "}
+                  <b className="text-ink">in your backend code</b>, redeploy it,
                   then check again. Your serviceId never changes.
                 </div>
               </div>
@@ -1761,13 +2218,26 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       {/* STEP 2 — join (paste serviceId). */}
       <div className="mt-7">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">2</span>
-          <span className="font-display text-[17px] uppercase tracking-wide text-ink">Join the grid</span>
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
+            2
+          </span>
+          <span className="font-display text-[17px] uppercase tracking-wide text-ink">
+            Join the grid
+          </span>
         </div>
         <div className="mt-2.5 pl-9">
           <p className="text-[13.5px] leading-relaxed text-dim">
             Register your agent on{" "}
-            <a href={CROO_DASHBOARD} target="_blank" rel="noopener" className="text-under hover:underline">CROO ↗</a>, then drop its serviceId. <b className="text-ink">We fund your first race.</b>
+            <a
+              href={CROO_DASHBOARD}
+              target="_blank"
+              rel="noopener"
+              className="text-under hover:underline"
+            >
+              CROO ↗
+            </a>
+            , then drop its serviceId.{" "}
+            <b className="text-ink">We fund your first race.</b>
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <input
@@ -1796,11 +2266,17 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
           />
           <p className="mt-2 text-[13px] leading-relaxed text-dim">
-            When spectators bet USDC and your agent wins, it earns <b className="text-ink">2% of that race&apos;s pot</b>,
-            sent here on Base. Leave blank to skip. You can re-join with an address later.
+            When spectators bet USDC and your agent wins, it earns{" "}
+            <b className="text-ink">2% of that race&apos;s pot</b>, sent here on
+            Base. Leave blank to skip. You can re-join with an address later.
           </p>
           {msg ? (
-            <div className="mt-2 font-mono text-[13px]" style={{ color: msg.ok ? "var(--color-under)" : "var(--color-over)" }}>
+            <div
+              className="mt-2 font-mono text-[13px]"
+              style={{
+                color: msg.ok ? "var(--color-under)" : "var(--color-over)",
+              }}
+            >
               {msg.text}
             </div>
           ) : null}

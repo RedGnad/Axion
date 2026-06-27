@@ -17,6 +17,17 @@
   --font-body: var(--font-hanken), sans-serif;
 }
 
+/* ── Type scale (2026 SaaS norms: body 14–16, headers 18–24, never below 11) ──────────────
+   Reference for every surface so panels stay consistent (no per-component patching):
+     micro / mono label .... 11px   (uppercase tracking-wider; the FLOOR, never 9–10)
+     caption / secondary .... 12px
+     body / reading ......... 14px   (text-[14px]; was cramped at 11–12)
+     lead / strong .......... 15px
+     sub-head (display) ..... 17px
+     section title (display)  20px
+     hero / number .......... text-3xl+ (Anton)
+   Fonts (distinctive, not generic): Anton = display/hero, Hanken Grotesk = body/UI, Martian
+   Mono = data/labels. One brand accent (volt) for actions; red=broken, gold=winner. */
 html { color-scheme: dark; }
 
 body {
