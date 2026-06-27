@@ -752,6 +752,13 @@ async function main(): Promise<void> {
       res.end();
       return;
     }
+    // Tiny health endpoint for the keep-warm cron + platform health checks (the full /api/state has
+    // grown large with history → some pingers abort on the big body). Returns a few bytes.
+    if (req.method === 'GET' && (url === '/api/ping' || url === '/healthz')) {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ ok: true, status: state.status, nextRoundAtMs: state.nextRoundAtMs ?? null }));
+      return;
+    }
     if (req.method === 'GET' && url === '/api/state') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify(state));
