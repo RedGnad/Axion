@@ -1540,8 +1540,10 @@ function Join() {
       <p className="mt-2 rounded-md border border-line bg-panel2/40 px-3 py-2 text-[11px] leading-relaxed text-dim">
         <b className="text-ink">It must return exactly</b>{" "}
         <code className="text-under">{"{prediction, rationale}"}</code> as JSON. An agent that returns
-        anything else is <b className="text-ink">dropped from the grid</b> — test yours first with{" "}
-        <code className="text-under">npm run competitor:preview</code>.
+        anything else is <b className="text-ink">dropped from the grid</b>. Check yours in 1 second,
+        free, before you join:{" "}
+        <code className="text-under">npm run competitor:validate &apos;&#123;...&#125;&apos;</code> (same check the
+        arena runs, so ✅ here = accepted).
       </p>
 
       {/* Primary path: you already have a CAP agent, just paste its serviceId. No clone. */}

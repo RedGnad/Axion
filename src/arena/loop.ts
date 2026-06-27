@@ -8,7 +8,7 @@ import { PERSONALITIES, type Personality } from './personalities.js';
 import { forecast, type DataInput } from './forecast.js';
 import { consensusLine, reasonHash, settle } from './settle.js';
 import type { Forecast, Round } from './types.js';
-import type { CompetitorRequest, CompetitorResponse } from './competitor-contract.js';
+import { validateCompetitorResponse, type CompetitorRequest } from './competitor-contract.js';
 
 /**
  * One Arena round, end-to-end and verifiable on-chain:
@@ -264,17 +264,12 @@ async function playRemote(
   const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : undefined;
   const hire = await c.orchestrator.hireService(service, JSON.stringify(request), undefined, { maxPriceSmallestUnit });
 
-  // CONTRACT CHECK: a remote agent must return {"prediction": <usd number > 0>, "rationale": <text>}.
-  // If it doesn't (didn't implement the contract → empty/garbage/0), DON'T let a junk 0-estimate pollute
-  // the race: throw so the round DQs it and tells the BUILDER exactly what's wrong (surfaced in the feed).
-  let parsed: Partial<CompetitorResponse> | null = null;
-  try { parsed = JSON.parse(hire.deliverable) as Partial<CompetitorResponse>; } catch { /* not JSON */ }
-  const prediction = Math.abs(Number(parsed?.prediction));
-  if (!parsed || !Number.isFinite(prediction) || prediction <= 0) {
-    const got = (hire.deliverable || '').trim().slice(0, 60) || 'empty';
-    throw new Error(`invalid response — return {"prediction": <usd number>, "rationale": <text>} (got: ${got})`);
-  }
-  const rationale = typeof parsed.rationale === 'string' && parsed.rationale.trim() ? parsed.rationale.trim().slice(0, 1200) : '(no rationale provided)';
+  // CONTRACT CHECK (same function the local validator uses → ✅ there == accepted here). A remote that
+  // doesn't return {"prediction": >0, "rationale"} is DQ'd, not raced with a junk 0-estimate; the
+  // builder sees exactly why in the feed.
+  const v = validateCompetitorResponse(hire.deliverable || '');
+  if (!v.ok) throw new Error(`invalid response — return {"prediction": <usd number>, "rationale": <text>} (${v.reason})`);
+  const { prediction, rationale } = v;
 
   const f: Forecast = {
     competitor: c.id,
