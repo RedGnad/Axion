@@ -75,8 +75,8 @@ export default function Page() {
               <div className="mt-4">
                 <Race round={state?.round ?? null} />
               </div>
+              <EstimatingRotator state={state} />
             </div>
-            <EstimatingMarquee state={state} />
             <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
               <ToteBoard state={state} />
             </div>
@@ -560,10 +560,7 @@ function RaceControl({
       kicker = "AGENTS HIRING DATA";
       big = clock(now - openMs);
       secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
-      note =
-        r.competitors.length > 4
-          ? `${r.competitors.filter((c) => c.estimate != null).length}/${r.competitors.length} agents in · sourcing data on-chain`
-          : r.competitors.map((c) => `${c.label} ${c.estimate != null ? "✓" : "⏳"}`).join("  ·  ");
+      note = `${r.competitors.filter((c) => c.estimate != null).length}/${r.competitors.length} agents in · buying data on-chain`;
     }
   } else {
     // Idle / between races — the grid below shows the LAST race result (not a live race).
@@ -1020,46 +1017,39 @@ function UsdcBet({ state, pickedAgent, pickedLabel, committed, onPlaced }: { sta
   );
 }
 
-/** Live "estimating" marquee during the hiring wait: a scrolling strip of honest per-agent states
- *  (sourcing on-chain / data in / cut) + recent activity, so the wait feels alive instead of a dead
- *  timer. Only renders while agents are hiring (phase 'open'). */
-function EstimatingMarquee({ state }: { state: ArenaState | null }) {
+/** Live "estimating" rotator during the hiring wait: ONE honest status at a time, crossfading every
+ *  ~2.2s (a calm modern "please wait" micro-feature, not a horizontal scroll). Reflects real state —
+ *  each agent flips from "sourcing" to "in" as its data lands. Only while agents are hiring ('open'). */
+function EstimatingRotator({ state }: { state: ArenaState | null }) {
   const r = state?.round;
-  if (!r || r.phase !== "open" || !r.competitors.length) return null;
-  const items = r.competitors.map((c) =>
+  const live = r?.phase === "open";
+  const comps = r?.competitors ?? [];
+  const items = comps.map((c) =>
     c.dq
-      ? `${c.label} cut`
+      ? `${c.label} was cut this race`
       : c.estimate != null
-        ? `${c.label} called ${usd(c.estimate)} ✓`
-        : `${c.label} sourcing data on-chain…`,
+        ? `${c.label} is in — called ${usd(c.estimate)}`
+        : `${c.label} is sourcing data on-chain`,
   );
-  const inN = r.competitors.filter((c) => c.estimate != null).length;
-  items.push(`${inN}/${r.competitors.length} agents in`);
-  for (const f of (state?.feed ?? []).slice(0, 4)) items.push(f.text);
-  const line = items.join("      ·      ");
+  if (comps.length) items.push(`${comps.filter((c) => c.estimate != null).length} of ${comps.length} agents in`);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (!live || items.length === 0) return;
+    const id = setInterval(() => setI((x) => (x + 1) % items.length), 2200);
+    return () => clearInterval(id);
+  }, [live, items.length]);
+  if (!live || !items.length) return null;
+  const idx = i % items.length;
   return (
-    <div className="flex items-center gap-3 border-t border-line bg-panel2/30 py-2 pl-5">
-      <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-volt">
-        <span
-          className="h-1.5 w-1.5 rounded-full bg-volt"
-          style={{ animation: "pulse-dot 1.3s infinite", boxShadow: "0 0 8px var(--color-volt)" }}
-        />
-        estimating
+    <div className="mt-4 flex items-center justify-center gap-2 border-t border-line/50 pt-3">
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full bg-volt"
+        style={{ animation: "pulse-dot 1.3s infinite", boxShadow: "0 0 8px var(--color-volt)" }}
+      />
+      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-volt">estimating</span>
+      <span key={idx} className="swapin font-mono text-[12px] text-dim">
+        {items[idx]}
       </span>
-      <div
-        className="marquee-wrap flex-1 overflow-hidden"
-        style={{
-          maskImage: "linear-gradient(90deg, transparent, #000 3%, #000 94%, transparent)",
-          WebkitMaskImage: "linear-gradient(90deg, transparent, #000 3%, #000 94%, transparent)",
-        }}
-      >
-        <div className="marquee-track font-mono text-[11px] text-dim">
-          <span className="px-6">{line}</span>
-          <span className="px-6" aria-hidden>
-            {line}
-          </span>
-        </div>
-      </div>
     </div>
   );
 }
