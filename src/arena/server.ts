@@ -260,7 +260,7 @@ async function loadHistory(): Promise<void> {
     history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'];
     knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
     joinedRoster?: { serviceId: string; label: string; payout?: string }[];
-    racesToday?: number; racesDayKey?: string;
+    racesToday?: number; racesDayKey?: string; nextRoundAtMs?: number;
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
@@ -271,6 +271,8 @@ async function loadHistory(): Promise<void> {
     // resets it to 0 and a bot could drain us). refreshBudget() rolls it over if the UTC day changed.
     if (typeof d.racesToday === 'number') racesToday = d.racesToday;
     if (d.racesDayKey) racesDayKey = d.racesDayKey;
+    // Restore the scheduled next-race time so the countdown is reliable across restarts.
+    if (typeof d.nextRoundAtMs === 'number') state.nextRoundAtMs = d.nextRoundAtMs;
   };
   const fromStore = await loadState<Persisted>();
   if (fromStore) {
@@ -329,7 +331,7 @@ function saveHistory(): void {
   const blob = {
     history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats,
     knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
-    joinedRoster, racesToday, racesDayKey,
+    joinedRoster, racesToday, racesDayKey, nextRoundAtMs: state.nextRoundAtMs,
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
@@ -482,9 +484,9 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
   if (running || competitors.length === 0) return;
   running = true;
   lastRoundStartMs = Date.now();
-  // Honest "next race in" = when a race can NEXT run (the cooldown), not the slow heartbeat. Demand
-  // (start/predict/bet) triggers the actual race; after the cooldown the UI shows "arena ready".
-  state.nextRoundAtMs = lastRoundStartMs + MIN_ROUND_MS;
+  // Schedule the next AUTOMATIC race and PERSIST it, so the "next race in" countdown is reliable and
+  // SURVIVES restarts (Render redeploy/spin-down) instead of resetting to the full period each boot.
+  if (AUTO_MS) { state.nextRoundAtMs = lastRoundStartMs + AUTO_MS; saveHistory(); }
   state.status = 'running';
   try {
     await runRound(competitors, cfg, WINDOW, {
@@ -928,13 +930,19 @@ async function main(): Promise<void> {
 
   if (process.env.ARENA_AUTORUN === '1') void runOneRound(cfg);
 
-  // Heartbeat: a slow background safety-net round every AUTO_MS so the arena never goes fully silent
-  // without demand. It is NOT shown as the "next race in" countdown (that would be misleading: it
-  // would reset on every restart and ignore that demand triggers races much sooner). The UI countdown
-  // reflects the cooldown after a real race; otherwise it shows "arena ready". Off unless AUTO_MS set.
+  // Automatic race on a RELIABLE schedule: the UI counts down to state.nextRoundAtMs (persisted), and
+  // this loop fires the round when that time arrives. Target-based (not setInterval(AUTO_MS)) so the
+  // countdown survives restarts: a redeploy/spin-down resumes the SAME target instead of resetting it.
   if (AUTO_MS >= 60_000 && competitors.length) {
-    console.log(`[arena-server] heartbeat: a round every ${Math.round(AUTO_MS / 60000)}min (cooldown ${Math.round(MIN_ROUND_MS / 60000)}min)`);
-    setInterval(() => tryRunRound(cfg, 'heartbeat'), AUTO_MS);
+    // Keep a restored future target; only set a fresh one if missing or stale beyond a full period.
+    if (!state.nextRoundAtMs || state.nextRoundAtMs < Date.now() - AUTO_MS) state.nextRoundAtMs = Date.now() + AUTO_MS;
+    saveHistory();
+    console.log(`[arena-server] auto race ~every ${Math.round(AUTO_MS / 60000)}min; next at ${new Date(state.nextRoundAtMs).toISOString()}`);
+    setInterval(() => {
+      if (running || !state.nextRoundAtMs || Date.now() < state.nextRoundAtMs) return;
+      const t = tryRunRound(cfg, 'auto'); // scheduled time reached → run (runOneRound reschedules nextRoundAtMs)
+      if (!t.started) { state.nextRoundAtMs = Date.now() + AUTO_MS; saveHistory(); } // skipped (cooldown/budget) → retry next period
+    }, 15_000);
   }
 }
 
