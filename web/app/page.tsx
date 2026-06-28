@@ -765,6 +765,10 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const live = r?.phase === "open" || r?.phase === "betting"; // current race accepts predictions
   const roster = state?.roster ?? [];
   const idlePickable = !live && roster.length > 0; // between races → predict the NEXT race
+  // Agents that have actually raced (have a standings row). A freshly-joined agent is bettable for the
+  // next race but has no history yet → tag it "new" so it doesn't look like a bug (it appears here but
+  // not in the standings until it races, e.g. Zeru just after joining).
+  const raced = new Set((state?.leaderboard ?? []).filter((r) => r.rounds > 0).map((r) => r.id));
   const cards: {
     id: string;
     label: string;
@@ -936,8 +940,10 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       ) : (
                         "forecasting…"
                       )
-                    ) : (
+                    ) : raced.has(c.id) ? (
                       "races next"
+                    ) : (
+                      <span className="text-volt">new · races next</span>
                     )}
                   </div>
                   <div
@@ -2164,8 +2170,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
           <span className="font-display text-[17px] uppercase tracking-wide text-ink">
             Test your response
           </span>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
-            optional
+          <span className="font-mono text-[11px] uppercase tracking-wider text-volt">
+            recommended
           </span>
         </div>
         <div className="mt-2.5 pl-9">
