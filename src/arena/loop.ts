@@ -175,10 +175,23 @@ const isCuratedSeed = (serviceId: string): boolean => DATA_AGENTS.some((e) => e.
 async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   const seed = getDataAgent(capability) ?? null;
   if (!LIVE_SOURCING) return seed;
-  const cands = await candidatesForCapability(capability); // ranked desc by orders7d, not failed
+  const cands = await candidatesForCapability(capability); // ranked desc by orders7d, minus blacklisted
   if (!cands.length) return seed;
+  // ROTATE so WHICH provider is hired varies round to round (real store dynamism), demand-weighted so
+  // high-demand providers show up more often but never EXCLUSIVELY (previously it always took the
+  // single #1 → looked frozen on the same handful). Occasionally probe an untried newcomer to qualify
+  // it on-chain; a dud just fails once, gets blacklisted, and drops out of future pools.
+  const pool = cands.slice(0, 6);
   const untried = cands.filter((c) => isProviderUntried(c.serviceId) && c.orders7d >= 5);
-  const pick = untried.length && Math.random() < 0.15 ? untried[Math.floor(Math.random() * untried.length)] : cands[0];
+  let pick: (typeof cands)[number];
+  if (untried.length && Math.random() < 0.2) {
+    pick = untried[Math.floor(Math.random() * Math.min(untried.length, 5))];
+  } else {
+    const total = pool.reduce((s, c) => s + Math.max(1, c.orders7d), 0);
+    let r = Math.random() * total;
+    pick = pool[pool.length - 1];
+    for (const c of pool) { r -= Math.max(1, c.orders7d); if (r <= 0) { pick = c; break; } }
+  }
   markProviderTried(pick.serviceId);
   return { capability, serviceId: pick.serviceId, label: pick.name, ours: false };
 }
