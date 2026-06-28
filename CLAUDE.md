@@ -10,10 +10,20 @@
 
 ## Positioning
 Axion Clash is a **consumer spectacle on top of real agent-to-agent commerce**. The A2A is not a
-demo prop: a persona literally cannot forecast without buying data, so every round emits real,
-needed CAP orders (organic by construction). Closest public precedent: Nof1's "Alpha Arena" (LLMs
-trade crypto live, people watch) — we are NOT that: ours is forecasting + an A2A data economy +
-spectator betting on the agents, not autonomous P&L trading. Do not name-collide with them.
+demo prop: each persona is an LLM with no chain access, so it can only forecast by HIRING data, and
+every round emits real CAP orders. Closest public precedent: Nof1's "Alpha Arena" (LLMs trade crypto
+live, people watch) — we are NOT that: ours is forecasting + an A2A data economy + spectator betting
+on the agents, not autonomous P&L trading. Do not name-collide with them.
+
+**DATA-SOURCING-AS-STRATEGY (the honest A2A frame — decided 2026-06-28 with the advisor, gate-checked
+against the live catalog).** Each persona bets a DIFFERENT data-thesis (Slicer=momentum/flow,
+Tanker=contrarian value, Wizord=microstructure) → disjoint hires, 6 distinct feeds/round, and live
+sourcing ROTATES the provider within each thesis (never the same feeds every round). The standings
+TEST which thesis is least wrong. INTEGRITY: the store has **no clean ETH 60s realized-vol feed**
+(116 services censused, mostly day-horizon / Polymarket analytics), so we **never present a hire as
+60s predictive alpha** — some theses lose by design. The organic A2A claim is the DIVERSITY of real,
+thesis-driven orders + the per-hire on-chain verifiability, NOT an alpha claim. Never wire a
+decorative hire dressed as predictive.
 
 Differentiator to defend (the "10"): the on-chain trust layer makes agent-vs-agent competition
 *verifiable* — per-hire escrow + Pyth-settled outcome + pre-committed estimates (`reasonHash`) —

@@ -53,10 +53,17 @@ const THIRD_PARTY: RosterEntry[] = [
  * "online" in the catalog is not a guarantee a provider accepts a negotiation: probe at first hire.
  */
 export const DATA_AGENTS: RosterEntry[] = [
+  // Per-persona DATA-THESES (disjoint → 6 distinct feeds/round). Each is the curated, VERIFIED-working
+  // fallback; live sourcing rotates among same-capability candidates in the live catalog for variety.
+  // Honest: the store has no clean ETH 60s realized-vol feed (mostly day-horizon), so these are
+  // thesis inputs, never claimed as 60s alpha. serviceIds verified live (all 0.10 USDC).
+  // Slicer — momentum / flow:
+  { capability: 'smart-money', serviceId: 'f57a40f6-be70-4074-8f09-db46cdf51fed', label: 'top_traders (smart-money flow)', ours: false },
   { capability: 'sentiment', serviceId: 'b45712e9-d3fa-4758-bcf9-ee42fbcb4dbf', label: 'Bitcoin Fear & Greed Index', ours: false },
-  { capability: 'smart-money', serviceId: 'f57a40f6-be70-4074-8f09-db46cdf51fed', label: 'top_traders (Binance smart-money)', ours: false },
+  // Tanker — contrarian value:
   { capability: 'valuation', serviceId: 'ebcb0d50-49e3-4108-a56e-cce2278dab10', label: 'Bitcoin AHR999 Indicator', ours: false },
   { capability: 'dca-signal', serviceId: '5bdddb40-2c4e-4b77-baf9-16d0ca85ea42', label: 'Bitcoin DCA Signal', ours: false },
+  // Wizord — microstructure:
   { capability: 'token-price', serviceId: '1db8e904-4974-43f3-b3c6-c5ee774ad215', label: 'Token Price', ours: false },
   { capability: 'gas', serviceId: '32e1b01f-22f2-453d-af70-45f4e557c440', label: 'Gas Tracker', ours: false },
 ];

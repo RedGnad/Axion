@@ -1,10 +1,17 @@
 /**
  * The competitor personalities (names LOCKED: Slicer / Tanker / Wizord).
  *
- * Each is an LLM persona with NO direct chain access — its only way to inform a forecast is to
- * HIRE specialist data-agents. That separation makes every hire genuinely necessary (organic A2A).
- * The three buy DISJOINT capability sets → 6 distinct third-party data-agents hired per round
- * (real A2A diversity, not cosmetic flavor).
+ * DATA-SOURCING IS THE STRATEGY. Each persona is an LLM with NO direct chain access; it can only
+ * inform a forecast by HIRING data-agents, and each bets a DIFFERENT data-thesis:
+ *   - Slicer = momentum / flow         (smart-money + sentiment)
+ *   - Tanker = contrarian macro / value (valuation + DCA signal)
+ *   - Wizord = microstructure          (live price + gas)
+ * Hires are DISJOINT per persona (6 distinct third-party feeds/round) and live sourcing ROTATES the
+ * provider within each thesis, so it is never the same feeds every round. The standings TEST which
+ * thesis is least wrong on a ~60s amplitude call. HONESTY (verified against the live catalog): there
+ * is no clean ETH 60s realized-vol feed in the store — most listed data is day-horizon — so we never
+ * present a hire as predictive alpha for 60s; some theses lose by design. The organic A2A claim is the
+ * DIVERSITY of real, thesis-driven orders, not an alpha claim.
  *
  * `id` is the locked display name used as the competitor key everywhere (rounds, bets, manifest).
  * `archetype` maps to the SDK-Key env var (COMPETITOR_<ARCHETYPE>_SDK_KEY) — the keys are issued
@@ -33,7 +40,7 @@ export const PERSONALITIES: Personality[] = [
     id: 'slicer',
     archetype: 'bull',
     label: 'Slicer',
-    blurb: 'Momentum hunter. Buys smart-money flow + market sentiment, rides the trend.',
+    blurb: 'Momentum thesis: smart-money flow + market sentiment, rides the trend.',
     capabilities: ['smart-money', 'sentiment'],
     volMultiplier: 1.3,
     systemPrompt:
@@ -46,7 +53,7 @@ export const PERSONALITIES: Personality[] = [
     id: 'tanker',
     archetype: 'bear',
     label: 'Tanker',
-    blurb: 'Contrarian value bear. Buys valuation + DCA signal, fades froth.',
+    blurb: 'Contrarian value thesis: valuation + DCA signal, fades froth.',
     capabilities: ['valuation', 'dca-signal'],
     volMultiplier: 0.8,
     systemPrompt:
@@ -59,7 +66,7 @@ export const PERSONALITIES: Personality[] = [
     id: 'wizord',
     archetype: 'quant',
     label: 'Wizord',
-    blurb: 'Microstructure quant. Buys live token price + gas, reads near-term flow.',
+    blurb: 'Microstructure thesis: live price + gas, reads near-term flow.',
     capabilities: ['token-price', 'gas'],
     volMultiplier: 1.0,
     systemPrompt:

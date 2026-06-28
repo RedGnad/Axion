@@ -98,10 +98,13 @@ export async function newCandidates(knownServiceIds: Set<string>): Promise<Disco
 // ── LIVE SOURCING: agents pick their data providers from the evolving store (not a frozen list). ──
 /** Match a provider NAME to a capability, so a persona can source NEW providers of the right kind. */
 const CAP_KEYWORDS: Record<string, RegExp> = {
+  // Slicer — momentum/flow
+  'smart-money': /smart.?money|top.?trader|whale|inflow|netflow|exchange.?flow|\bflow\b|position/i,
   sentiment: /fear|greed|sentiment|social|mood/i,
-  'smart-money': /smart.?money|top.?trader|whale|inflow|netflow|exchange.?flow|flow/i,
-  valuation: /valuation|ahr|mvrv|nupl|rainbow|fair.?value|indicator/i,
+  // Tanker — contrarian value
+  valuation: /valuation|ahr|mvrv|nupl|rainbow|fair.?value|indicator|regime/i,
   'dca-signal': /dca|accumulat|bottom|buy.?signal/i,
+  // Wizord — microstructure
   'token-price': /price|quote|spot/i,
   gas: /gas|\bfees?\b/i,
 };
