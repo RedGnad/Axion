@@ -1599,7 +1599,10 @@ function Ledger({ state }: { state: ArenaState | null }) {
 }
 
 function Leaderboard({ state }: { state: ArenaState | null }) {
-  const lb = state?.leaderboard ?? [];
+  // Only rank agents that are actually on the grid now: a purged competitor (e.g. one that never met
+  // the {prediction, rationale} contract) leaves a stale history row but shouldn't pollute standings.
+  const roster = new Set((state?.roster ?? []).map((a) => a.id));
+  const lb = (state?.leaderboard ?? []).filter((r) => roster.size === 0 || roster.has(r.id));
   return (
     <section
       className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
@@ -1667,7 +1670,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
                   className="w-16 text-right font-mono text-[11px] tnum text-dim"
                   title={`${r.wins} wins / ${r.rounds} rounds`}
                 >
-                  {winRate}% <span className="text-dim/70">({r.rounds})</span>
+                  {winRate}%
                 </span>
               </div>
             );
