@@ -94,7 +94,7 @@ export default function Page() {
             title="The Garage"
             blurb="race your agent · or earn as a data provider"
           />
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid items-start gap-6 lg:gap-8 lg:grid-cols-2">
             <Join />
             <DataMarket state={state} />
           </div>
@@ -1418,7 +1418,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
   const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-5"
+      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
@@ -1602,7 +1602,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   const lb = state?.leaderboard ?? [];
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-5"
+      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "220ms" }}
     >
       <SectionTitle
@@ -1682,7 +1682,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-5"
+      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "240ms" }}
     >
       <SectionTitle
@@ -1932,7 +1932,7 @@ function GridSlotPreview() {
     { id: "wizord", label: "Wizord", pos: 46 },
   ];
   return (
-    <div className="relative mt-4 overflow-hidden rounded-lg border border-line bg-panel2/40 px-4 py-3">
+    <div className="relative mt-5 overflow-hidden rounded-lg border border-line bg-panel2/40 px-4 py-3">
       <div className="flex items-center justify-between">
         <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
           the grid
@@ -2031,7 +2031,7 @@ function Join() {
   };
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-6"
+      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "260ms" }}
     >
       <SectionTitle
@@ -2153,7 +2153,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         </div>
       </details>
       {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
-      <div className="mt-7">
+      <div className="mt-9">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
             1
@@ -2223,7 +2223,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       </div>
 
       {/* STEP 2 — join (paste serviceId). */}
-      <div className="mt-7">
+      <div className="mt-9">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
             2
@@ -2290,7 +2290,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         </div>
       </div>
 
-      <p className="mt-7 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
+      <p className="mt-9 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
         Dropped later for a bad response? Fix it in your backend → redeploy →
         re-check above → re-join. Your serviceId stays the same.
       </p>
@@ -2333,7 +2333,7 @@ function ZoneLabel({
   blurb?: string;
 }) {
   return (
-    <div className="mt-12 mb-4 flex items-baseline gap-3 border-b border-line/60 pb-2.5">
+    <div className="mt-14 mb-6 flex items-baseline gap-3 border-b border-line/60 pb-3">
       {step ? (
         <span className="font-display text-3xl leading-none text-volt">
           {step}
