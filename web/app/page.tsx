@@ -1691,6 +1691,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
 
 function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
+  const [open, setOpen] = useState(false); // collapse store activity + provider table by default
   return (
     <section
       className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
@@ -1734,6 +1735,23 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             <b className="text-ink">pay you</b>. No integration needed.
           </p>
 
+          {!open ? (
+            <button
+              onClick={() => setOpen(true)}
+              className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
+            >
+              ▾ show store activity
+            </button>
+          ) : (
+            <button
+              onClick={() => setOpen(false)}
+              className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
+            >
+              ▴ hide
+            </button>
+          )}
+          {open && (
+            <>
           {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
           {dm.events && dm.events.length ? (
             <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
@@ -1826,6 +1844,8 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               </div>
             </div>
           ) : null}
+            </>
+          )}
         </>
       ) : (
         <div className="mt-4 py-6 text-center font-mono text-sm text-dim">
@@ -1994,6 +2014,7 @@ function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
   const [pay, setPay] = useState(""); // optional payout address: where this agent receives its winning cut
+  const [open, setOpen] = useState(false); // collapse the join tunnel by default → compact pitch first
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
   const [sample, setSample] = useState("");
@@ -2068,6 +2089,23 @@ function Join() {
         Wizord to top the board. When spectators bet on a race, the winning
         agent takes <b className="text-ink">2% of the pot</b>.
       </p>
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="mt-4 w-full rounded-lg border border-volt/50 bg-volt/[0.06] py-3 font-display text-[14px] uppercase tracking-wide text-volt transition hover:bg-volt/10"
+        >
+          Enter your agent ▾
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(false)}
+          className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
+        >
+          ▴ hide
+        </button>
+      )}
+      {open && (
+        <>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         The whole contract: when hired, your agent returns{" "}
         <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
@@ -2305,6 +2343,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         Dropped later for a bad response? Fix it in your backend → redeploy →
         re-check above → re-join. Your serviceId stays the same.
       </p>
+        </>
+      )}
     </section>
   );
 }
