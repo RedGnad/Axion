@@ -16,6 +16,7 @@ export interface CompetitorView {
   launchAtMs?: number; // when its data landed → staggered launch
   dataMs?: number;     // data latency (ms) → ⚡ fastest-grid badge
   dq?: boolean;        // disqualified this round (too slow) → doesn't race/win
+  hires?: string[];    // provider labels this agent bought this round (live); empty for remotes
 }
 export interface RoundView {
   id: string;

@@ -33,6 +33,9 @@ interface CompetitorView {
   dataMs?: number;
   /** Disqualified this round (didn't deliver before the cutoff) — doesn't race or win. */
   dq?: boolean;
+  /** Provider labels this agent hired THIS round (from its edges) — surfaced live so spectators see
+   *  which data each persona bought. Empty for remote agents (they source internally). */
+  hires?: string[];
 }
 interface RoundView {
   id: string;
@@ -552,6 +555,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           // This agent's data is in → it launches NOW; record its latency (fast = head-start + ⚡).
           c.launchAtMs = Date.now();
           c.dataMs = roundOpenMs ? Date.now() - roundOpenMs : undefined;
+          c.hires = edges.map((e) => e.label); // which providers it bought this round (live, per agent)
         }
         for (const e of edges) {
           pushFeed(`${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`, BASESCAN + e.payTxHash);
@@ -774,6 +778,7 @@ async function main(): Promise<void> {
       return;
     }
     if (req.method === 'GET' && url === '/api/state') {
+      refreshBudget(); // keep the daily-subsidy display current so it rolls over at UTC midnight (never a stale "used up")
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify(state));
       return;

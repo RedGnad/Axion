@@ -187,10 +187,14 @@ async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   if (untried.length && Math.random() < 0.2) {
     pick = untried[Math.floor(Math.random() * Math.min(untried.length, 5))];
   } else {
-    const total = pool.reduce((s, c) => s + Math.max(1, c.orders7d), 0);
+    // sqrt-dampened demand weighting: still favors high-demand providers, but not so overwhelmingly
+    // that the single #1 is picked every round (raw orders7d gaps are ~100:1 → it looked frozen).
+    // Dampened, comparable-demand candidates actually alternate round to round → visible variety.
+    const w = (c: (typeof cands)[number]) => Math.sqrt(Math.max(1, c.orders7d));
+    const total = pool.reduce((s, c) => s + w(c), 0);
     let r = Math.random() * total;
     pick = pool[pool.length - 1];
-    for (const c of pool) { r -= Math.max(1, c.orders7d); if (r <= 0) { pick = c; break; } }
+    for (const c of pool) { r -= w(c); if (r <= 0) { pick = c; break; } }
   }
   markProviderTried(pick.serviceId);
   return { capability, serviceId: pick.serviceId, label: pick.name, ours: false };

@@ -1335,7 +1335,9 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
     c.dq
       ? `${c.label} was cut this race`
       : c.estimate != null
-        ? `${c.label} is in, called ${usd(c.estimate)}`
+        ? c.hires && c.hires.length
+          ? `${c.label} bought ${c.hires.join(" + ")}, called ${usd(c.estimate)}`
+          : `${c.label} is in, called ${usd(c.estimate)}`
         : `${c.label} is sourcing data on-chain`,
   );
   if (comps.length)
