@@ -165,6 +165,8 @@ const predictPending = new Map<string, { agentId: string; visitorId: string }[]>
 // Deduped by visitorId so one visitor = one prediction per race (honest stats, no inflation).
 let nextPredictPending: { agentId: string; visitorId: string }[] = [];
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
+// serviceId → last live-probe time, so a builder can't rapid-fire join attempts (each probe costs a hire).
+const recentProbes = new Map<string, number>();
 
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
 // catalog as "new". knownProviderIds = serviceIds seen in past censuses; seenPairs = (agent|provider)
@@ -833,10 +835,40 @@ async function main(): Promise<void> {
             if (competitors.some((c) => c.kind === 'remote' && c.serviceId === serviceId)) return reply(409, { error: 'agent already in the arena' });
             const payout = (payoutAddress || '').trim();
             if (payout && !isPayoutAddress(payout)) return reply(400, { error: 'payout address must be a 0x… Base address (40 hex chars)' });
+            const lastProbe = recentProbes.get(serviceId) ?? 0;
+            if (Date.now() - lastProbe < 30_000) return reply(429, { error: 'already testing this agent — give it a moment, then retry.' });
+            recentProbes.set(serviceId, Date.now());
             if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
             let name = (label || `agent-${serviceId.slice(0, 4)}`).replace(/[^\w -]/g, '').slice(0, 24) || `agent-${serviceId.slice(0, 4)}`;
             while (metaById.has(name)) name += '*';
-            competitors.push(makeRemoteCompetitor(remoteBuyer, serviceId, name));
+
+            // LIVE PROBE: hire the agent once and validate its response BEFORE admitting it to the grid,
+            // so a non-working agent never reaches the bet board or a race (the recurring "invalid agent"
+            // problem). Their bad response → clear rejection here; OUR-side failure (timeout/our wallet) →
+            // admit anyway and rely on the race-time purge (never block a legit builder on our infra).
+            const comp = makeRemoteCompetitor(remoteBuyer, serviceId, name);
+            const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.20');
+            const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : undefined;
+            let spot = state.livePrice ?? 0;
+            try { if (!spot) spot = (await fetchPythPrice()).price; } catch { /* fall back below */ }
+            spot = spot || 3000;
+            const probeReq = { roundId: `probe-${Date.now()}`, asset: 'ETH', spot, deadlineSeconds: 60, recentVol: Math.max(0.5, spot * 0.0005) };
+            let probe: { ok: boolean; reason?: string; infra?: boolean };
+            try {
+              const hire = await Promise.race([
+                comp.orchestrator.hireService({ capability: 'competitor', serviceId, label: name, ours: false }, JSON.stringify(probeReq), undefined, { maxPriceSmallestUnit }),
+                new Promise<never>((_, rej) => setTimeout(() => rej(new Error('no response in 45s')), 45_000)),
+              ]);
+              const v = validateCompetitorResponse((hire as { deliverable?: string }).deliverable || '');
+              probe = v.ok ? { ok: true } : { ok: false, reason: v.reason };
+            } catch (e) {
+              probe = { ok: false, infra: true, reason: (e as Error).message }; // our side, not the builder's
+            }
+            if (!probe.ok && !probe.infra) {
+              return reply(422, { error: `your agent returned an invalid response (${probe.reason}). When hired it must return {"prediction": <number>, "rationale": <text>}. Fix it, then re-join.` });
+            }
+
+            competitors.push(comp);
             metaById.set(name, { label: name, blurb: 'community agent' });
             if (payout) setAgentPayout(name, payout); // route this agent's winning purse on-chain
             joinedRoster.push({ serviceId, label: name, payout: payout || undefined });
@@ -844,10 +876,9 @@ async function main(): Promise<void> {
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
             refreshRoster(); // the new agent is now bettable for the next race (idle predictions)
-            pushFeed(`New competitor joined the arena: ${name}`);
+            pushFeed(probe.ok ? `New competitor joined (passed live check): ${name}` : `New competitor joined: ${name}`);
             broadcast();
-            const wr = tryRunRound(cfg, `welcome:${name}`); // demand trigger: a new agent → a welcome round
-            reply(202, { ok: true, name, payout: !!payout, welcomeRound: wr.started, nextAtMs: wr.nextAtMs });
+            reply(202, { ok: true, name, payout: !!payout, probed: !!probe.ok, note: probe.infra ? 'joined — the live check could not run just now, you will be validated at your first race' : 'passed the live check' });
           } catch (e) {
             reply(400, { error: (e as Error).message });
           }

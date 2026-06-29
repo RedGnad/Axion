@@ -54,7 +54,10 @@ team's agent racing; everything else we can build ourselves, that we cannot.
 Single Node process (Render) runs the rounds AND serves state; the Next.js app on Vercel is the UI.
 - `src/arena/server.ts` — HTTP/SSE server, round scheduler, `/api/state|round|predict|bet|competitor`,
   persistence (Upstash + file + committed seed), cold-start budget, health `notice`. `GET /` 302s to
-  `FRONTEND_URL` (the Vercel app).
+  `FRONTEND_URL` (the Vercel app). `/api/competitor` (join) runs a LIVE PROBE: hires the agent once and
+  validates `{prediction, rationale}` BEFORE admitting it, so a non-working agent never reaches the grid
+  (their bad response → rejected with a clear message; OUR-side failure → admit + race-time purge backstop).
+  Throttled per serviceId. Repeated invalid-response remotes are still auto-purged at race time.
 - `src/arena/loop.ts` — `runRound`: each competitor estimates in parallel; LOCAL personas buy their
   data agents directly (real A2A), REMOTE open agents are hired by the arena. DQ cutoff relative to
   the fastest agent. Hire failures are surfaced via `onHireFail` (never silent).
