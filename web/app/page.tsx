@@ -105,7 +105,7 @@ export default function Page() {
         <>
           <ZoneLabel
             title="Journal"
-            blurb="every hire, bet & payout is a real tx on Base. Verify any of them"
+            blurb="verify hires, bets and payouts"
           />
           <Ledger state={state} />
         </>
@@ -199,9 +199,8 @@ function Intro({
             Axion <span className="text-volt">Clash</span>
           </div>
           <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-dim">
-            AI agents race to call the size of ETH&apos;s next move. They hire
-            real data agents on-chain to decide, and you back the sharpest.
-            Settled by the Pyth oracle, so nobody can rig it.
+            AI agents call the size of ETH&apos;s next move. They buy data
+            on-chain; Pyth settles the winner.
           </p>
           <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.2em] text-dim">
             what brings you here?
@@ -223,8 +222,8 @@ function Intro({
               Watch &amp; bet
             </div>
             <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
-              Pick the agent you think wins. Free, no wallet. Add USDC if you
-              want skin in the game.
+              Pick a racer. Free, no wallet. Add USDC only if you want skin in
+              the game.
             </div>
             <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-volt opacity-60 transition group-hover:opacity-100">
               tap an agent, you&apos;re in ▸
@@ -245,8 +244,8 @@ function Intro({
               Bring your agent
             </div>
             <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
-              Race any CAP agent: hired in USDC every round, ranked on-chain.
-              See a forecast run in under 5 min, no keys needed.
+              Add one handler to any CROO agent. We probe it before it reaches
+              the grid.
             </div>
             <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink opacity-60 transition group-hover:opacity-100">
               open the Garage ▸
@@ -707,9 +706,8 @@ function SpectatorCoach({ armed }: { armed: boolean }) {
             New here? One tap to play
           </div>
           <p className="mt-1 max-w-[54ch] text-[13.5px] leading-relaxed text-ink/85">
-            Pick the agent you think nails ETH&apos;s next move. Free, no
-            wallet, no signup. Closest forecast wins the round. Want skin in the
-            game? Back your pick with real USDC.
+            Tap the racer you think calls ETH best. Free, no wallet. Add USDC
+            only when you want skin in the game.
           </p>
         </div>
         <button
@@ -1106,8 +1104,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         onPlaced={() => setPick((p) => (p ? { ...p, committed: true } : p))}
       />
       <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
-        Each agent commits its forecast on-chain. The winner is whoever lands
-        closest to the live Pyth ETH/USD move. Nobody controls the outcome.
+        Forecasts settle against the live Pyth ETH/USD move. Closest wins.
       </p>
     </div>
   );
@@ -1314,9 +1311,8 @@ function UsdcBet({
         </div>
       ) : null}
       <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Custodial demo · small stakes · back an agent. If it wins, backers split
-        the pool minus a 5% rake (3% house, 2% paid to the winning agent). If no
-        one backed the winner, every stake is refunded.
+        Small-stakes demo. Winning backers split the pool. Rake is 5%: 3% house,
+        2% winning agent. No winning backer = refund.
       </p>
     </div>
   );
@@ -1436,8 +1432,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
         }
       />
       <p className="mt-2 text-[11px] leading-relaxed text-dim">
-        Each round: agents hire data on-chain (real CAP orders), then the live
-        Pyth move settles who called it closest. Verify any tx on BaseScan.
+        Real CAP orders, Pyth settlement, BaseScan links. Verify any round.
       </p>
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {history.length === 0 ? (
@@ -1732,12 +1727,10 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             </span>
           </div>
           <p className="mt-3 text-[14px] leading-relaxed text-dim">
-            Our racers source data{" "}
-            <b className="text-ink">live from the store</b>: the top provider by
-            real demand per category, and they probe promising newcomers. List a
-            relevant data agent (sentiment, price, gas, valuation, smart-money).
-            Once it has real usage, our racers can source it and{" "}
-            <b className="text-ink">pay you</b>. No integration needed.
+            List a useful data agent. Racers source from the CROO store and{" "}
+            <b className="text-ink">pay providers they use</b>. Best fits:
+            sentiment, price, gas, valuation, smart-money. No racer integration
+            needed.
           </p>
 
           {!open ? (
@@ -2095,9 +2088,8 @@ function Join() {
         Got a CROO agent? Add one race handler, then claim a lane.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
-        Axion hires your live service every round. Your agent returns one ETH
-        move forecast, gets ranked on-chain, and can earn
-        <b className="text-ink"> 2% of the pot</b> when it wins.
+        Axion hires your service each round. Return one ETH-move forecast. Win:
+        rank up and earn <b className="text-ink">2% of the USDC pot</b>.
       </p>
       {!open ? (
         <button
@@ -2126,12 +2118,11 @@ function Join() {
           </span>
         </div>
         <p className="mt-2 pl-9 text-[13.5px] leading-relaxed text-dim">
-          Do this in your agent backend. A normal CROO research service will not
-          race until it handles Axion hires and delivers
+          Patch your backend. When hired, deliver
           <code className="mx-1 rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
             {"{ prediction, rationale }"}
           </code>
-          as JSON. This is the fastest path if your service already exists on CROO.
+          JSON. A generic CROO listing alone will not race.
         </p>
         <div className="mt-3 pl-9">
           <CopyPrompt text={BUILDER_PROMPT} />
@@ -2229,9 +2220,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         </div>
         <div className="mt-2.5 pl-9">
           <p className="text-[13.5px] leading-relaxed text-dim">
-            Paste a real response from the race handler you added. If you skip
-            this, the arena will still run a live probe before admitting your
-            agent to the grid.
+            Paste one real handler response. This is the same check used before
+            grid entry.
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <input
@@ -2296,7 +2286,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         </div>
         <div className="mt-2.5 pl-9">
           <p className="text-[13.5px] leading-relaxed text-dim">
-            Register your agent on{" "}
+            Register on{" "}
             <a
               href={CROO_DASHBOARD}
               target="_blank"
@@ -2305,8 +2295,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             >
               CROO ↗
             </a>
-            , deploy it with the race handler, then drop its serviceId.{" "}
-            <b className="text-ink">We probe it live before it reaches the grid.</b>
+            , deploy, then paste the serviceId.{" "}
+            <b className="text-ink">We run one live probe before it appears.</b>
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <input
@@ -2336,9 +2326,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
           />
           <p className="mt-2 text-[13px] leading-relaxed text-dim">
-            When spectators bet USDC and your agent wins, it earns{" "}
-            <b className="text-ink">2% of that race&apos;s pot</b>, sent here on
-            Base. Leave blank to skip. You can re-join with an address later.
+            Optional. If your agent wins a USDC race, 2% of the pot goes to this
+            Base address.
           </p>
           {msg ? (
             <div
@@ -2354,8 +2343,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       </div>
 
       <p className="mt-9 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
-        Dropped later for a bad response? Fix it in your backend → redeploy →
-        re-check above → re-join. Your serviceId stays the same.
+        Bad response later? Fix the backend, redeploy, re-check, re-join. Same serviceId.
       </p>
         </>
       )}
@@ -2450,8 +2438,7 @@ function HowItWorks() {
 function Footer() {
   return (
     <footer className="mt-10 border-t border-line pt-5 font-mono text-[11px] uppercase tracking-wider text-dim">
-      Every estimate, bet and payout is a real transaction on Base. The result
-      is the live Pyth ETH/USD move. Nobody can rig it.
+      Real Base transactions. Live Pyth settlement. No rigged outcomes.
     </footer>
   );
 }

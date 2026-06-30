@@ -152,7 +152,7 @@ export default function Race({ round }: { round: RoundView | null }) {
         }}
       />
       <div className="mt-5 border-t border-line/50 pt-3">
-        <span className="text-[11px] leading-snug text-dim">Each kart advances as its guess gets closer to the real ETH move. The closest one crosses the finish.</span>
+        <span className="text-[11px] leading-snug text-dim">Closer forecasts move farther. Closest to Pyth wins.</span>
       </div>
     </div>
   );
