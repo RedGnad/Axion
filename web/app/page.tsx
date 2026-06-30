@@ -48,10 +48,9 @@ export default function Page() {
 
       {tab === "play" && (
         <>
-          <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-4 overflow-hidden rounded-2xl border border-line bg-panel/70"
+            className="reveal mt-4 overflow-hidden rounded-lg border border-line bg-panel/70"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
@@ -77,10 +76,12 @@ export default function Page() {
               </div>
               <EstimatingRotator state={state} />
             </div>
-            <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
-              <SpectatorCoach armed={!intro} />
-              <ToteBoard state={state} />
-            </div>
+            {online ? (
+              <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
+                <SpectatorCoach armed={!intro} />
+                <ToteBoard state={state} />
+              </div>
+            ) : null}
             <LiveTicker state={state} />
           </section>
           <ZoneLabel title="Standings" blurb="which agent calls ETH best" />
@@ -182,7 +183,7 @@ function Intro({
       onClick={onClose}
     >
       <div
-        className="reveal relative w-full max-w-lg overflow-hidden rounded-2xl border border-volt/30 bg-panel shadow-[0_0_60px_rgba(182,255,58,.12)]"
+        className="reveal relative w-full max-w-lg overflow-hidden rounded-lg border border-volt/30 bg-panel shadow-[0_0_60px_rgba(182,255,58,.12)]"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -816,6 +817,14 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     }
   };
   const ps = state?.predictStats;
+  const pendingPicks = ps?.pending ?? 0;
+  const resolvedPicks = ps
+    ? Math.max(0, ps.resolved ?? ps.total - pendingPicks)
+    : 0;
+  const publicAccuracy =
+    ps && resolvedPicks > 0
+      ? Math.round((100 * ps.correct) / resolvedPicks)
+      : 0;
   const myLabel = active
     ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId)
     : "";
@@ -833,11 +842,17 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           <div className="text-right font-mono text-[11px] text-dim">
             <b className="text-ink tnum">{ps.total.toLocaleString()}</b> picks ·{" "}
             <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b>{" "}
-            visitors ·{" "}
-            <b className="text-volt tnum">
-              {ps.total ? Math.round((100 * ps.correct) / ps.total) : 0}%
-            </b>{" "}
-            called right
+            visitors
+            {resolvedPicks > 0 ? (
+              <>
+                {" "}· <b className="text-volt tnum">{publicAccuracy}%</b>{" "}
+                settled right
+              </>
+            ) : pendingPicks > 0 ? (
+              <>
+                {" "}· <b className="text-volt tnum">{pendingPicks}</b> pending
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -867,7 +882,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               <div
                 key={c.id}
                 className={cn(
-                  "relative overflow-hidden rounded-2xl border bg-panel2/30 transition",
+                  "relative overflow-hidden rounded-lg border bg-panel2/30 transition",
                   boxed ? "border-2" : "border border-line",
                   tappable && "lift",
                   c.dq && "opacity-50",
@@ -1159,7 +1174,7 @@ function UsdcBet({
   const mult = ub.multiplier; // ×odds (×4 early → ×2 at race start → ×1 at settle); decays with information
 
   return (
-    <div className="mt-5 rounded-xl border border-line bg-panel2/50 p-5">
+    <div className="mt-5 rounded-lg border border-line bg-panel2/50 p-5">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <div className="font-display text-lg uppercase tracking-wide text-ink">
@@ -1388,7 +1403,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
   const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
@@ -1585,7 +1600,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   );
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "220ms" }}
     >
       <SectionTitle
@@ -1666,7 +1681,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
   const [open, setOpen] = useState(false); // collapse store activity + provider table by default
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "240ms" }}
     >
       <SectionTitle
@@ -2040,7 +2055,7 @@ function Join() {
   };
   return (
     <section
-      className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "260ms" }}
     >
       <SectionTitle
@@ -2091,14 +2106,18 @@ function Join() {
                 Add the race handler
               </span>
             </div>
-            <p className="mt-2 pl-9 text-[13.5px] leading-relaxed text-dim">
-              Patch your backend. When hired, deliver
-              <code className="mx-1 inline-block whitespace-nowrap rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
-                {"{ prediction, rationale }"}
-              </code>
-              JSON. A generic CROO listing alone will not race.
-            </p>
-            <div className="mt-3 pl-9">
+            <div className="mt-3 space-y-3 pl-9">
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                Patch your backend. A generic CROO listing alone will not race.
+              </p>
+              <div className="rounded-md border border-line/70 bg-panel2/60 px-3 py-2.5">
+                <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                  required response
+                </div>
+                <div className="mt-1 overflow-x-auto whitespace-nowrap font-mono text-[12.5px] text-under">
+                  {'{ "prediction": number, "rationale": string }'}
+                </div>
+              </div>
               <CopyPrompt text={BUILDER_PROMPT} />
             </div>
           </div>

@@ -76,7 +76,7 @@ export interface ArenaState {
   leaderboard: LeaderRow[];
   feed: FeedItem[];
   roster?: { id: string; label: string }[];
-  predictStats?: { total: number; correct: number; visitors: number };
+  predictStats?: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   budget?: { used: number; cap: number; resetsAt: number };
   notice?: { level: 'warn'; text: string };

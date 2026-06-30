@@ -105,7 +105,7 @@ interface ArenaState {
    *  (at a low cadence the arena is idle most of the time; this is the main engagement lever). */
   roster?: { id: string; label: string }[];
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
-  predictStats: { total: number; correct: number; visitors: number };
+  predictStats: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
@@ -245,7 +245,22 @@ function isInfraFail(reason: string): boolean {
   return /insufficient|balance|funds|timed out|timeout|AGENT_NOT_FOUND|requester agent not found/i.test(reason);
 }
 
+function pendingPredictionCount(): number {
+  let n = nextPredictPending.length;
+  for (const bucket of predictPending.values()) n += bucket.length;
+  return n;
+}
+
+function refreshPredictStats(): ArenaState['predictStats'] {
+  const pending = pendingPredictionCount();
+  const resolved = Math.max(0, state.predictStats.total - pending);
+  state.predictStats.pending = pending;
+  state.predictStats.resolved = resolved;
+  return state.predictStats;
+}
+
 function broadcast(): void {
+  refreshPredictStats();
   const payload = `data: ${JSON.stringify(state)}\n\n`;
   for (const res of clients) res.write(payload);
 }
@@ -343,6 +358,7 @@ async function loadHistory(): Promise<void> {
 }
 
 function saveHistory(): void {
+  refreshPredictStats();
   const blob = {
     history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats,
     knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
@@ -856,6 +872,7 @@ async function main(): Promise<void> {
     }
     if (req.method === 'GET' && url === '/api/state') {
       refreshBudget(); // keep the daily-subsidy display current so it rolls over at UTC midnight (never a stale "used up")
+      refreshPredictStats();
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify(state));
       return;
@@ -884,6 +901,7 @@ async function main(): Promise<void> {
         'Access-Control-Allow-Origin': '*',
         'X-Accel-Buffering': 'no', // tell proxies (Render/Cloudflare) not to buffer the stream
       });
+      refreshPredictStats();
       res.write(`data: ${JSON.stringify(state)}\n\n`);
       clients.add(res);
       const hb = setInterval(() => res.write(': hb\n\n'), 20_000); // heartbeat keeps the stream flushing
