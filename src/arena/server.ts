@@ -110,8 +110,8 @@ interface ArenaState {
   usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
   budget?: { used: number; cap: number; resetsAt: number };
-  /** Health banner: surfaced (never silent) when data hires fail — e.g. the arena AA wallet is out of
-   *  USDC so agents couldn't buy data and forecast on baseline only. Cleared once a round buys data. */
+  /** Health banner: surfaced (never silent) when data hires fail. Kept user-facing and action-oriented:
+   *  funding, delisting, and provider latency are different states. Cleared once a round buys data. */
   notice?: { level: 'warn'; text: string };
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
@@ -224,15 +224,25 @@ let lastHireFailReason = ''; // most recent data-hire failure (human-ish), for t
 function humanizeHireFail(reason: string): string {
   const r = reason.toLowerCase();
   if (r.includes('invalid response')) return 'invalid response (must return {prediction, rationale})';
+  if (r.includes('agent_not_found') || r.includes('requester agent not found')) return 'seed agent no longer registered on CROO';
   if (/insufficient|balance|funds/.test(r)) return 'arena wallet out of USDC';
   if (/timed out|timeout/.test(r)) return 'provider too slow (timeout)';
   if (/create_failed|rejected|reject/.test(r)) return 'provider rejected the order';
   return reason.slice(0, 80);
 }
-/** A bad competitor RESPONSE (didn't honor the contract) is the builder's issue, not our infra → it
- *  should be surfaced to them, but must NOT raise the "fund the arena wallet" health banner. */
+function degradedNotice(why: string): string {
+  if (why === 'arena wallet out of USDC') {
+    return 'Live data degraded: an agent wallet needs USDC. Races continue with fallback forecasts; see Journal for details.';
+  }
+  if (why === 'seed agent no longer registered on CROO') {
+    return 'Live data degraded: a seed racer was removed from CROO. Restore or redeploy it before claiming full data hires.';
+  }
+  return `Live data degraded: ${why}. Races continue with fallback forecasts; see Journal for details.`;
+}
+/** A bad competitor RESPONSE (didn't honor the contract) is the builder's issue, not our infra. It
+ *  should be surfaced to them, but must not raise the arena health banner. */
 function isInfraFail(reason: string): boolean {
-  return /insufficient|balance|funds|timed out|timeout/i.test(reason);
+  return /insufficient|balance|funds|timed out|timeout|AGENT_NOT_FOUND|requester agent not found/i.test(reason);
 }
 
 function broadcast(): void {
@@ -526,7 +536,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         const why = humanizeHireFail(reason);
         if (isInfraFail(reason)) {
           lastHireFailReason = why;
-          state.notice = { level: 'warn', text: `Data hires are failing: ${why}. Agents are forecasting on baseline only. Fund the arena wallet to restore real data.` };
+          state.notice = { level: 'warn', text: degradedNotice(why) };
           pushFeed(`${personaMeta(competitor).label} couldn't get ${label}: ${why}`);
         } else {
           pushFeed(`${personaMeta(competitor).label}: ${why}`); // e.g. "PulseBNB: invalid response (must return {prediction, rationale})"
@@ -597,7 +607,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         const o = round.outcome!;
         // Data flowed this round → clear the health banner; none → keep/raise it (A2A is hollow).
         if (edges.length > 0) { state.notice = undefined; lastHireFailReason = ''; }
-        else if (!state.notice) state.notice = { level: 'warn', text: 'No data was purchased this round. Agents forecast on baseline only. Fund the arena wallet to restore real data.' };
+        else if (!state.notice) state.notice = { level: 'warn', text: 'Live data degraded: no data was purchased this round. Races used fallback forecasts; see Journal for details.' };
         // Accuracy decides the win; SPEED only breaks exact ties — among co-winners, the agent whose
         // data landed first takes it (legitimate edge for choosing fast data-providers).
         let winners = o.winners;

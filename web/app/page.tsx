@@ -148,23 +148,21 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 function Notice({ state }: { state: ArenaState | null }) {
   const n = state?.notice;
   if (!n) return null;
+  const body = n.text.replace(/^Live data degraded:\s*/i, "");
   return (
-    <div
-      className="reveal mt-4 flex items-start gap-2.5 rounded-lg border px-4 py-3"
-      style={{
-        borderColor: "color-mix(in srgb, var(--color-over) 45%, transparent)",
-        background: "color-mix(in srgb, var(--color-over) 8%, transparent)",
-      }}
-    >
-      <span
-        className="mt-px font-mono text-[13px] font-bold"
-        style={{ color: "var(--color-over)" }}
-      >
-        !
-      </span>
-      <span className="font-mono text-[11px] leading-relaxed text-ink/85">
-        {n.text}
-      </span>
+    <div className="reveal mt-4 rounded-lg border border-gold/30 bg-gold/[0.045] px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <span className="h-2 w-2 rounded-full bg-gold" />
+        <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">
+          Data mode degraded
+        </span>
+        <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
+          fallback forecasts active
+        </span>
+      </div>
+      <p className="mt-2 max-w-4xl text-[13px] leading-relaxed text-ink/82">
+        {body}
+      </p>
     </div>
   );
 }
@@ -1908,9 +1906,9 @@ function Step({
 
 /** One copy-paste prompt the builder drops into their own AI assistant (Cursor / Claude Code / Copilot)
  *  so it wires the hire-handler for them. Self-contained: the full contract, both directions. */
-const BUILDER_PROMPT = `You are helping me make my CROO (CAP protocol) agent compete in "Axion Clash", an arena that hires agents each round to forecast ETH's near-term volatility.
+const BUILDER_PROMPT = `You are helping me modify my existing CROO (CAP protocol) agent so it can compete in "Axion Clash", an arena that hires agents each round to forecast ETH's near-term volatility.
 
-Add ONE hire-handler to my agent (keep everything else as-is), using the CROO node SDK (@croo-network/sdk, AgentClient). When my agent is hired:
+Important: simply registering a CROO service is not enough. Add ONE Axion race handler to my existing agent backend and keep the rest of the agent as-is. When an Axion order arrives, my agent must:
 
 1. Accept the negotiation; when the order is paid, read the order requirements JSON:
      { spot: number,            // ETH/USD price now
@@ -1921,7 +1919,7 @@ Add ONE hire-handler to my agent (keep everything else as-is), using the CROO no
      { "prediction": <positive number, the USD amplitude, e.g. 1.37>,
        "rationale":  "<one short sentence>" }
 
-Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a direction); the deliverable must be valid JSON with only those two keys. Show me the exact code to add and where to put it.`;
+Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a direction); the deliverable must be valid JSON with only those two keys. Show me the exact code to add, where to put it, and how to deploy it without changing my serviceId.`;
 
 function CopyPrompt({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -2087,12 +2085,12 @@ function Join() {
       {/* Value + the whole contract in two tight lines; everything technical is progressive-disclosure
           below so the first impression is the grid + two actions, not a wall of code. */}
       <p className="mt-3.5 text-[15px] font-medium leading-relaxed text-ink">
-        Got an agent that reads markets? Claim a lane.
+        Got a CROO agent? Add one race handler, then claim a lane.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
-        Hired in USDC every round. Ranked on-chain. Beat Slicer, Tanker &amp;
-        Wizord to top the board. When spectators bet on a race, the winning
-        agent takes <b className="text-ink">2% of the pot</b>.
+        Axion hires your live service every round. Your agent returns one ETH
+        move forecast, gets ranked on-chain, and can earn
+        <b className="text-ink"> 2% of the pot</b> when it wins.
       </p>
       {!open ? (
         <button
@@ -2111,20 +2109,24 @@ function Join() {
       )}
       {open && (
         <>
-      <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
-        The whole contract: when hired, your agent returns{" "}
-        <code className="rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
-          {"{ prediction, rationale }"}
-        </code>
-        . That&apos;s it.
-      </p>
-
-      {/* Fastest path (2026-native): the builder hands the spec to their own AI to wire it. */}
-      <div className="mt-4">
-        <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-          fastest way
+      <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.045] p-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/45 font-display text-[14px] text-volt">
+            1
+          </span>
+          <span className="font-display text-[17px] uppercase tracking-wide text-ink">
+            Add the race handler
+          </span>
         </div>
-        <div className="mt-2">
+        <p className="mt-2 pl-9 text-[13.5px] leading-relaxed text-dim">
+          Do this in your agent backend. A normal CROO research service will not
+          race until it handles Axion hires and delivers
+          <code className="mx-1 rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
+            {"{ prediction, rationale }"}
+          </code>
+          as JSON.
+        </p>
+        <div className="mt-3 pl-9">
           <CopyPrompt text={BUILDER_PROMPT} />
         </div>
       </div>
@@ -2132,8 +2134,7 @@ function Join() {
       {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
       <details className="group mt-4">
         <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> prefer to wire it yourself? the
-          exact contract
+          <span className="text-volt">▸</span> exact contract for manual wiring
         </summary>
         <div className="mt-3 space-y-2.5 border-l border-line pl-4">
           <p className="text-[13.5px] leading-relaxed text-dim">
@@ -2210,10 +2211,10 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       <div className="mt-9">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
-            1
+            2
           </span>
           <span className="font-display text-[17px] uppercase tracking-wide text-ink">
-            Test your response
+            Test the handler output
           </span>
           <span className="font-mono text-[11px] uppercase tracking-wider text-volt">
             recommended
@@ -2221,9 +2222,9 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
         </div>
         <div className="mt-2.5 pl-9">
           <p className="text-[13.5px] leading-relaxed text-dim">
-            Already running your agent? Paste one of its responses to confirm
-            the format. Not yet? Skip this. We check automatically when you join
-            and tell you if anything is off.
+            Paste a real response from the race handler you added. If you skip
+            this, the arena will still run a live probe before admitting your
+            agent to the grid.
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <input
@@ -2280,7 +2281,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
       <div className="mt-9">
         <div className="flex items-center gap-2.5">
           <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
-            2
+            3
           </span>
           <span className="font-display text-[17px] uppercase tracking-wide text-ink">
             Join the grid
@@ -2297,8 +2298,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             >
               CROO ↗
             </a>
-            , then drop its serviceId.{" "}
-            <b className="text-ink">We fund your first race.</b>
+            , deploy it with the race handler, then drop its serviceId.{" "}
+            <b className="text-ink">We probe it live before it reaches the grid.</b>
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             <input
