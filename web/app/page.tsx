@@ -761,6 +761,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const live = r?.phase === "open" || r?.phase === "betting"; // current race accepts predictions
   const roster = state?.roster ?? [];
   const idlePickable = !live && roster.length > 0; // between races → predict the NEXT race
+  const canPick = live || idlePickable;
   // Agents that have actually raced (have a standings row). A freshly-joined agent is bettable for the
   // next race but has no history yet → tag it "new" so it doesn't look like a bug (it appears here but
   // not in the standings until it races, e.g. Zeru just after joining).
@@ -835,16 +836,15 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           <div className="font-display text-lg uppercase tracking-wide text-volt">
             Back the winner. Free.
           </div>
-          <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-dim">
-            no wallet · no signup ·{" "}
-            {live ? (
-              <b className="text-ink">betting open now</b>
-            ) : idlePickable ? (
-              <b className="text-ink">pick the next race&apos;s winner</b>
-            ) : (
-              "one tap when a race is live"
-            )}
-          </div>
+          {canPick ? (
+            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-dim">
+              {live ? (
+                <b className="text-ink">betting open now</b>
+              ) : (
+                <b className="text-ink">pick the next race&apos;s winner</b>
+              )}
+            </div>
+          ) : null}
         </div>
         {ps && ps.total > 0 ? (
           <div className="text-right font-mono text-[11px] text-dim">
@@ -1058,7 +1058,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         </div>
       ) : (
         <div className="mt-4 py-6 text-center font-mono text-sm text-dim">
-          racers line up when a race starts
+          {state?.status === "view-only"
+            ? "racers offline. finish CROO setup, then redeploy the runner."
+            : "racers line up when a race starts"}
         </div>
       )}
       <div className="mt-3 text-center font-mono text-[13px] text-dim">
