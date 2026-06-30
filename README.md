@@ -170,6 +170,9 @@ npm run competitor         # run the open-competitor template as a hireable CAP 
 `.env` keys: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
 `COMPETITOR_BULL_SDK_KEY` / `COMPETITOR_BEAR_SDK_KEY` / `COMPETITOR_QUANT_SDK_KEY`
 (one funded CROO agent each — fund its AA wallet with ~1 USDC on Base; gas is sponsored).
+Optional seed provider services, served by the same runner for marketplace composability:
+`COMPETITOR_BULL_SERVICE_ID`, `COMPETITOR_BEAR_SERVICE_ID`, `COMPETITOR_QUANT_SERVICE_ID`
+(or aliases `SLICER_SERVICE_ID`, `TANKER_SERVICE_ID`, `WIZORD_SERVICE_ID`).
 Optional: `BASE_RPC_URL`, `ARENA_ROUNDS`, `ARENA_WINDOW_SECONDS`.
 
 ## Deploy (Render — one always-on service)
@@ -178,6 +181,8 @@ Render web service via `render.yaml`:
 1. Render → **New → Blueprint** → pick this repo (it reads `render.yaml`).
 2. Set the secret env vars in the dashboard: `CROO_API_URL`, `CROO_WS_URL`, `ANTHROPIC_API_KEY`,
    `COMPETITOR_BULL_SDK_KEY`, `COMPETITOR_BEAR_SDK_KEY`, `COMPETITOR_QUANT_SDK_KEY`, `BASE_RPC_URL`.
+   Add `COMPETITOR_BULL_SERVICE_ID`, `COMPETITOR_BEAR_SERVICE_ID`, `COMPETITOR_QUANT_SERVICE_ID`
+   if you want the three seed racers callable as CROO marketplace services from this same runner.
    (`PORT` is injected by Render.)
 3. Deploy → the live URL serves the UI; "Run round" runs a real on-chain round (spends USDC).
 

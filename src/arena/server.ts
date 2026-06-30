@@ -468,6 +468,70 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   setInterval(() => void tick(), 6000);
 }
 
+/** Optional: make the seed racers callable CROO services from the same Render runner.
+ * External users can hire Slicer/Tanker/Wizord as generic short-horizon market forecasters, while
+ * Axion still uses their SDK keys locally as buyer racers. Set COMPETITOR_BULL_SERVICE_ID etc.
+ * or aliases SLICER_SERVICE_ID, TANKER_SERVICE_ID, WIZORD_SERVICE_ID. */
+function seedServiceId(persona: (typeof PERSONALITIES)[number]): string {
+  const archetype = persona.archetype.toUpperCase();
+  return process.env['COMPETITOR_' + archetype + '_SERVICE_ID'] ?? process.env[persona.id.toUpperCase() + '_SERVICE_ID'] ?? '';
+}
+
+function seedForecast(persona: (typeof PERSONALITIES)[number], requirements: string): string {
+  let req: { spot?: number; deadlineSeconds?: number; recentVol?: number } = {};
+  try { req = JSON.parse(requirements || '{}') as typeof req; } catch { /* fallback below */ }
+  const spot = Number(req.spot) || state.livePrice || 3000;
+  const horizon = Number(req.deadlineSeconds) || WINDOW;
+  const recent = Number(req.recentVol) > 0 ? Number(req.recentVol) : Math.max(0.5, spot * 0.0004);
+  const prediction = Math.max(0.01, Number((recent * persona.volMultiplier).toFixed(2)));
+  const usd = String.fromCharCode(36);
+  const rationale = persona.label + ': ' + usd + prediction.toFixed(2) + ' short-horizon move estimate from recent volatility over ~' + horizon + 's.';
+  return JSON.stringify({ prediction, rationale });
+}
+
+async function startSeedRacerProviders(cfg: { baseURL: string; wsURL: string }): Promise<void> {
+  for (const persona of PERSONALITIES) {
+    const key = process.env['COMPETITOR_' + persona.archetype.toUpperCase() + '_SDK_KEY'];
+    const serviceId = seedServiceId(persona);
+    if (!key || !serviceId) continue;
+    const client = new AgentClient({ baseURL: cfg.baseURL, wsURL: cfg.wsURL }, key);
+    try { await client.connectWebSocket(); } catch { /* WS keeps store online; polling does the work */ }
+    const done = new Set<string>();
+    const inFlight = new Set<string>();
+    console.log('[' + persona.id + '] seed provider online on service ' + serviceId);
+
+    const tick = async (): Promise<void> => {
+      try {
+        const negs = await client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 20 });
+        for (const n of negs) {
+          if (n.serviceId !== serviceId) continue;
+          try { await client.acceptNegotiation(n.negotiationId); console.log('[' + persona.id + '] accepted external hire ' + n.negotiationId); } catch { /* retry next tick */ }
+        }
+        const orders = await client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 20 });
+        for (const o of orders) {
+          if (o.serviceId !== serviceId || done.has(o.orderId) || inFlight.has(o.orderId)) continue;
+          inFlight.add(o.orderId);
+          void (async () => {
+            try {
+              const neg = await client.getNegotiation(o.negotiationId);
+              await client.deliverOrder(o.orderId, {
+                deliverableType: DeliverableType.Text,
+                deliverableText: seedForecast(persona, neg.requirements ?? '{}'),
+              });
+              done.add(o.orderId);
+              console.log('[' + persona.id + '] delivered external forecast ' + o.orderId);
+            } catch (err) {
+              console.warn('[' + persona.id + '] external forecast failed: ' + (err as Error).message);
+            } finally {
+              inFlight.delete(o.orderId);
+            }
+          })();
+        }
+      } catch { /* transient */ }
+    };
+    setInterval(() => void tick(), 3000);
+  }
+}
 function nextUtcMidnightMs(): number {
   const d = new Date();
   d.setUTCHours(24, 0, 0, 0);
@@ -731,8 +795,9 @@ async function main(): Promise<void> {
     })();
   }, 2000);
 
-  // Keep Axion live & hireable from this same service (free; only runs if its env keys are set).
+  // Keep Axion + optional seed services live from this same Render runner (env-gated).
   void startAxionProvider(cfg);
+  void startSeedRacerProviders(cfg);
 
   // Try to wire live competitors; if none are configured, serve in view-only mode (history + UI).
   try {
