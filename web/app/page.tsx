@@ -103,10 +103,7 @@ export default function Page() {
 
       {tab === "proof" && (
         <>
-          <ZoneLabel
-            title="Journal"
-            blurb="verify hires, bets and payouts"
-          />
+          <ZoneLabel title="Journal" blurb="verify hires, bets and payouts" />
           <Ledger state={state} />
         </>
       )}
@@ -273,9 +270,6 @@ function Header({
         <h1 className="font-display text-4xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
           Axion <span className="text-volt">Clash</span>
         </h1>
-        <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.25em] text-dim">
-          AI agents clash to call ETH&apos;s next move. You back the winner.
-        </p>
       </div>
       <div className="flex items-center gap-2">
         <button
@@ -323,7 +317,7 @@ function Telemetry({ state }: { state: ArenaState | null }) {
     <div className="grid h-full items-center gap-5 sm:grid-cols-[auto_1fr]">
       <div>
         <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-dim">
-          ETH / USD · live · Pyth
+          ETH / USD
         </div>
         <div className="flex items-end gap-3">
           <span className="font-display text-5xl leading-none tnum sm:text-6xl">
@@ -431,7 +425,7 @@ function MoveBadge({ state }: { state: ArenaState | null }) {
   );
 }
 
-/** Small phase tag for the section header (the big countdown lives in RaceControl). */
+/** Small phase tag for active rounds only; idle/offline is already covered in the header. */
 function PhaseTag({
   state,
   online,
@@ -440,30 +434,15 @@ function PhaseTag({
   online: boolean;
 }) {
   const r = state?.round;
-  const active = state?.status === "running" && r && r.phase !== "settled";
-  const text = !online
-    ? "offline"
-    : !active
-      ? "between races"
-      : r!.phase === "betting"
-        ? "race live"
-        : "estimating";
-  const col = !online
-    ? "var(--color-over)"
-    : active
-      ? "var(--color-volt)"
-      : "var(--color-dim)";
+  const active =
+    online && state?.status === "running" && r && r.phase !== "settled";
+  if (!active) return null;
+  const text = r.phase === "betting" ? "live" : "estimating";
   return (
-    <span
-      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider"
-      style={{ color: col }}
-    >
+    <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-volt">
       <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{
-          background: col,
-          animation: active ? "pulse-dot 1.3s infinite" : "none",
-        }}
+        className="h-1.5 w-1.5 rounded-full bg-volt"
+        style={{ animation: "pulse-dot 1.3s infinite" }}
       />
       {text}
     </span>
@@ -599,7 +578,6 @@ function RaceControl({
   } else {
     // Idle / between races — the grid below shows the LAST race result (not a live race).
     const delta = nextAt ? nextAt - now : 0;
-    const w = r?.competitors.find((c) => c.isWinner);
     const budLeft = state?.budget
       ? Math.max(0, state.budget.cap - state.budget.used)
       : null;
@@ -617,7 +595,9 @@ function RaceControl({
       startMsg ??
       (exhausted
         ? "today's free races are used up. Back at UTC midnight"
-        : `${w ? `last race won by ${w.label}` : "one tap runs a real on-chain race"}${budLeft != null ? ` · ${budLeft} free races left today` : ""}`);
+        : budLeft != null
+          ? `${budLeft} free races left today`
+          : "");
   }
 
   return (
@@ -761,18 +741,30 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const live = r?.phase === "open" || r?.phase === "betting"; // current race accepts predictions
   const roster = state?.roster ?? [];
   const idlePickable = !live && roster.length > 0; // between races → predict the NEXT race
-  const canPick = live || idlePickable;
   // Agents that have actually raced (have a standings row). A freshly-joined agent is bettable for the
   // next race but has no history yet → tag it "new" so it doesn't look like a bug (it appears here but
   // not in the standings until it races, e.g. Zeru just after joining).
-  const raced = new Set((state?.leaderboard ?? []).filter((r) => r.rounds > 0).map((r) => r.id));
+  const raced = new Set(
+    (state?.leaderboard ?? []).filter((r) => r.rounds > 0).map((r) => r.id),
+  );
+  const lastWinnerIds = new Set(
+    !live && r?.phase === "settled"
+      ? r.competitors.filter((c) => c.isWinner).map((c) => c.id)
+      : [],
+  );
   const cards: {
     id: string;
     label: string;
     estimate?: number;
     isWinner?: boolean;
     dq?: boolean;
-  }[] = live ? comps : roster.map((a) => ({ id: a.id, label: a.label }));
+  }[] = live
+    ? comps
+    : roster.map((a) => ({
+        id: a.id,
+        label: a.label,
+        isWinner: lastWinnerIds.has(a.id),
+      }));
 
   // Expand data (the old "racers" content): rationale/latency from the round (live or last settled),
   // hires from the matching settled record. Honest: "this race" only when the shown round is in history.
@@ -836,15 +828,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           <div className="font-display text-lg uppercase tracking-wide text-volt">
             Back the winner. Free.
           </div>
-          {canPick ? (
-            <div className="mt-0.5 font-mono text-[11px] uppercase tracking-wider text-dim">
-              {live ? (
-                <b className="text-ink">betting open now</b>
-              ) : (
-                <b className="text-ink">pick the next race&apos;s winner</b>
-              )}
-            </div>
-          ) : null}
         </div>
         {ps && ps.total > 0 ? (
           <div className="text-right font-mono text-[11px] text-dim">
@@ -884,7 +867,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               <div
                 key={c.id}
                 className={cn(
-                  "overflow-hidden rounded-2xl border bg-panel2/30 transition",
+                  "relative overflow-hidden rounded-2xl border bg-panel2/30 transition",
                   boxed ? "border-2" : "border border-line",
                   tappable && "lift",
                   c.dq && "opacity-50",
@@ -908,6 +891,15 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                         : "none",
                 }}
               >
+                {won ? (
+                  <span
+                    className="absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-gold/45 bg-gold/10 text-[13px]"
+                    aria-label="last winner"
+                    title="last winner"
+                  >
+                    🏆
+                  </span>
+                ) : null}
                 {/* BACK face — tap to back free (tap again to cancel, tap another to change) */}
                 <button
                   onClick={() => choose(c.id)}
@@ -927,7 +919,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   >
                     {c.label}
                   </div>
-                  <div className="mt-1.5 font-mono text-[11px] uppercase tracking-wider text-dim">
+                  <div className="mt-1.5 min-h-[1rem] font-mono text-[11px] uppercase tracking-wider text-dim">
                     {live ? (
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
@@ -936,14 +928,12 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       ) : (
                         "forecasting…"
                       )
-                    ) : raced.has(c.id) ? (
-                      "races next"
-                    ) : (
-                      <span className="text-volt">new · races next</span>
+                    ) : raced.has(c.id) ? null : (
+                      <span className="text-volt">new</span>
                     )}
                   </div>
                   <div
-                    className="mt-1 font-mono text-[11px] font-bold uppercase tracking-[0.18em]"
+                    className="mt-1 min-h-[1rem] font-mono text-[11px] font-bold uppercase tracking-[0.18em]"
                     style={{
                       color: won
                         ? "var(--color-gold)"
@@ -954,17 +944,13 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                             : "var(--color-dim)",
                     }}
                   >
-                    {won
-                      ? "★ won"
-                      : committed
-                        ? "✓ USDC in"
-                        : isPick
-                          ? "✓ your pick · tap to cancel"
-                          : tappable
-                            ? live
-                              ? "▸ back"
-                              : "▸ back · next"
-                            : "opens at race start"}
+                    {committed
+                      ? "USDC in"
+                      : isPick
+                        ? "selected"
+                        : tappable && live
+                          ? "back"
+                          : ""}
                   </div>
                 </button>
                 {/* WHY toggle — the old "racers" disclosure, now per card */}
@@ -1063,7 +1049,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             : "racers line up when a race starts"}
         </div>
       )}
-      <div className="mt-3 text-center font-mono text-[13px] text-dim">
+      <div className="mt-3 min-h-[1.25rem] text-center font-mono text-[13px] text-dim">
         {pick?.resolved ? (
           <span
             className="text-base"
@@ -1071,30 +1057,16 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               color: pick.correct ? "var(--color-under)" : "var(--color-over)",
             }}
           >
-            {pick.correct
-              ? "✓ you backed the winner"
-              : "✗ your agent lost. try the next race."}
+            {pick.correct ? "winner picked" : "pick missed"}
           </span>
         ) : active ? (
-          <>
-            you backed <b className="text-ink">{myLabel}</b>
-            {pick!.round === "next" ? " for the next race" : ""}.{" "}
-            {pick!.committed
-              ? "USDC is in. Locked."
-              : "tap another to change, or it again to cancel."}
-          </>
-        ) : live ? (
           <span className="text-ink">
-            tap the agent you think wins. it&apos;s free.
-          </span>
-        ) : idlePickable ? (
-          <span className="text-ink">
-            back the next race&apos;s winner. it&apos;s free.
+            <b>{myLabel}</b> selected{pick!.committed ? " · USDC in" : ""}
           </span>
         ) : null}
         {rec.t > 0 ? (
           <span className="ml-2 text-volt">
-            your picks {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)
+            {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)
           </span>
         ) : null}
       </div>
@@ -1105,9 +1077,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         committed={!!pick?.committed}
         onPlaced={() => setPick((p) => (p ? { ...p, committed: true } : p))}
       />
-      <p className="mt-4 text-center text-[11px] leading-relaxed text-dim">
-        Forecasts settle against the live Pyth ETH/USD move. Closest wins.
-      </p>
     </div>
   );
 }
@@ -1312,10 +1281,6 @@ function UsdcBet({
           {msg.text}
         </div>
       ) : null}
-      <p className="mt-3 text-[12px] leading-relaxed text-dim">
-        Small-stakes demo. Winning backers split the pool. Rake is 5%: 3% house,
-        2% winning agent. No winning backer = refund.
-      </p>
     </div>
   );
 }
@@ -1376,7 +1341,8 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
     state?.status === "running" &&
     state.round &&
     state.round.phase !== "settled";
-  const rows = active ? feed.slice(0, 3) : feed.slice(0, 1); // scroll the play-by-play while live
+  if (!active) return null;
+  const rows = feed.slice(0, 3); // scroll the play-by-play while live
   return (
     <div className="border-t border-line px-5 py-2.5">
       {rows.map((f, i) => (
@@ -1609,9 +1575,13 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   const lastRoundIds = new Set(
     (state?.history?.[0]?.competitors ?? []).map((a) => a.id),
   );
-  const activeIds = rosterIds.size ? rosterIds : roundIds.size ? roundIds : lastRoundIds;
-  const lb = (state?.leaderboard ?? []).filter((r) =>
-    activeIds.size > 0 && activeIds.has(r.id),
+  const activeIds = rosterIds.size
+    ? rosterIds
+    : roundIds.size
+      ? roundIds
+      : lastRoundIds;
+  const lb = (state?.leaderboard ?? []).filter(
+    (r) => activeIds.size > 0 && activeIds.has(r.id),
   );
   return (
     <section
@@ -1752,98 +1722,100 @@ function DataMarket({ state }: { state: ArenaState | null }) {
           )}
           {open && (
             <>
-          {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
-          {dm.events && dm.events.length ? (
-            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
-              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                store activity
-              </div>
-              <div className="mt-2.5 max-h-[170px] space-y-2 overflow-auto pr-1">
-                {dm.events.map((e, i) => (
-                  <div
-                    key={i}
-                    className="flex items-baseline gap-2.5 text-[13px] leading-snug"
-                  >
-                    <span className="w-9 shrink-0 font-mono text-[11px] tnum text-dim">
-                      {ago(e.ts)}
-                    </span>
-                    <span
-                      className="w-[72px] shrink-0 font-mono text-[11px] uppercase tracking-wider"
-                      style={{
-                        color:
-                          e.kind === "joined"
-                            ? "var(--color-volt)"
-                            : "var(--color-under)",
-                      }}
-                    >
-                      {e.kind === "joined" ? "new listing" : "first hire"}
-                    </span>
-                    <span className="flex-1 text-ink/80">{e.text}</span>
+              {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
+              {dm.events && dm.events.length ? (
+                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                    store activity
                   </div>
-                ))}
-              </div>
-              <div className="mt-3 space-y-1 border-t border-white/5 pt-2.5 text-[12px] leading-relaxed text-dim">
-                <p>
-                  <b style={{ color: "var(--color-volt)" }}>New listing</b>: a
-                  data agent appeared in the public CROO catalog.
-                </p>
-                <p>
-                  <b style={{ color: "var(--color-under)" }}>First hire</b>: an
-                  agent paid it on-chain for the first time.
-                </p>
-                <p></p>
-              </div>
-            </div>
-          ) : null}
+                  <div className="mt-2.5 max-h-[170px] space-y-2 overflow-auto pr-1">
+                    {dm.events.map((e, i) => (
+                      <div
+                        key={i}
+                        className="flex items-baseline gap-2.5 text-[13px] leading-snug"
+                      >
+                        <span className="w-9 shrink-0 font-mono text-[11px] tnum text-dim">
+                          {ago(e.ts)}
+                        </span>
+                        <span
+                          className="w-[72px] shrink-0 font-mono text-[11px] uppercase tracking-wider"
+                          style={{
+                            color:
+                              e.kind === "joined"
+                                ? "var(--color-volt)"
+                                : "var(--color-under)",
+                          }}
+                        >
+                          {e.kind === "joined" ? "new listing" : "first hire"}
+                        </span>
+                        <span className="flex-1 text-ink/80">{e.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 space-y-1 border-t border-white/5 pt-2.5 text-[12px] leading-relaxed text-dim">
+                    <p>
+                      <b style={{ color: "var(--color-volt)" }}>New listing</b>:
+                      a data agent appeared in the public CROO catalog.
+                    </p>
+                    <p>
+                      <b style={{ color: "var(--color-under)" }}>First hire</b>:
+                      an agent paid it on-chain for the first time.
+                    </p>
+                    <p></p>
+                  </div>
+                </div>
+              ) : null}
 
-          {dm.providerStats && dm.providerStats.length ? (
-            <div className="mt-4">
-              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                providers paid by Axion
-              </div>
-              <div className="mb-1.5 mt-2.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-dim">
-                <span className="flex-1">provider</span>
-                <span className="w-12 text-right" title="hires">
-                  hires
-                </span>
-                <span className="w-14 text-right" title="avg response time">
-                  latency
-                </span>
-                <span className="w-14 text-right" title="USDC paid">
-                  paid
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {dm.providerStats.slice(0, 6).map((p, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 text-[13.5px]"
-                  >
-                    <span className="flex-1 truncate text-ink">{p.label}</span>
-                    <span className="w-12 text-right font-mono text-[12px] tnum text-dim">
-                      {p.hires}
+              {dm.providerStats && dm.providerStats.length ? (
+                <div className="mt-4">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                    providers paid by Axion
+                  </div>
+                  <div className="mb-1.5 mt-2.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-dim">
+                    <span className="flex-1">provider</span>
+                    <span className="w-12 text-right" title="hires">
+                      hires
                     </span>
-                    <span
-                      className="w-14 text-right font-mono text-[12px] tnum"
-                      style={{
-                        color:
-                          p.avgMs != null && p.avgMs < 5000
-                            ? "var(--color-volt)"
-                            : "var(--color-dim)",
-                      }}
-                    >
-                      {p.avgMs != null
-                        ? `${(p.avgMs / 1000).toFixed(1)}s`
-                        : "—"}
+                    <span className="w-14 text-right" title="avg response time">
+                      latency
                     </span>
-                    <span className="w-14 text-right font-mono text-[12px] tnum text-under">
-                      ${p.paidUSDC.toFixed(2)}
+                    <span className="w-14 text-right" title="USDC paid">
+                      paid
                     </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+                  <div className="space-y-1.5">
+                    {dm.providerStats.slice(0, 6).map((p, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 text-[13.5px]"
+                      >
+                        <span className="flex-1 truncate text-ink">
+                          {p.label}
+                        </span>
+                        <span className="w-12 text-right font-mono text-[12px] tnum text-dim">
+                          {p.hires}
+                        </span>
+                        <span
+                          className="w-14 text-right font-mono text-[12px] tnum"
+                          style={{
+                            color:
+                              p.avgMs != null && p.avgMs < 5000
+                                ? "var(--color-volt)"
+                                : "var(--color-dim)",
+                          }}
+                        >
+                          {p.avgMs != null
+                            ? `${(p.avgMs / 1000).toFixed(1)}s`
+                            : "—"}
+                        </span>
+                        <span className="w-14 text-right font-mono text-[12px] tnum text-under">
+                          ${p.paidUSDC.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </>
@@ -2110,243 +2082,248 @@ function Join() {
       )}
       {open && (
         <>
-      <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.045] p-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/45 font-display text-[14px] text-volt">
-            1
-          </span>
-          <span className="font-display text-[17px] uppercase tracking-wide text-ink">
-            Add the race handler
-          </span>
-        </div>
-        <p className="mt-2 pl-9 text-[13.5px] leading-relaxed text-dim">
-          Patch your backend. When hired, deliver
-          <code className="mx-1 rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
-            {"{ prediction, rationale }"}
-          </code>
-          JSON. A generic CROO listing alone will not race.
-        </p>
-        <div className="mt-3 pl-9">
-          <CopyPrompt text={BUILDER_PROMPT} />
-        </div>
-      </div>
+          <div className="mt-4 rounded-lg border border-volt/25 bg-volt/[0.045] p-4">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/45 font-display text-[14px] text-volt">
+                1
+              </span>
+              <span className="font-display text-[17px] uppercase tracking-wide text-ink">
+                Add the race handler
+              </span>
+            </div>
+            <p className="mt-2 pl-9 text-[13.5px] leading-relaxed text-dim">
+              Patch your backend. When hired, deliver
+              <code className="mx-1 inline-block whitespace-nowrap rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
+                {"{ prediction, rationale }"}
+              </code>
+              JSON. A generic CROO listing alone will not race.
+            </p>
+            <div className="mt-3 pl-9">
+              <CopyPrompt text={BUILDER_PROMPT} />
+            </div>
+          </div>
 
-      {/* No agent yet? template — collapsed. */}
-      <details className="group mt-2.5">
-        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> starting from zero? clone the racer
-          template
-        </summary>
-        <div className="mt-3 space-y-3 border-l border-line pl-4">
-          <Step
-            n={1}
-            title={
-              <>
-                Get the template <span className="text-dim">(Node 18+)</span>
-              </>
-            }
-          >
-            <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
-          </Step>
-          <Step
-            n={2}
-            title={
-              <>
-                Watch it forecast once.{" "}
-                <b className="text-ink">No keys, no USDC.</b>
-              </>
-            }
-          >
-            <CopyCmd cmd="npm run competitor:preview" />
-          </Step>
-          <Step
-            n={3}
-            title={
-              <>
-                <b className="text-volt">The actual work:</b> open{" "}
-                <code className="text-under">src/arena/competitor.ts</code> and
-                rewrite <code className="text-under">estimate()</code> with your
-                own data and logic.
-              </>
-            }
-          />
-          <Step
-            n={4}
-            title={
-              <>
-                Add your CROO key to <code className="text-under">.env</code>,
-                then go live.
-              </>
-            }
-          >
-            <CopyCmd cmd="npm run competitor" />
-          </Step>
-        </div>
-      </details>
-      {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
-      <details className="group mt-4">
-        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> exact contract for manual wiring
-        </summary>
-        <div className="mt-3 space-y-2.5 border-l border-line pl-4">
-          <p className="text-[13.5px] leading-relaxed text-dim">
-            Each round the arena hires your agent with:
-          </p>
-          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
-            {"{ spot, deadlineSeconds, recentVol }"}
-          </div>
-          <p className="text-[13.5px] leading-relaxed text-dim">
-            and it must deliver, as JSON:
-          </p>
-          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
-            {"{ prediction, rationale }"}
-          </div>
-          <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
+          {/* No agent yet? template — collapsed. */}
+          <details className="group mt-2.5">
+            <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
+              <span className="text-volt">▸</span> no agent on croo yet? clone
+              the racer template
+            </summary>
+            <div className="mt-3 space-y-3 border-l border-line pl-4">
+              <Step
+                n={1}
+                title={
+                  <>
+                    Get the template{" "}
+                    <span className="text-dim">(Node 18+)</span>
+                  </>
+                }
+              >
+                <CopyCmd cmd="git clone https://github.com/RedGnad/Axion && cd Axion && npm install" />
+              </Step>
+              <Step
+                n={2}
+                title={
+                  <>
+                    Watch it forecast once.{" "}
+                    <b className="text-ink">No keys, no USDC.</b>
+                  </>
+                }
+              >
+                <CopyCmd cmd="npm run competitor:preview" />
+              </Step>
+              <Step
+                n={3}
+                title={
+                  <>
+                    <b className="text-volt">The actual work:</b> open{" "}
+                    <code className="text-under">src/arena/competitor.ts</code>{" "}
+                    and rewrite <code className="text-under">estimate()</code>{" "}
+                    with your own data and logic.
+                  </>
+                }
+              />
+              <Step
+                n={4}
+                title={
+                  <>
+                    Add your CROO key to{" "}
+                    <code className="text-under">.env</code>, then go live.
+                  </>
+                }
+              >
+                <CopyCmd cmd="npm run competitor" />
+              </Step>
+            </div>
+          </details>
+          {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
+          <details className="group mt-4">
+            <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
+              <span className="text-volt">▸</span> exact contract for manual
+              wiring
+            </summary>
+            <div className="mt-3 space-y-2.5 border-l border-line pl-4">
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                Each round the arena hires your agent with:
+              </p>
+              <div className="overflow-x-auto whitespace-nowrap rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+                {"{ spot, deadlineSeconds, recentVol }"}
+              </div>
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                and it must deliver, as JSON:
+              </p>
+              <div className="overflow-x-auto whitespace-nowrap rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+                {"{ prediction, rationale }"}
+              </div>
+              <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
 const prediction = /* your estimate of |ETH move| over the window, in USD */;
 deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
-        </div>
-      </details>
-
-      {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
-      <div className="mt-9">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
-            2
-          </span>
-          <span className="font-display text-[17px] uppercase tracking-wide text-ink">
-            Test the handler output
-          </span>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-volt">
-            recommended
-          </span>
-        </div>
-        <div className="mt-2.5 pl-9">
-          <p className="text-[13.5px] leading-relaxed text-dim">
-            Paste one real handler response. This is the same check used before
-            grid entry.
-          </p>
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            <input
-              value={sample}
-              onChange={(e) => {
-                setSample(e.target.value);
-                setVres(null);
-              }}
-              placeholder={'{"prediction": 1.37, "rationale": "calm tape"}'}
-              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
-            />
-            <button
-              onClick={check}
-              disabled={checking || !sample.trim()}
-              className="rounded-lg border border-volt/50 px-5 py-3 font-mono text-[13px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
-            >
-              {checking ? "checking…" : "check"}
-            </button>
-          </div>
-          {vres ? (
-            vres.ok ? (
-              <div className="mt-2.5 font-mono text-[13px] text-under">
-                ✓ valid. Prediction ${(vres.prediction ?? 0).toFixed(2)}. The
-                arena will accept this.
-              </div>
-            ) : (
-              <div
-                className="mt-2.5 rounded-md border px-3.5 py-2.5"
-                style={{
-                  borderColor:
-                    "color-mix(in srgb, var(--color-over) 40%, transparent)",
-                  background:
-                    "color-mix(in srgb, var(--color-over) 6%, transparent)",
-                }}
-              >
-                <div
-                  className="font-mono text-[13px]"
-                  style={{ color: "var(--color-over)" }}
-                >
-                  ✗ {vres.reason}
-                </div>
-                <div className="mt-1 text-[13px] leading-relaxed text-dim">
-                  Fix what your agent returns{" "}
-                  <b className="text-ink">in your backend code</b>, redeploy it,
-                  then check again. Your serviceId never changes.
-                </div>
-              </div>
-            )
-          ) : null}
-        </div>
-      </div>
-
-      {/* STEP 2 — join (paste serviceId). */}
-      <div className="mt-9">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
-            3
-          </span>
-          <span className="font-display text-[17px] uppercase tracking-wide text-ink">
-            Join the grid
-          </span>
-        </div>
-        <div className="mt-2.5 pl-9">
-          <p className="text-[13.5px] leading-relaxed text-dim">
-            Register on{" "}
-            <a
-              href={CROO_DASHBOARD}
-              target="_blank"
-              rel="noopener"
-              className="text-under hover:underline"
-            >
-              CROO ↗
-            </a>
-            , deploy, then paste the serviceId.{" "}
-            <b className="text-ink">We run one live probe before it appears.</b>
-          </p>
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            <input
-              value={svc}
-              onChange={(e) => setSvc(e.target.value)}
-              placeholder="serviceId (uuid)"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
-            />
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="name"
-              className="w-28 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
-            />
-            <button
-              onClick={submit}
-              disabled={busy || !svc.trim()}
-              className="rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
-            >
-              {busy ? "testing…" : "Join"}
-            </button>
-          </div>
-          <input
-            value={pay}
-            onChange={(e) => setPay(e.target.value)}
-            placeholder="payout address (0x… on Base) · optional, to receive your winning cut"
-            className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
-          />
-          <p className="mt-2 text-[13px] leading-relaxed text-dim">
-            Optional. If your agent wins a USDC race, 2% of the pot goes to this
-            Base address.
-          </p>
-          {msg ? (
-            <div
-              className="mt-2 font-mono text-[13px]"
-              style={{
-                color: msg.ok ? "var(--color-under)" : "var(--color-over)",
-              }}
-            >
-              {msg.text}
             </div>
-          ) : null}
-        </div>
-      </div>
+          </details>
 
-      <p className="mt-9 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
-        Bad response later? Fix the backend, redeploy, re-check, re-join. Same serviceId.
-      </p>
+          {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
+          <div className="mt-9">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
+                2
+              </span>
+              <span className="font-display text-[17px] uppercase tracking-wide text-ink">
+                Test the handler output
+              </span>
+              <span className="font-mono text-[11px] uppercase tracking-wider text-volt">
+                recommended
+              </span>
+            </div>
+            <div className="mt-2.5 pl-9">
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                Paste one real handler response. This is the same check used
+                before grid entry.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <input
+                  value={sample}
+                  onChange={(e) => {
+                    setSample(e.target.value);
+                    setVres(null);
+                  }}
+                  placeholder={'{"prediction": 1.37, "rationale": "calm tape"}'}
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
+                />
+                <button
+                  onClick={check}
+                  disabled={checking || !sample.trim()}
+                  className="rounded-lg border border-volt/50 px-5 py-3 font-mono text-[13px] uppercase tracking-wider text-volt transition hover:bg-volt/10 disabled:opacity-40"
+                >
+                  {checking ? "checking…" : "check"}
+                </button>
+              </div>
+              {vres ? (
+                vres.ok ? (
+                  <div className="mt-2.5 font-mono text-[13px] text-under">
+                    ✓ valid. Prediction ${(vres.prediction ?? 0).toFixed(2)}.
+                    The arena will accept this.
+                  </div>
+                ) : (
+                  <div
+                    className="mt-2.5 rounded-md border px-3.5 py-2.5"
+                    style={{
+                      borderColor:
+                        "color-mix(in srgb, var(--color-over) 40%, transparent)",
+                      background:
+                        "color-mix(in srgb, var(--color-over) 6%, transparent)",
+                    }}
+                  >
+                    <div
+                      className="font-mono text-[13px]"
+                      style={{ color: "var(--color-over)" }}
+                    >
+                      ✗ {vres.reason}
+                    </div>
+                    <div className="mt-1 text-[13px] leading-relaxed text-dim">
+                      Fix what your agent returns{" "}
+                      <b className="text-ink">in your backend code</b>, redeploy
+                      it, then check again. Your serviceId never changes.
+                    </div>
+                  </div>
+                )
+              ) : null}
+            </div>
+          </div>
+
+          {/* STEP 2 — join (paste serviceId). */}
+          <div className="mt-9">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-volt/40 font-display text-[14px] text-volt">
+                3
+              </span>
+              <span className="font-display text-[17px] uppercase tracking-wide text-ink">
+                Join the grid
+              </span>
+            </div>
+            <div className="mt-2.5 pl-9">
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                Register on{" "}
+                <a
+                  href={CROO_DASHBOARD}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-under hover:underline"
+                >
+                  CROO ↗
+                </a>
+                , deploy, then paste the serviceId.{" "}
+                <b className="text-ink">
+                  We run one live probe before it appears.
+                </b>
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <input
+                  value={svc}
+                  onChange={(e) => setSvc(e.target.value)}
+                  placeholder="serviceId (uuid)"
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
+                />
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="name"
+                  className="w-28 rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[13px] outline-none focus:border-ink/40"
+                />
+                <button
+                  onClick={submit}
+                  disabled={busy || !svc.trim()}
+                  className="rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
+                >
+                  {busy ? "testing…" : "Join"}
+                </button>
+              </div>
+              <input
+                value={pay}
+                onChange={(e) => setPay(e.target.value)}
+                placeholder="payout address (0x… on Base) · optional, to receive your winning cut"
+                className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
+              />
+              <p className="mt-2 text-[13px] leading-relaxed text-dim">
+                Optional. If your agent wins a USDC race, 2% of the pot goes to
+                this Base address.
+              </p>
+              {msg ? (
+                <div
+                  className="mt-2 font-mono text-[13px]"
+                  style={{
+                    color: msg.ok ? "var(--color-under)" : "var(--color-over)",
+                  }}
+                >
+                  {msg.text}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <p className="mt-9 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
+            Bad response later? Fix the backend, redeploy, re-check, re-join.
+            Same serviceId.
+          </p>
         </>
       )}
     </section>
@@ -2438,9 +2415,5 @@ function HowItWorks() {
 }
 
 function Footer() {
-  return (
-    <footer className="mt-10 border-t border-line pt-5 font-mono text-[11px] uppercase tracking-wider text-dim">
-      Real Base transactions. Live Pyth settlement. No rigged outcomes.
-    </footer>
-  );
+  return null;
 }
