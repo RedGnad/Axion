@@ -1939,10 +1939,10 @@ function CopyPrompt({ text }: { text: string }) {
     >
       <span className="flex min-w-0 flex-col">
         <span className="font-display text-[14px] uppercase tracking-wide text-volt">
-          Copy the setup prompt
+          Copy patch prompt
         </span>
         <span className="font-mono text-[11px] text-dim">
-          paste into your AI: Cursor, Claude Code, Copilot
+          for an existing CROO agent
         </span>
       </span>
       <span className="shrink-0 font-mono text-[11px] uppercase tracking-wider text-dim group-hover:text-volt">
@@ -2124,41 +2124,17 @@ function Join() {
           <code className="mx-1 rounded bg-panel2 px-1.5 py-0.5 font-mono text-[12.5px] text-under">
             {"{ prediction, rationale }"}
           </code>
-          as JSON.
+          as JSON. This is the fastest path if your service already exists on CROO.
         </p>
         <div className="mt-3 pl-9">
           <CopyPrompt text={BUILDER_PROMPT} />
         </div>
       </div>
 
-      {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
-      <details className="group mt-4">
-        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> exact contract for manual wiring
-        </summary>
-        <div className="mt-3 space-y-2.5 border-l border-line pl-4">
-          <p className="text-[13.5px] leading-relaxed text-dim">
-            Each round the arena hires your agent with:
-          </p>
-          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
-            {"{ spot, deadlineSeconds, recentVol }"}
-          </div>
-          <p className="text-[13.5px] leading-relaxed text-dim">
-            and it must deliver, as JSON:
-          </p>
-          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
-            {"{ prediction, rationale }"}
-          </div>
-          <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
-const prediction = /* your estimate of |ETH move| over the window, in USD */;
-deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
-        </div>
-      </details>
-
       {/* No agent yet? template — collapsed. */}
       <details className="group mt-2.5">
         <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-          <span className="text-volt">▸</span> no agent on CROO? start from our
+          <span className="text-volt">▸</span> starting from zero? clone the racer
           template
         </summary>
         <div className="mt-3 space-y-3 border-l border-line pl-4">
@@ -2207,6 +2183,30 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
           </Step>
         </div>
       </details>
+      {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
+      <details className="group mt-4">
+        <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
+          <span className="text-volt">▸</span> exact contract for manual wiring
+        </summary>
+        <div className="mt-3 space-y-2.5 border-l border-line pl-4">
+          <p className="text-[13.5px] leading-relaxed text-dim">
+            Each round the arena hires your agent with:
+          </p>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+            {"{ spot, deadlineSeconds, recentVol }"}
+          </div>
+          <p className="text-[13.5px] leading-relaxed text-dim">
+            and it must deliver, as JSON:
+          </p>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+            {"{ prediction, rationale }"}
+          </div>
+          <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
+const prediction = /* your estimate of |ETH move| over the window, in USD */;
+deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
+        </div>
+      </details>
+
       {/* STEP 1 — in-product, instant, free contract check (no terminal). */}
       <div className="mt-9">
         <div className="flex items-center gap-2.5">
