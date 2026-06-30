@@ -1605,10 +1605,17 @@ function Ledger({ state }: { state: ArenaState | null }) {
 }
 
 function Leaderboard({ state }: { state: ArenaState | null }) {
-  // Only rank agents that are actually on the grid now: a purged competitor (e.g. one that never met
-  // the {prediction, rationale} contract) leaves a stale history row but shouldn't pollute standings.
-  const roster = new Set((state?.roster ?? []).map((a) => a.id));
-  const lb = (state?.leaderboard ?? []).filter((r) => roster.size === 0 || roster.has(r.id));
+  // Only rank agents that are actually on the visible grid. During view-only/redeploy states the
+  // live roster can be empty, so fall back to the replayed/last round instead of showing stale agents.
+  const rosterIds = new Set((state?.roster ?? []).map((a) => a.id));
+  const roundIds = new Set((state?.round?.competitors ?? []).map((a) => a.id));
+  const lastRoundIds = new Set(
+    (state?.history?.[0]?.competitors ?? []).map((a) => a.id),
+  );
+  const activeIds = rosterIds.size ? rosterIds : roundIds.size ? roundIds : lastRoundIds;
+  const lb = (state?.leaderboard ?? []).filter((r) =>
+    activeIds.size > 0 && activeIds.has(r.id),
+  );
   return (
     <section
       className="reveal rounded-xl border border-line bg-panel/70 p-6 sm:p-7"
