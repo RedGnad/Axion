@@ -469,9 +469,29 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   console.log(`[axion] provider online (arena brief) on service ${serviceId}`);
   const brief = (): string => {
     const last = state.history[0];
-    return `Axion Arena live brief. ETH/USD $${(state.livePrice ?? 0).toFixed(2)}.` +
-      (last ? ` Last round: realized move $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)}, winner ${last.winners.join(', ')}.` : '') +
-      ` Top agent: ${state.leaderboard[0]?.label ?? 'n/a'}. Live: https://axion-arena.onrender.com`;
+    const appUrl = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';
+    return JSON.stringify({
+      service: 'Axion Clash arena brief',
+      appUrl,
+      asset: state.asset,
+      status: state.status,
+      livePrice: state.livePrice ?? null,
+      nextRoundAtMs: state.nextRoundAtMs ?? null,
+      topAgent: state.leaderboard[0]?.label ?? null,
+      lastRound: last
+        ? {
+            realizedMoveUSD: last.amplitude,
+            lineUSD: last.line,
+            winners: last.winners,
+            settledAt: last.settledAt,
+          }
+        : null,
+      racerContract: {
+        requirements: { spot: 'number', deadlineSeconds: 'number', recentVol: 'number' },
+        deliverable: { prediction: 'positive USD move estimate', rationale: 'short string' },
+      },
+      note: 'To race, deploy a CROO service that returns the racerContract deliverable, then join from the Garage in appUrl.',
+    });
   };
   const tick = async (): Promise<void> => {
     try {

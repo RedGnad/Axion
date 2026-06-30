@@ -124,6 +124,15 @@ export default function Race({ round }: { round: RoundView | null }) {
               style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
               title={c.dq ? 'too slow this round, cut' : c.rationale || ''}
             >
+              {c.isWinner ? (
+                <span
+                  className="absolute -top-5 left-1/2 -translate-x-1/2 rounded-full border border-gold/45 bg-gold/10 px-1.5 py-0.5 text-[12px] leading-none"
+                  aria-label="winner"
+                  title="winner"
+                >
+                  🏆
+                </span>
+              ) : null}
               <div
                 className="h-3.5 w-8 rounded-[3px]"
                 style={{ background: col, boxShadow: c.dq ? 'none' : `0 0 14px ${col}99`, opacity: c.isWinner ? 1 : 0.92, outline: c.isWinner ? `2px solid var(--color-gold)` : 'none', filter: c.dq ? 'grayscale(1)' : 'none' }}

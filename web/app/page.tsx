@@ -48,6 +48,7 @@ export default function Page() {
 
       {tab === "play" && (
         <>
+          <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
             className="reveal mt-4 overflow-hidden rounded-lg border border-line bg-panel/70"
@@ -748,11 +749,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const raced = new Set(
     (state?.leaderboard ?? []).filter((r) => r.rounds > 0).map((r) => r.id),
   );
-  const lastWinnerIds = new Set(
-    !live && r?.phase === "settled"
-      ? r.competitors.filter((c) => c.isWinner).map((c) => c.id)
-      : [],
-  );
   const cards: {
     id: string;
     label: string;
@@ -764,7 +760,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     : roster.map((a) => ({
         id: a.id,
         label: a.label,
-        isWinner: lastWinnerIds.has(a.id),
       }));
 
   // Expand data (the old "racers" content): rationale/latency from the round (live or last settled),
@@ -873,7 +868,8 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               (live ? !c.dq : idlePickable); // pick/change/cancel
             const boxed = tappable || isPick || won;
             const col = "var(--color-volt)";
-            const isOpen = open === c.id;
+            const showCallDetail = live;
+            const isOpen = showCallDetail && open === c.id;
             const d = detail(c.id);
             const hires = (hiresSrc?.edges ?? []).filter(
               (e) => e.competitor === c.id,
@@ -906,15 +902,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                         : "none",
                 }}
               >
-                {won ? (
-                  <span
-                    className="absolute right-3 top-3 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-gold/45 bg-gold/10 text-[13px]"
-                    aria-label="last winner"
-                    title="last winner"
-                  >
-                    🏆
-                  </span>
-                ) : null}
                 {/* BACK face — tap to back free (tap again to cancel, tap another to change) */}
                 <button
                   onClick={() => choose(c.id)}
@@ -968,13 +955,15 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                           : ""}
                   </div>
                 </button>
-                {/* WHY toggle — the old "racers" disclosure, now per card */}
-                <button
-                  onClick={() => setOpen(isOpen ? null : c.id)}
-                  className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
-                >
-                  why this call {isOpen ? "▾" : "▸"}
-                </button>
+                {/* WHY toggle — only when the card represents the current live race. Idle cards are next-race picks. */}
+                {showCallDetail ? (
+                  <button
+                    onClick={() => setOpen(isOpen ? null : c.id)}
+                    className="flex w-full items-center justify-center gap-1 border-t border-line/40 py-1.5 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
+                  >
+                    why this call {isOpen ? "▾" : "▸"}
+                  </button>
+                ) : null}
                 {isOpen ? (
                   <div className="space-y-2.5 border-t border-line/40 px-3.5 py-3 text-left">
                     <div>
@@ -1398,8 +1387,9 @@ const BASESCAN = "https://basescan.org/tx/";
 
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
-  // The persistent record: each settled round + its hires (each a real CAP order = pay + settle tx).
-  const totalTx = history.reduce((s, h) => s + (h.edges?.length ?? 0) * 2, 0);
+  const verifiedHistory = history.filter((h) => (h.edges?.length ?? 0) > 0);
+  // The persistent record: each visible round has real CAP orders (pay + settle tx).
+  const totalTx = verifiedHistory.reduce((s, h) => s + (h.edges?.length ?? 0) * 2, 0);
   const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
   return (
     <section
@@ -1414,16 +1404,16 @@ function Ledger({ state }: { state: ArenaState | null }) {
           </span>
         }
       />
-      <p className="mt-2 text-[11px] leading-relaxed text-dim">
-        Real CAP orders, Pyth settlement, BaseScan links. Verify any round.
+      <p className="mt-2 text-[12px] leading-relaxed text-dim">
+        Only rounds with real CROO orders are shown. Forecast-only fallback rounds stay out of this journal.
       </p>
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
-        {history.length === 0 ? (
+        {verifiedHistory.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">
-            no settled races yet. Start one on Play
+            no verified hire records yet
           </div>
         ) : (
-          history.map((h, hi) => {
+          verifiedHistory.map((h, hi) => {
             const comps = (h.competitors ?? []).filter(
               (c) => c.estimate != null,
             );
@@ -1441,8 +1431,8 @@ function Ledger({ state }: { state: ArenaState | null }) {
                 className="reveal rounded-lg border border-line/70 bg-panel2/40 p-3"
                 style={{ animationDelay: `${Math.min(hi, 8) * 30}ms` }}
               >
-                {/* header: when + how many on-chain txs this round produced */}
-                <div className="flex items-center justify-between text-[11px]">
+                {/* header: verified round summary */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <span className="font-mono text-dim">
                     {new Date(h.settledAt).toLocaleString([], {
                       month: "short",
@@ -1451,8 +1441,13 @@ function Ledger({ state }: { state: ArenaState | null }) {
                       minute: "2-digit",
                     })}
                   </span>
-                  <span className="font-mono text-dim">
-                    {(h.edges?.length ?? 0) * 2} txs
+                  <span className="flex items-center gap-2 font-mono uppercase tracking-wider">
+                    <span className="rounded-md border border-gold/35 bg-gold/10 px-2 py-1 text-gold">
+                      won {h.winners.map(cap).join(", ")}
+                    </span>
+                    <span className="rounded-md border border-line bg-panel px-2 py-1 text-dim">
+                      {(h.edges?.length ?? 0) * 2} txs
+                    </span>
                   </span>
                 </div>
                 {comps.length ? (

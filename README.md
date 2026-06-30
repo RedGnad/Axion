@@ -173,6 +173,7 @@ npm run competitor         # run the open-competitor template as a hireable CAP 
 Optional seed provider services, served by the same runner for marketplace composability:
 `COMPETITOR_BULL_SERVICE_ID`, `COMPETITOR_BEAR_SERVICE_ID`, `COMPETITOR_QUANT_SERVICE_ID`
 (or aliases `SLICER_SERVICE_ID`, `TANKER_SERVICE_ID`, `WIZORD_SERVICE_ID`).
+Optional Axion Store listing: `AXION_SERVICE_ID` keeps the Axion agent hireable and returns an arena brief + app link.
 Optional: `BASE_RPC_URL`, `ARENA_ROUNDS`, `ARENA_WINDOW_SECONDS`.
 
 ## Deploy (Render — one always-on service)
