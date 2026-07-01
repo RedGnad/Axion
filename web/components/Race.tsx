@@ -107,20 +107,20 @@ export default function Race({ round }: { round: RoundView | null }) {
 
   // Compact the lanes as the field grows so a big roster doesn't flood the track (keeps the start/
   // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
-  const laneH = round.competitors.length > 10 ? "h-9" : round.competitors.length > 6 ? "h-11" : "h-14";
+  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-11" : "h-10 sm:h-14";
   return (
-    <div ref={wrap} className="relative pr-2">
+    <div ref={wrap} className="relative pr-1 sm:pr-2">
       {round.competitors.map((c) => {
         const col = livery(c.id);
         return (
           <div key={c.id} className={`relative ${laneH} border-b border-dashed border-white/5`}>
-            <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
+            <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[12px] sm:text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
               {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
             </span>
             <div
               data-kart={c.id}
-              className="absolute top-4 -translate-x-1/2 flex flex-col items-center gap-1 z-20"
+              className="absolute top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-0.5 sm:top-4 sm:gap-1"
               style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
               title={c.dq ? 'too slow this round, cut' : c.rationale || ''}
             >
@@ -134,10 +134,10 @@ export default function Race({ round }: { round: RoundView | null }) {
                 </span>
               ) : null}
               <div
-                className="h-3.5 w-8 rounded-[3px]"
+                className="h-3 w-7 rounded-[3px] sm:h-3.5 sm:w-8"
                 style={{ background: col, boxShadow: c.dq ? 'none' : `0 0 14px ${col}99`, opacity: c.isWinner ? 1 : 0.92, outline: c.isWinner ? `2px solid var(--color-gold)` : 'none', filter: c.dq ? 'grayscale(1)' : 'none' }}
               />
-              <span className="font-mono text-[10px] tnum" style={{ color: c.isWinner ? 'var(--color-gold)' : c.dq ? 'var(--color-over)' : c.estimate != null ? '#cfcfd4' : 'var(--color-dim)' }}>
+              <span className="font-mono text-[9px] tnum sm:text-[10px]" style={{ color: c.isWinner ? 'var(--color-gold)' : c.dq ? 'var(--color-over)' : c.estimate != null ? '#cfcfd4' : 'var(--color-dim)' }}>
                 {c.dq ? 'too slow' : c.estimate != null ? usd(c.estimate) : 'scouting…'}
               </span>
             </div>
@@ -160,7 +160,7 @@ export default function Race({ round }: { round: RoundView | null }) {
           outline: '1px solid rgba(255,255,255,.6)',
         }}
       />
-      <div className="mt-5 border-t border-line/50 pt-3">
+      <div className="mt-3 hidden border-t border-line/50 pt-2 sm:block">
         <span className="text-[11px] leading-snug text-dim">Closer forecasts move farther. Closest to Pyth wins.</span>
       </div>
     </div>

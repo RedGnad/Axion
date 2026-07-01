@@ -40,7 +40,7 @@ export default function Page() {
     setIntro(false);
   };
   return (
-    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-5 sm:px-5 sm:pb-24 sm:pt-6">
+    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-4 sm:px-5 sm:pb-24 sm:pt-6">
       <Intro open={intro} setTab={setTab} onClose={closeIntro} />
       <Header state={state} online={online} onHelp={() => setIntro(true)} />
       <Tabs tab={tab} setTab={setTab} />
@@ -51,18 +51,18 @@ export default function Page() {
           <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-4 overflow-hidden rounded-lg border border-line bg-panel/70"
+            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
-              <div className="bg-panel px-4 py-4 sm:px-5 sm:py-5">
+              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
                 <Telemetry state={state} />
               </div>
-              <div className="bg-panel px-4 py-4 sm:px-5 sm:py-5">
+              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
                 <RaceControl state={state} online={online} />
               </div>
             </div>
-            <div className="border-t border-line px-4 py-4 sm:px-5 sm:py-5">
+            <div className="border-t border-line px-3 py-3 sm:px-5 sm:py-4">
               <SectionTitle
                 title="The grid"
                 right={
@@ -78,7 +78,7 @@ export default function Page() {
               <EstimatingRotator state={state} />
             </div>
             {online ? (
-              <div className="border-t border-volt/20 bg-volt/[0.02] px-5 py-5">
+              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-5 sm:py-4">
                 <SpectatorCoach armed={!intro} />
                 <ToteBoard state={state} />
               </div>
@@ -123,13 +123,13 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { id: "proof", label: "Journal" },
   ];
   return (
-    <div className="reveal mt-5 flex gap-1 border-b border-line">
+    <div className="reveal mt-4 flex gap-1 border-b border-line sm:mt-5">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => setTab(t.id)}
           className={cn(
-            "-mb-px border-b-2 px-4 py-2.5 font-display text-[13px] uppercase tracking-wide transition",
+            "-mb-px border-b-2 px-4 py-2 font-display text-[13px] uppercase tracking-wide transition sm:py-2.5",
             tab === t.id
               ? "border-volt text-volt"
               : "border-transparent text-dim hover:text-ink",
@@ -267,9 +267,9 @@ function Header({
 }) {
   const status = !online ? "offline" : (state?.status ?? "—");
   return (
-    <header className="reveal flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
+    <header className="reveal flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4 sm:gap-4 sm:pb-5">
       <div>
-        <h1 className="font-display text-4xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
+        <h1 className="font-display text-3xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
           Axion <span className="text-volt">Clash</span>
         </h1>
       </div>
@@ -316,13 +316,13 @@ function Telemetry({ state }: { state: ArenaState | null }) {
   const delta = series.length >= 2 ? series[series.length - 1] - series[0] : 0;
   const up = delta >= 0;
   return (
-    <div className="grid h-full items-center gap-5 sm:grid-cols-[auto_1fr]">
+    <div className="grid h-full items-center gap-3 sm:grid-cols-[auto_1fr] sm:gap-5">
       <div>
         <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-dim">
           ETH / USD
         </div>
         <div className="flex items-end gap-3">
-          <span className="font-display text-5xl leading-none tnum sm:text-6xl">
+          <span className="font-display text-[2.75rem] leading-none tnum sm:text-6xl">
             {px != null ? usd(px) : "—"}
           </span>
           <span
@@ -340,7 +340,7 @@ function Telemetry({ state }: { state: ArenaState | null }) {
 }
 
 function Sparkline({ series, up }: { series: number[]; up: boolean }) {
-  if (series.length < 2) return <div className="h-16" />;
+  if (series.length < 2) return <div className="h-12 sm:h-16" />;
   const min = Math.min(...series),
     max = Math.max(...series),
     range = max - min || 1;
@@ -357,7 +357,7 @@ function Sparkline({ series, up }: { series: number[]; up: boolean }) {
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
-      className="h-16 w-full"
+      className="h-12 w-full sm:h-16"
     >
       <polyline
         points={pts}
@@ -608,13 +608,13 @@ function RaceControl({
         <div className="font-mono text-[11px] uppercase tracking-[0.28em] text-dim">
           {kicker}
         </div>
-        <div className="mt-0.5 flex items-end gap-4">
+        <div className="mt-0.5 flex items-end gap-3 sm:gap-4">
           <div
             className={cn(
               "font-display leading-none tnum",
               accent ? "text-volt" : "text-ink",
             )}
-            style={{ fontSize: "clamp(2rem, 6.5vw, 3.25rem)" }}
+            style={{ fontSize: "clamp(1.9rem, 6vw, 3.25rem)" }}
           >
             {big}
           </div>
@@ -651,7 +651,7 @@ function RaceControl({
         <button
           onClick={startNow}
           disabled={busy}
-          className="w-full shrink-0 rounded-lg bg-volt px-6 py-3.5 font-display text-base uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-4"
+          className="w-full shrink-0 rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-3.5"
         >
           {busy ? "starting…" : "▶ start a race"}
         </button>
@@ -757,10 +757,14 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     dq?: boolean;
   }[] = live
     ? comps
-    : roster.map((a) => ({
-        id: a.id,
-        label: a.label,
-      }));
+    : roster.map((a) => {
+        const last = r?.competitors.find((c) => c.id === a.id);
+        return {
+          id: a.id,
+          label: a.label,
+          estimate: last?.estimate,
+        };
+      });
 
   // Expand data (the old "racers" content): rationale/latency from the round (live or last settled),
   // hires from the matching settled record. Honest: "this race" only when the shown round is in history.
@@ -827,9 +831,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   return (
     <div>
       {/* Free no-wallet on-ramp; USDC is an optional upgrade on the SAME pick (one decision). */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-volt/30 bg-volt/[0.04] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
         <div>
-          <div className="font-display text-lg uppercase tracking-wide text-volt">
+          <div className="font-display text-base uppercase tracking-wide text-volt sm:text-lg">
             Back the winner. Free.
           </div>
         </div>
@@ -854,7 +858,11 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
       {cards.length ? (
         <div
           className={cn(
-            "mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3",
+            cards.length === 1
+              ? "mt-3 grid grid-cols-1 gap-2 sm:gap-3"
+              : cards.length === 2
+                ? "mt-3 grid grid-cols-2 gap-2 sm:gap-3"
+                : "mt-3 grid grid-cols-3 gap-2 sm:gap-3",
             cards.length > 6 && "max-h-[520px] overflow-auto pr-1", // many agents → scroll, never flood
           )}
         >
@@ -867,7 +875,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               !pick?.resolved &&
               (live ? !c.dq : idlePickable); // pick/change/cancel
             const boxed = tappable || isPick || won;
-            const col = "var(--color-volt)";
+            const col = livery(c.id);
             const showCallDetail = live;
             const isOpen = showCallDetail && open === c.id;
             const d = detail(c.id);
@@ -907,21 +915,23 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   onClick={() => choose(c.id)}
                   disabled={!tappable && !isPick}
                   className={cn(
-                    "w-full px-3 py-4 text-center",
+                    "flex min-h-[80px] w-full flex-col justify-between px-2.5 py-2.5 text-left sm:min-h-[84px] sm:px-3.5 sm:py-3.5",
                     tappable ? "cursor-pointer" : "cursor-default",
                   )}
                 >
-                  <span
-                    className="mx-auto mb-2 block h-3 w-3 rounded-sm"
-                    style={{ background: livery(c.id) }}
-                  />
-                  <div
-                    className="font-display text-lg uppercase leading-none tracking-wide"
-                    style={{ opacity: boxed ? 1 : 0.78 }}
-                  >
-                    {c.label}
+                  <div className="flex w-full items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-sm sm:h-3 sm:w-3"
+                      style={{ background: livery(c.id) }}
+                    />
+                    <div
+                      className="min-w-0 truncate font-display text-[15px] uppercase leading-none tracking-wide sm:text-lg"
+                      style={{ opacity: boxed ? 1 : 0.78 }}
+                    >
+                      {c.label}
+                    </div>
                   </div>
-                  <div className="mt-1.5 min-h-[1rem] font-mono text-[11px] uppercase tracking-wider text-dim">
+                  <div className="mt-2 min-h-[1rem] font-mono text-[10px] uppercase tracking-wider text-dim sm:text-[11px]">
                     {live ? (
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
@@ -930,12 +940,14 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       ) : (
                         "forecasting…"
                       )
+                    ) : c.estimate != null ? (
+                      <>last {usd(c.estimate)}</>
                     ) : raced.has(c.id) ? null : (
                       <span className="text-volt">new</span>
                     )}
                   </div>
                   <div
-                    className="mt-1 min-h-[1rem] font-mono text-[11px] font-bold uppercase tracking-[0.18em]"
+                    className="mt-1 min-h-[1rem] font-mono text-[10px] font-bold uppercase tracking-[0.16em] sm:text-[11px] sm:tracking-[0.18em]"
                     style={{
                       color: won
                         ? "var(--color-gold)"
@@ -950,7 +962,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       ? "USDC in"
                       : isPick
                         ? "selected"
-                        : tappable && live
+                        : tappable
                           ? "back"
                           : ""}
                   </div>
@@ -2366,7 +2378,7 @@ function SectionTitle({
   right?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-3">
       <h2 className="flex items-baseline gap-2">
         {index ? (
           <span className="font-mono text-[10px] text-volt">{index}</span>
@@ -2375,7 +2387,7 @@ function SectionTitle({
           {title}
         </span>
       </h2>
-      {right}
+      {right ? <div className="shrink-0">{right}</div> : null}
     </div>
   );
 }
@@ -2422,20 +2434,29 @@ function HowItWorks() {
   ];
   return (
     <div
-      className="reveal mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px] text-dim"
+      className="reveal mt-2 text-[13px] text-dim sm:mt-3"
       style={{ animationDelay: "40ms" }}
     >
-      {steps.map(([n, t], i) => (
-        <span key={n} className="flex items-center gap-2">
-          <span className="font-display text-[15px] leading-none text-volt">
-            {n}
+      <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[11px] uppercase tracking-wider sm:hidden">
+        <span className="text-volt">01 forecast</span>
+        <span className="text-dim/50">/</span>
+        <span className="text-volt">02 back</span>
+        <span className="text-dim/50">/</span>
+        <span className="text-volt">03 settle</span>
+      </div>
+      <div className="hidden flex-wrap items-center gap-x-5 gap-y-1.5 sm:flex">
+        {steps.map(([n, t], i) => (
+          <span key={n} className="flex items-center gap-2">
+            <span className="font-display text-[15px] leading-none text-volt">
+              {n}
+            </span>
+            <span>{t}</span>
+            {i < steps.length - 1 ? (
+              <span className="ml-3 h-3 w-px bg-line" />
+            ) : null}
           </span>
-          <span>{t}</span>
-          {i < steps.length - 1 ? (
-            <span className="ml-3 h-3 w-px bg-line" />
-          ) : null}
-        </span>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
