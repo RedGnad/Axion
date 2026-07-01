@@ -123,7 +123,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { id: "proof", label: "Journal" },
   ];
   return (
-    <div className="reveal mt-4 flex gap-1 border-b border-line sm:mt-5">
+    <div className="reveal mt-3 flex gap-1 sm:mt-5">
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -267,7 +267,7 @@ function Header({
 }) {
   const status = !online ? "offline" : (state?.status ?? "—");
   return (
-    <header className="reveal flex flex-wrap items-end justify-between gap-3 border-b border-line pb-4 sm:gap-4 sm:pb-5">
+    <header className="reveal flex flex-wrap items-end justify-between gap-3 pb-3 sm:gap-4 sm:pb-4">
       <div>
         <h1 className="font-display text-3xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
           Axion <span className="text-volt">Clash</span>
@@ -340,7 +340,7 @@ function Telemetry({ state }: { state: ArenaState | null }) {
 }
 
 function Sparkline({ series, up }: { series: number[]; up: boolean }) {
-  if (series.length < 2) return <div className="h-12 sm:h-16" />;
+  if (series.length < 2) return <div className="h-10 sm:h-16" />;
   const min = Math.min(...series),
     max = Math.max(...series),
     range = max - min || 1;
@@ -357,7 +357,7 @@ function Sparkline({ series, up }: { series: number[]; up: boolean }) {
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
-      className="h-12 w-full sm:h-16"
+      className="h-10 w-full sm:h-16"
     >
       <polyline
         points={pts}
@@ -630,7 +630,14 @@ function RaceControl({
           ) : null}
         </div>
         {note ? (
-          <div className="mt-1.5 font-mono text-[12.5px] text-dim">{note}</div>
+          <div
+            className={cn(
+              "mt-1.5 font-mono text-[12.5px] text-dim",
+              showStart && "hidden sm:block",
+            )}
+          >
+            {note}
+          </div>
         ) : null}
         {barPct != null ? (
           <div
@@ -831,25 +838,29 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   return (
     <div>
       {/* Free no-wallet on-ramp; USDC is an optional upgrade on the SAME pick (one decision). */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2.5 sm:px-4 sm:py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2 sm:px-4 sm:py-3">
         <div>
-          <div className="font-display text-base uppercase tracking-wide text-volt sm:text-lg">
+          <div className="font-display text-[15px] uppercase tracking-wide text-volt sm:text-lg">
             Back the winner. Free.
           </div>
         </div>
         {ps && ps.total > 0 ? (
-          <div className="text-right font-mono text-[11px] text-dim">
+          <div className="font-mono text-[10px] text-dim sm:text-right sm:text-[11px]">
             <b className="text-ink tnum">{ps.total.toLocaleString()}</b> picks ·{" "}
-            <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b>{" "}
-            visitors
+            <span className="hidden sm:inline">
+              <b className="text-ink tnum">{ps.visitors.toLocaleString()}</b>{" "}
+              visitors
+            </span>
             {resolvedPicks > 0 ? (
               <>
-                {" "}· <b className="text-volt tnum">{publicAccuracy}%</b>{" "}
-                settled right
+                <span className="hidden sm:inline"> · </span>
+                <b className="text-volt tnum">{publicAccuracy}%</b>{" "}
+                right
               </>
             ) : pendingPicks > 0 ? (
               <>
-                {" "}· <b className="text-volt tnum">{pendingPicks}</b> pending
+                <span className="hidden sm:inline"> · </span>
+                <b className="text-volt tnum">{pendingPicks}</b> pending
               </>
             ) : null}
           </div>
@@ -915,7 +926,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   onClick={() => choose(c.id)}
                   disabled={!tappable && !isPick}
                   className={cn(
-                    "flex min-h-[80px] w-full flex-col justify-between px-2.5 py-2.5 text-left sm:min-h-[84px] sm:px-3.5 sm:py-3.5",
+                    "flex min-h-[70px] w-full flex-col justify-between px-2.5 py-2.5 text-left sm:min-h-[84px] sm:px-3.5 sm:py-3.5",
                     tappable ? "cursor-pointer" : "cursor-default",
                   )}
                 >
@@ -2434,17 +2445,10 @@ function HowItWorks() {
   ];
   return (
     <div
-      className="reveal mt-2 text-[13px] text-dim sm:mt-3"
+      className="reveal mt-2 hidden text-[13px] text-dim sm:block sm:mt-3"
       style={{ animationDelay: "40ms" }}
     >
-      <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap font-mono text-[11px] uppercase tracking-wider sm:hidden">
-        <span className="text-volt">01 forecast</span>
-        <span className="text-dim/50">/</span>
-        <span className="text-volt">02 back</span>
-        <span className="text-dim/50">/</span>
-        <span className="text-volt">03 settle</span>
-      </div>
-      <div className="hidden flex-wrap items-center gap-x-5 gap-y-1.5 sm:flex">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
         {steps.map(([n, t], i) => (
           <span key={n} className="flex items-center gap-2">
             <span className="font-display text-[15px] leading-none text-volt">

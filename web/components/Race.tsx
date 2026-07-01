@@ -107,7 +107,7 @@ export default function Race({ round }: { round: RoundView | null }) {
 
   // Compact the lanes as the field grows so a big roster doesn't flood the track (keeps the start/
   // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
-  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-11" : "h-10 sm:h-14";
+  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-11" : "h-9 sm:h-14";
   return (
     <div ref={wrap} className="relative pr-1 sm:pr-2">
       {round.competitors.map((c) => {
@@ -120,7 +120,7 @@ export default function Race({ round }: { round: RoundView | null }) {
             </span>
             <div
               data-kart={c.id}
-              className="absolute top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-0.5 sm:top-4 sm:gap-1"
+              className="absolute top-2.5 z-20 flex -translate-x-1/2 flex-col items-center gap-0.5 sm:top-4 sm:gap-1"
               style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
               title={c.dq ? 'too slow this round, cut' : c.rationale || ''}
             >
