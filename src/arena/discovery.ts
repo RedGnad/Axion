@@ -35,7 +35,7 @@ let cache: { at: number; list: DiscoveredProvider[] } | null = null;
 
 /** Names that aren't ETH-forecast DATA feeds (subscriptions / execution / generic plans). Excluded
  *  so dynamic hiring can't drift into nonsensical or non-data orders. */
-const DENY = /subscription|monthly|plan|days|swap|execute|executor|bridge|deploy|mint|airdrop|faucet/i;
+const DENY = /subscription|monthly|plan|days|swap|execute|execution|executor|bridge|deploy|mint|airdrop|faucet|pay|payout|split|resolver|ens|logo|design|buyer.?ping|\becho\b|\btest\b|arena|axion|racer|race|forecast/i;
 
 function maxPriceUSDC(): number {
   const v = Number(process.env.DISCOVERY_MAX_PRICE_USDC);

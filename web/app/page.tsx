@@ -40,7 +40,7 @@ export default function Page() {
     setIntro(false);
   };
   return (
-    <main className="mx-auto max-w-[1180px] px-5 pb-24 pt-6">
+    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-5 sm:px-5 sm:pb-24 sm:pt-6">
       <Intro open={intro} setTab={setTab} onClose={closeIntro} />
       <Header state={state} online={online} onHelp={() => setIntro(true)} />
       <Tabs tab={tab} setTab={setTab} />
@@ -55,14 +55,14 @@ export default function Page() {
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
-              <div className="bg-panel px-5 py-5">
+              <div className="bg-panel px-4 py-4 sm:px-5 sm:py-5">
                 <Telemetry state={state} />
               </div>
-              <div className="bg-panel px-5 py-5">
+              <div className="bg-panel px-4 py-4 sm:px-5 sm:py-5">
                 <RaceControl state={state} online={online} />
               </div>
             </div>
-            <div className="border-t border-line px-5 py-5">
+            <div className="border-t border-line px-4 py-4 sm:px-5 sm:py-5">
               <SectionTitle
                 title="The grid"
                 right={
@@ -558,7 +558,7 @@ function RaceControl({
       // The race is live → odds (dropping) is the hero; keep the suspense (no settle countdown).
       kicker = "RACE LIVE · BET NOW";
       big = `×${mult.toFixed(1)}`;
-      note = "odds drop as the move reveals. back an agent below.";
+      note = "";
     } else if (graceOpen) {
       // Grace: controlled countdown (hero) + odds (secondary, still visible) + red bar.
       kicker = "STRAGGLERS CUT IN";
@@ -603,7 +603,7 @@ function RaceControl({
   }
 
   return (
-    <div className="flex h-full flex-wrap items-center justify-between gap-4">
+    <div className="flex h-full flex-wrap items-center justify-between gap-3 sm:gap-4">
       <div key={kicker} className="swapin min-w-0 flex-1">
         <div className="font-mono text-[11px] uppercase tracking-[0.28em] text-dim">
           {kicker}
@@ -651,7 +651,7 @@ function RaceControl({
         <button
           onClick={startNow}
           disabled={busy}
-          className="shrink-0 rounded-lg bg-volt px-7 py-4 font-display text-base uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50"
+          className="w-full shrink-0 rounded-lg bg-volt px-6 py-3.5 font-display text-base uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-4"
         >
           {busy ? "starting…" : "▶ start a race"}
         </button>
@@ -854,7 +854,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
       {cards.length ? (
         <div
           className={cn(
-            "mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3",
+            "mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3",
             cards.length > 6 && "max-h-[520px] overflow-auto pr-1", // many agents → scroll, never flood
           )}
         >
@@ -1296,6 +1296,13 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
   const r = state?.round;
   const live = r?.phase === "open";
   const comps = r?.competitors ?? [];
+  const describeTargets = (targets?: string[]) => {
+    if (!targets?.length) return "answering the arena hire";
+    const clean = targets.map((t) => t.replace(/-/g, " "));
+    return clean.length > 2
+      ? clean.slice(0, 2).join(" + ") + ` + ${clean.length - 2} more`
+      : clean.join(" + ");
+  };
   const items = comps.map((c) =>
     c.dq
       ? `${c.label} was cut this race`
@@ -1303,7 +1310,7 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
         ? c.hires && c.hires.length
           ? `${c.label} bought ${c.hires.join(" + ")}, called ${usd(c.estimate)}`
           : `${c.label} is in, called ${usd(c.estimate)}`
-        : `${c.label} is sourcing data on-chain`,
+        : `${c.label} hiring ${describeTargets(c.targets)}`,
   );
   if (comps.length)
     items.push(
@@ -1995,7 +2002,7 @@ function GridSlotPreview() {
 function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
-  const [pay, setPay] = useState(""); // optional payout address: where this agent receives its winning cut
+  const [pay, setPay] = useState("");
   const [open, setOpen] = useState(false); // collapse the join tunnel by default → compact pitch first
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
@@ -2103,11 +2110,11 @@ function Join() {
             </div>
             <div className="mt-3 space-y-3 pl-9">
               <p className="text-[13.5px] leading-relaxed text-dim">
-                Patch your backend. A generic CROO listing alone will not race.
+                Give your agent a race move. When Axion hires it, return this tiny JSON.
               </p>
               <div className="rounded-md border border-line/70 bg-panel2/60 px-3 py-2.5">
                 <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                  required response
+                  race response
                 </div>
                 <div className="mt-1 overflow-x-auto whitespace-nowrap font-mono text-[12.5px] text-under">
                   {'{ "prediction": number, "rationale": string }'}
@@ -2211,7 +2218,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             <div className="mt-2.5 pl-9">
               <p className="text-[13.5px] leading-relaxed text-dim">
                 Paste one real handler response. This is the same check used
-                before grid entry.
+                during a race.
               </p>
               <div className="mt-2.5 flex flex-wrap gap-2">
                 <input
@@ -2311,16 +2318,19 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                   {busy ? "adding…" : "Join"}
                 </button>
               </div>
-              <input
-                value={pay}
-                onChange={(e) => setPay(e.target.value)}
-                placeholder="payout address (0x… on Base) · optional, to receive your winning cut"
-                className="mt-2 w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
-              />
-              <p className="mt-2 text-[13px] leading-relaxed text-dim">
-                Optional. If your agent wins a USDC race, 2% of the pot goes to
-                this Base address.
-              </p>
+              <details className="mt-2 group">
+                <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
+                  <span className="text-volt">▸</span> reward wallet
+                </summary>
+                <div className="mt-2">
+                  <input
+                    value={pay}
+                    onChange={(e) => setPay(e.target.value)}
+                    placeholder="0x reward wallet (optional)"
+                    className="w-full rounded-lg border border-line bg-panel2 px-3.5 py-3 font-mono text-[12.5px] outline-none focus:border-ink/40"
+                  />
+                </div>
+              </details>
               {msg ? (
                 <div
                   className="mt-2 font-mono text-[13px]"

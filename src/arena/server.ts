@@ -36,6 +36,8 @@ interface CompetitorView {
   /** Provider labels this agent hired THIS round (from its edges) — surfaced live so spectators see
    *  which data each persona bought. Empty for remote agents (they source internally). */
   hires?: string[];
+  /** Capability labels this agent is trying to source before its estimate lands. */
+  targets?: string[];
 }
 interface RoundView {
   id: string;
@@ -439,6 +441,7 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
       .map((r) => ({ label: r.label, serviceId: r.serviceId, hires: r.hires, avgMs: r.latN ? Math.round(r.latSum / r.latN) : null, paidUSDC: Math.round(r.hires * PRICE * 100) / 100 }))
       .sort((a, b) => b.hires - a.hires)
       .slice(0, 8);
+    const eventDeny = /subscription|monthly|plan|days|swap|execute|execution|executor|bridge|deploy|mint|airdrop|faucet|pay|payout|split|resolver|ens|logo|design|buyer.?ping|\becho\b|\btest\b|arena|axion|racer|race|forecast/i;
     state.dataMarket = {
       discovered: pool.length,
       maxPriceUSDC: Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10,
@@ -446,7 +449,7 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
       top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
       wired: wired ?? state.dataMarket?.wired ?? [],
       providerStats,
-      events: storeEvents,
+      events: storeEvents.filter((e) => !eventDeny.test(e.text)).slice(0, 14),
     };
     if (newJoins > 0) saveHistory(); // persist the grown known-set + new timeline entries
     broadcast();
@@ -614,7 +617,11 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           etaRaceStartMs: roundOpenMs + HIRING_ETA_MS,
           etaSettleMs: roundOpenMs + HIRING_ETA_MS + WINDOW * 1000,
           dqAtMs,
-          competitors: competitors.map((c) => ({ id: c.id, ...personaMeta(c.id) })),
+          competitors: competitors.map((c) => ({
+            id: c.id,
+            ...personaMeta(c.id),
+            targets: c.kind === 'local' ? c.persona.capabilities : ['arena forecast'],
+          })),
         };
         lastHireFailReason = ''; // fresh round; failures (if any) will re-arm the banner
         // Carry over predictions placed during the idle gap (on the now-racing roster), deduped.
