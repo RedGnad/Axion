@@ -107,7 +107,7 @@ export default function Race({ round }: { round: RoundView | null }) {
 
   // Compact the lanes as the field grows so a big roster doesn't flood the track (keeps the start/
   // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
-  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-11" : "h-9 sm:h-14";
+  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-10" : "h-9 sm:h-11";
   return (
     <div ref={wrap} className="relative pr-1 sm:pr-2">
       {round.competitors.map((c) => {
@@ -160,9 +160,6 @@ export default function Race({ round }: { round: RoundView | null }) {
           outline: '1px solid rgba(255,255,255,.6)',
         }}
       />
-      <div className="mt-3 hidden border-t border-line/50 pt-2 sm:block">
-        <span className="text-[11px] leading-snug text-dim">Closer forecasts move farther. Closest to Pyth wins.</span>
-      </div>
     </div>
   );
 }

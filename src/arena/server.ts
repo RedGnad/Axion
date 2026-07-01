@@ -126,6 +126,8 @@ interface ArenaState {
   usdcBet?: { enabled: boolean; open: boolean; betCutoffAtMs?: number; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
   budget?: { used: number; cap: number; resetsAt: number };
+  /** Secondary long-form format: one data-rich thesis event per day by default. */
+  thesisRace?: { usedToday: number; capToday: number; resetsAt: number; windowSeconds: number };
   /** Health banner: surfaced (never silent) when data hires fail. Kept user-facing and action-oriented:
    *  funding, delisting, and provider latency are different states. Cleared once a round buys data. */
   notice?: { level: 'warn'; text: string };
@@ -156,6 +158,7 @@ const PORT = Number(process.env.PORT ?? '8787');
 const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
 const THESIS_WINDOW = Number(process.env.ARENA_THESIS_WINDOW_SECONDS ?? '900');
+const DAILY_THESIS_RACES = Math.max(0, Number(process.env.ARENA_DAILY_THESIS_RACES ?? '1'));
 let HIRING_ETA_MS = 90_000; // estimated hiring time; AUTO-CALIBRATED from each round's real open→betting duration
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
@@ -366,6 +369,8 @@ async function loadHistory(): Promise<void> {
   if (last) {
     state.round = {
       id: last.id,
+      format: last.format,
+      windowSeconds: last.windowSeconds,
       phase: 'settled',
       openPrice: last.openPrice,
       closePrice: last.closePrice,
@@ -636,11 +641,18 @@ function nextUtcMidnightMs(): number {
   d.setUTCHours(24, 0, 0, 0);
   return d.getTime();
 }
+function thesisUsedToday(): number {
+  const today = new Date().toISOString().slice(0, 10);
+  let used = state.history.filter((h) => h.format === 'thesis' && h.settledAt.slice(0, 10) === today).length;
+  if (state.round?.format === 'thesis' && state.round.phase !== 'settled') used += 1;
+  return used;
+}
 /** Reflect the bounded daily subsidy into state (for the UI), rolling over at UTC midnight. */
 function refreshBudget(): void {
   const today = new Date().toISOString().slice(0, 10);
   if (today !== racesDayKey) { racesDayKey = today; racesToday = 0; }
   state.budget = { used: racesToday, cap: DAILY_RACES, resetsAt: nextUtcMidnightMs() };
+  state.thesisRace = { usedToday: thesisUsedToday(), capToday: DAILY_THESIS_RACES, resetsAt: nextUtcMidnightMs(), windowSeconds: THESIS_WINDOW };
 }
 
 /** Trigger a round respecting the cost ceiling (cooldown) + running guard + bounded daily subsidy. */
@@ -653,12 +665,15 @@ function tryRunRound(
   const since = Date.now() - lastRoundStartMs;
   if (lastRoundStartMs && since < MIN_ROUND_MS) return { started: false, reason: 'cooldown', nextAtMs: lastRoundStartMs + MIN_ROUND_MS };
   refreshBudget();
-  if (racesToday >= DAILY_RACES) return { started: false, reason: `today's free races are used up (${DAILY_RACES}/day). Back at UTC midnight`, nextAtMs: nextUtcMidnightMs() };
-  racesToday++;
+  if (format === 'thesis' && thesisUsedToday() >= DAILY_THESIS_RACES) {
+    return { started: false, reason: 'daily thesis race already used', nextAtMs: nextUtcMidnightMs(), format, windowSeconds: windowForFormat(format) };
+  }
+  if (format === 'blitz' && racesToday >= DAILY_RACES) return { started: false, reason: `today's free races are used up (${DAILY_RACES}/day). Back at UTC midnight`, nextAtMs: nextUtcMidnightMs() };
+  if (format === 'blitz') racesToday++;
   refreshBudget();
   saveHistory(); // persist the subsidy counter immediately so the cap survives a restart mid-round
   const windowSeconds = windowForFormat(format);
-  console.log(`[arena-server] round trigger: ${reason}/${format} ${windowSeconds}s (${racesToday}/${DAILY_RACES} today)`);
+  console.log(`[arena-server] round trigger: ${reason}/${format} ${windowSeconds}s (blitz ${racesToday}/${DAILY_RACES}, thesis ${thesisUsedToday()}/${DAILY_THESIS_RACES} today)`);
   void runOneRound(cfg, { format, windowSeconds });
   return { started: true, format, windowSeconds };
 }

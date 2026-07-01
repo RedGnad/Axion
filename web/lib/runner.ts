@@ -88,6 +88,7 @@ export interface ArenaState {
   predictStats?: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   usdcBet?: { enabled: boolean; open?: boolean; betCutoffAtMs?: number; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   budget?: { used: number; cap: number; resetsAt: number };
+  thesisRace?: { usedToday: number; capToday: number; resetsAt: number; windowSeconds: number };
   notice?: { level: 'warn'; text: string };
   dataMarket?: {
     discovered: number;

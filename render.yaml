@@ -28,11 +28,14 @@ services:
         value: "60"
       - key: ARENA_THESIS_WINDOW_SECONDS
         value: "900"
+      - key: ARENA_DAILY_THESIS_RACES
+        value: "1"
       # ── Optional env (set in the Render dashboard, sync:false; each enables a feature) ──
       # CADENCE / COLD-START:
       #   ARENA_WINDOW_SECONDS  — default manual/auto "Blitz" race horizon (60s).
-      #   ARENA_THESIS_WINDOW_SECONDS — optional manual "Thesis" horizon (900s = 15m) for richer
-      #                           data agents; same agents/economics, longer settlement window.
+      #   ARENA_THESIS_WINDOW_SECONDS — secondary "Thesis" event horizon (900s = 15m) for richer
+      #                           data agents; same racers/economics, longer settlement window.
+      #   ARENA_DAILY_THESIS_RACES — daily cap for the Thesis event (default 1; resets UTC).
       #   ARENA_AUTO_ROUND_MS   — ms between scheduled rounds (the "NEXT" countdown). Keep it
       #                           high while funds are low; lower it once the persona wallets are funded.
       #   ARENA_DAILY_RACES     — bounded free races/day from our treasury (default 12; resets UTC).

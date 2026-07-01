@@ -26,6 +26,12 @@ export default function Page() {
   const { state, online } = useArena(2000);
   const [tab, setTab] = useState<Tab>("play");
   const [intro, setIntro] = useState(false);
+  useEffect(() => {
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0 }));
+  }, []);
   // First-run intent split (shown once): route a visitor to "watch & bet" or "bring an agent" so
   // nobody lands on a dense dashboard wondering where to start. Re-openable from the header.
   useEffect(() => {
@@ -40,7 +46,7 @@ export default function Page() {
     setIntro(false);
   };
   return (
-    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-4 sm:px-5 sm:pb-24 sm:pt-6">
+    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-3 sm:px-5 sm:pb-24 sm:pt-4">
       <Intro open={intro} setTab={setTab} onClose={closeIntro} />
       <Header state={state} online={online} onHelp={() => setIntro(true)} />
       <Tabs tab={tab} setTab={setTab} />
@@ -48,21 +54,20 @@ export default function Page() {
 
       {tab === "play" && (
         <>
-          <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70"
+            className="reveal mt-2 overflow-hidden rounded-lg border border-line bg-panel/70"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
-              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
+              <div className="bg-panel px-3 py-3 sm:px-4 sm:py-3">
                 <Telemetry state={state} />
               </div>
-              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
+              <div className="bg-panel px-3 py-3 sm:px-4 sm:py-3">
                 <RaceControl state={state} online={online} />
               </div>
             </div>
-            <div className="border-t border-line px-3 py-3 sm:px-5 sm:py-4">
+            <div className="border-t border-line px-3 py-3 sm:px-4 sm:py-3">
               <SectionTitle
                 title="The grid"
                 right={
@@ -72,19 +77,20 @@ export default function Page() {
                   </div>
                 }
               />
-              <div className="mt-4">
+              <div className="mt-3">
                 <Race round={state?.round ?? null} />
               </div>
               <EstimatingRotator state={state} />
             </div>
             {online ? (
-              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-5 sm:py-4">
+              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-4 sm:py-3">
                 <SpectatorCoach armed={!intro} />
                 <ToteBoard state={state} />
               </div>
             ) : null}
             <LiveTicker state={state} />
           </section>
+          <DailyThesis state={state} online={online} />
           <ZoneLabel title="Standings" blurb="which agent calls ETH best" />
           <Leaderboard state={state} />
         </>
@@ -123,13 +129,13 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { id: "proof", label: "Journal" },
   ];
   return (
-    <div className="reveal mt-3 flex gap-1 sm:mt-5">
+    <div className="reveal mt-2 flex gap-1 sm:mt-3">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => setTab(t.id)}
           className={cn(
-            "-mb-px border-b-2 px-4 py-2 font-display text-[13px] uppercase tracking-wide transition sm:py-2.5",
+            "-mb-px border-b-2 px-4 py-1.5 font-display text-[13px] uppercase tracking-wide transition sm:py-2",
             tab === t.id
               ? "border-volt text-volt"
               : "border-transparent text-dim hover:text-ink",
@@ -267,9 +273,9 @@ function Header({
 }) {
   const status = !online ? "offline" : (state?.status ?? "—");
   return (
-    <header className="reveal flex flex-wrap items-end justify-between gap-3 pb-3 sm:gap-4 sm:pb-4">
+    <header className="reveal flex flex-wrap items-end justify-between gap-3 pb-2 sm:gap-4 sm:pb-3">
       <div>
-        <h1 className="font-display text-3xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
+        <h1 className="font-display text-3xl uppercase leading-none tracking-[0.04em] sm:text-4xl">
           Axion <span className="text-volt">Clash</span>
         </h1>
       </div>
@@ -844,9 +850,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   return (
     <div>
       {/* Free no-wallet on-ramp; USDC is an optional upgrade on the SAME pick (one decision). */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2 sm:px-4 sm:py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2 sm:px-4">
         <div>
-          <div className="font-display text-[15px] uppercase tracking-wide text-volt sm:text-lg">
+          <div className="font-display text-[15px] uppercase tracking-wide text-volt sm:text-base">
             Back the winner. Free.
           </div>
         </div>
@@ -875,10 +881,10 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         <div
           className={cn(
             cards.length === 1
-              ? "mt-3 grid grid-cols-1 gap-2 sm:gap-3"
+              ? "mt-2 grid grid-cols-1 gap-2"
               : cards.length === 2
-                ? "mt-3 grid grid-cols-2 gap-2 sm:gap-3"
-                : "mt-3 grid grid-cols-3 gap-2 sm:gap-3",
+                ? "mt-2 grid grid-cols-2 gap-2"
+                : "mt-2 grid grid-cols-3 gap-2",
             cards.length > 6 && "max-h-[520px] overflow-auto pr-1", // many agents → scroll, never flood
           )}
         >
@@ -931,7 +937,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   onClick={() => choose(c.id)}
                   disabled={!tappable && !isPick}
                   className={cn(
-                    "flex min-h-[70px] w-full flex-col justify-between px-2.5 py-2.5 text-left sm:min-h-[84px] sm:px-3.5 sm:py-3.5",
+                    "flex min-h-[62px] w-full flex-col justify-between px-2.5 py-2 text-left sm:min-h-[70px] sm:px-3 sm:py-2.5",
                     tappable ? "cursor-pointer" : "cursor-default",
                   )}
                 >
@@ -941,13 +947,13 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       style={{ background: livery(c.id) }}
                     />
                     <div
-                      className="min-w-0 truncate font-display text-[15px] uppercase leading-none tracking-wide sm:text-lg"
+                      className="min-w-0 truncate font-display text-[15px] uppercase leading-none tracking-wide sm:text-base"
                       style={{ opacity: boxed ? 1 : 0.78 }}
                     >
                       {c.label}
                     </div>
                   </div>
-                  <div className="mt-2 min-h-[1rem] font-mono text-[10px] uppercase tracking-wider text-dim sm:text-[11px]">
+                  <div className="mt-1 min-h-[0.9rem] font-mono text-[10px] uppercase tracking-wider text-dim sm:text-[11px]">
                     {live ? (
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
@@ -963,7 +969,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                     )}
                   </div>
                   <div
-                    className="mt-1 min-h-[1rem] font-mono text-[10px] font-bold uppercase tracking-[0.16em] sm:text-[11px] sm:tracking-[0.18em]"
+                    className="mt-0.5 min-h-[0.9rem] font-mono text-[10px] font-bold uppercase tracking-[0.16em] sm:text-[11px] sm:tracking-[0.18em]"
                     style={{
                       color: won
                         ? "var(--color-gold)"
@@ -1319,6 +1325,73 @@ function UsdcBet({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function DailyThesis({
+  state,
+  online,
+}: {
+  state: ArenaState | null;
+  online: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const thesis = state?.thesisRace;
+  const running = state?.status === "running";
+  const used = thesis ? thesis.usedToday >= thesis.capToday : false;
+  const start = async () => {
+    setBusy(true);
+    setMsg("starting the thesis race…");
+    try {
+      const res = await fetch(`${RUNNER_URL}/api/round`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "thesis" }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        started?: boolean;
+        reason?: string;
+        error?: string;
+      };
+      setMsg(
+        j.started
+          ? "Daily thesis starting. Agents are hiring richer data."
+          : j.reason || j.error || "not available right now",
+      );
+    } catch {
+      setMsg("arena was asleep. Try again in ~20s");
+    } finally {
+      setTimeout(() => {
+        setBusy(false);
+        setMsg(null);
+      }, 6000);
+    }
+  };
+  return (
+    <section className="reveal mt-4 rounded-lg border border-line bg-panel/55 px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:px-5">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-display text-base uppercase tracking-wide text-ink">
+            Daily Thesis Race
+          </span>
+          <span className="rounded border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+            15m
+          </span>
+        </div>
+        <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-dim">
+          One slower data-rich race for research, wallet, sentiment and macro agents. Blitz stays the main game.
+        </p>
+        {msg ? <div className="mt-1.5 font-mono text-[11px] text-volt">{msg}</div> : null}
+      </div>
+      <button
+        onClick={start}
+        disabled={!online || running || busy || used}
+        className="mt-3 w-full rounded-md border border-volt/55 px-4 py-2.5 font-display text-[13px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60 sm:mt-0 sm:w-auto"
+      >
+        {used ? "today done" : busy ? "starting…" : "start thesis"}
+      </button>
+    </section>
   );
 }
 
