@@ -36,8 +36,10 @@ interface CompetitorView {
   /** Provider labels this agent hired THIS round (from its edges) — surfaced live so spectators see
    *  which data each persona bought. Empty for remote agents (they source internally). */
   hires?: string[];
-  /** Capability labels this agent is trying to source before its estimate lands. */
+  /** Capability/provider labels this agent is sourcing before its estimate lands. */
   targets?: string[];
+  /** Whether targets are still desired capabilities or the selected providers being hired. */
+  sourcePhase?: 'choosing' | 'hiring';
 }
 interface RoundView {
   id: string;
@@ -621,6 +623,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             id: c.id,
             ...personaMeta(c.id),
             targets: c.kind === 'local' ? c.persona.capabilities : ['arena forecast'],
+            sourcePhase: 'choosing',
           })),
         };
         lastHireFailReason = ''; // fresh round; failures (if any) will re-arm the banner
@@ -633,6 +636,15 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         }
         refreshUsdcBet(); // betting opens NOW (early, highest odds) → fresh pool from the hiring phase
         pushFeed(`Round open. ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
+        broadcast();
+      },
+      onSourcing: ({ competitor, services }) => {
+        if (!state.round) return;
+        const c = state.round.competitors.find((x) => x.id === competitor);
+        if (c) {
+          c.targets = services.map((s) => s.label);
+          c.sourcePhase = 'hiring';
+        }
         broadcast();
       },
       onHireFail: ({ competitor, label, reason }) => {

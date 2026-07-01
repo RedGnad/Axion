@@ -17,7 +17,8 @@ export interface CompetitorView {
   dataMs?: number;     // data latency (ms) → ⚡ fastest-grid badge
   dq?: boolean;        // disqualified this round (too slow) → doesn't race/win
   hires?: string[];    // provider labels this agent bought this round (live); empty for remotes
-  targets?: string[];  // capability labels it is trying to source while estimating
+  targets?: string[];  // capability/provider labels it is sourcing while estimating
+  sourcePhase?: 'choosing' | 'hiring';
 }
 export interface RoundView {
   id: string;

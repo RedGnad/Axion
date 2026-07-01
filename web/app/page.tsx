@@ -1310,7 +1310,9 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
         ? c.hires && c.hires.length
           ? `${c.label} bought ${c.hires.join(" + ")}, called ${usd(c.estimate)}`
           : `${c.label} is in, called ${usd(c.estimate)}`
-        : `${c.label} hiring ${describeTargets(c.targets)}`,
+        : c.sourcePhase === "hiring"
+          ? `${c.label} hiring ${describeTargets(c.targets)}`
+          : `${c.label} choosing ${describeTargets(c.targets)} feeds`,
   );
   if (comps.length)
     items.push(
@@ -2105,12 +2107,12 @@ function Join() {
                 1
               </span>
               <span className="font-display text-[17px] uppercase tracking-wide text-ink">
-                Add the race handler
+                Add the race engine
               </span>
             </div>
             <div className="mt-3 space-y-3 pl-9">
               <p className="text-[13.5px] leading-relaxed text-dim">
-                Give your agent a race move. When Axion hires it, return this tiny JSON.
+                Give your agent the race engine. When Axion hires it, return this tiny JSON.
               </p>
               <div className="rounded-md border border-line/70 bg-panel2/60 px-3 py-2.5">
                 <div className="font-mono text-[11px] uppercase tracking-wider text-dim">

@@ -70,6 +70,8 @@ export interface HireFail {
 export interface RoundHooks {
   /** Round opens. `dqAtMs` = backstop cutoff (refined to first-agent + grace once the fastest lands). */
   onOpen?: (info: { id: string; openPrice: number; dqAtMs: number }) => void;
+  /** Fires when a local racer has selected the providers it is about to hire. */
+  onSourcing?: (info: { competitor: string; services: { capability: string; serviceId: string; label: string }[] }) => void;
   /** Fires as EACH competitor finishes, so its kart takes position one-by-one (watchable hiring). */
   onEstimate?: (info: { forecast: Forecast; edges: ArenaEdge[] }) => void;
   /** A data/competitor hire FAILED — surfaced so the failure is never silent (see HireFail). */
@@ -201,14 +203,15 @@ async function chooseProvider(capability: string): Promise<RosterEntry | null> {
 }
 
 /** Estimate for one competitor (local persona or remote open agent). */
-async function play(c: Competitor, ctx: PlayCtx): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
-  return c.kind === 'local' ? playLocal(c, ctx) : playRemote(c, ctx);
+async function play(c: Competitor, ctx: PlayCtx, hooks: RoundHooks): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
+  return c.kind === 'local' ? playLocal(c, ctx, hooks) : playRemote(c, ctx);
 }
 
 /** Local persona: buy its data-agents directly, then estimate the amplitude. */
 async function playLocal(
   c: Extract<Competitor, { kind: 'local' }>,
   ctx: PlayCtx,
+  hooks: RoundHooks,
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   // Hire the persona's data-agents IN PARALLEL. (The docs warn against concurrent payOrder from one
   // wallet, but in practice the backend tolerates it and parallel is REQUIRED for acceptable latency:
@@ -216,6 +219,10 @@ async function playLocal(
   // Source one provider per capability: curated seed by default, or live from the evolving store.
   const chosen = await Promise.all(c.persona.capabilities.map((cap) => chooseProvider(cap)));
   const services = chosen.filter((s): s is RosterEntry => !!s);
+  hooks.onSourcing?.({
+    competitor: c.id,
+    services: services.map((s) => ({ capability: s.capability, serviceId: s.serviceId, label: s.label })),
+  });
   const fails: HireFail[] = [];
   const results = await Promise.all(
     services.map(async (service) => {
@@ -333,7 +340,7 @@ export async function runRound(
   const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
   const done = new Map<string, { forecast: Forecast; edges: ArenaEdge[] }>();
   const playP = competitors.map((c) =>
-    play(c, ctx)
+    play(c, ctx, hooks)
       .then((r) => {
         if (!firstAt) {
           firstAt = Date.now();
