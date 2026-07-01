@@ -22,6 +22,8 @@ export interface CompetitorView {
 }
 export interface RoundView {
   id: string;
+  format?: 'blitz' | 'thesis';
+  windowSeconds?: number;
   phase: 'open' | 'betting' | 'racing' | 'settled';
   openPrice: number;
   closePrice?: number;
@@ -39,13 +41,18 @@ export interface RoundView {
 }
 export interface HistoryEdge {
   competitor: string;
+  capability?: string;
   label: string;
+  serviceId?: string;
   ours: boolean;
   payTxHash: string;
   clearTxHash: string;
+  latencyMs?: number;
 }
 export interface HistoryItem {
   id: string;
+  format?: 'blitz' | 'thesis';
+  windowSeconds?: number;
   openPrice: number;
   closePrice: number;
   amplitude: number;
@@ -84,10 +91,12 @@ export interface ArenaState {
   notice?: { level: 'warn'; text: string };
   dataMarket?: {
     discovered: number;
+    matched?: number;
     maxPriceUSDC: number;
     censusAt: number;
     top: { name: string; orders7d: number; priceUSDC: number }[];
-    wired: { label: string; serviceId: string; ours: boolean }[];
+    wired: { competitor?: string; capability?: string; label: string; serviceId: string; ours: boolean }[];
+    routing?: { capability: string; candidates: number; top: string[]; selected?: string }[];
     providerStats?: { label: string; serviceId: string; hires: number; avgMs: number | null; paidUSDC: number }[];
     events?: { ts: number; kind: 'joined' | 'adopted'; text: string }[];
   };

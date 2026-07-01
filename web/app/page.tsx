@@ -462,6 +462,7 @@ function RaceControl({
   const r = state?.round;
   const active = state?.status === "running" && r && r.phase !== "settled";
   const nextAt = state?.nextRoundAtMs;
+  const [format, setFormat] = useState<"blitz" | "thesis">("blitz");
   const [busy, setBusy] = useState(false);
   const [startMsg, setStartMsg] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -474,20 +475,35 @@ function RaceControl({
 
   const startNow = async () => {
     setBusy(true);
-    setStartMsg("waking the arena & starting…");
+    setStartMsg(
+      format === "thesis"
+        ? "waking the arena & starting 15m thesis…"
+        : "waking the arena & starting…",
+    );
     try {
-      const res = await fetch(`${RUNNER_URL}/api/round`, { method: "POST" });
+      const res = await fetch(`${RUNNER_URL}/api/round`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format }),
+      });
       const j = (await res.json().catch(() => ({}))) as {
         started?: boolean;
         nextAtMs?: number;
         reason?: string;
         error?: string;
+        format?: "blitz" | "thesis";
+        windowSeconds?: number;
       };
-      if (j.started) setStartMsg("✓ race starting. Agents hiring data…");
+      if (j.started)
+        setStartMsg(
+          j.format === "thesis"
+            ? "✓ 15m thesis starting. Agents hiring richer data…"
+            : "✓ race starting. Agents hiring data…",
+        );
       else if (j.reason) setStartMsg(j.reason);
       else if (j.nextAtMs)
         setStartMsg(
-          `next race in ${Math.max(0, Math.round((j.nextAtMs - Date.now()) / 1000))}s`,
+          `next ${Math.max(0, Math.round((j.nextAtMs - Date.now()) / 1000))}s`,
         );
       else setStartMsg(j.error || "a race is already running…");
     } catch {
@@ -519,7 +535,7 @@ function RaceControl({
     now - settledRef.current.at < 7000
   );
 
-  let kicker = "NEXT RACE IN";
+  let kicker = "NEXT";
   let big = "";
   let accent = true; // lime number vs neutral
   let showStart = true; // judge can always trigger a real round
@@ -556,7 +572,7 @@ function RaceControl({
       ready < total;
     if (r.phase === "betting") {
       // The race is live → odds (dropping) is the hero; keep the suspense (no settle countdown).
-      kicker = "RACE LIVE · BET NOW";
+      kicker = r.format === "thesis" ? "15M THESIS LIVE" : "RACE LIVE · BET NOW";
       big = `×${mult.toFixed(1)}`;
       note = "";
     } else if (graceOpen) {
@@ -572,7 +588,7 @@ function RaceControl({
     } else {
       // Hiring: elapsed timer (hero) + odds + a LIVE per-agent status (✓ in / ⏳ still hiring on-chain)
       // so the wait isn't a dead timer — each agent flips as its real data lands.
-      kicker = "AGENTS HIRING DATA";
+      kicker = r.format === "thesis" ? "AGENTS BUILDING THESIS" : "AGENTS HIRING DATA";
       big = clock(now - openMs);
       secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
       note = `${r.competitors.filter((c) => c.estimate != null).length}/${r.competitors.length} agents in · buying data on-chain`;
@@ -585,7 +601,7 @@ function RaceControl({
       : null;
     const exhausted = budLeft === 0;
     if (nextAt && delta > 0) {
-      kicker = "NEXT RACE IN";
+      kicker = "NEXT";
       big = clock(delta);
     } else {
       kicker = "ARENA READY";
@@ -655,13 +671,39 @@ function RaceControl({
         ) : null}
       </div>
       {showStart ? (
-        <button
-          onClick={startNow}
-          disabled={busy}
-          className="w-full shrink-0 rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-3.5"
-        >
-          {busy ? "starting…" : "▶ start a race"}
-        </button>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:items-end">
+          <div className="grid w-full grid-cols-2 gap-1 rounded-md border border-line bg-panel2/50 p-1 sm:w-[190px]">
+            {([
+              ["blitz", "60s"],
+              ["thesis", "15m"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setFormat(id)}
+                className={cn(
+                  "rounded px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider transition",
+                  format === id
+                    ? "bg-volt text-[#0a0a0b]"
+                    : "text-dim hover:text-ink",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={startNow}
+            disabled={busy}
+            className="w-full rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-3.5"
+          >
+            {busy
+              ? "starting…"
+              : format === "thesis"
+                ? "▶ start 15m"
+                : "▶ start 60s"}
+          </button>
+        </div>
       ) : null}
     </div>
   );
@@ -854,8 +896,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             {resolvedPicks > 0 ? (
               <>
                 <span className="hidden sm:inline"> · </span>
-                <b className="text-volt tnum">{publicAccuracy}%</b>{" "}
-                right
+                <b className="text-volt tnum">{publicAccuracy}%</b> right
               </>
             ) : pendingPicks > 0 ? (
               <>
@@ -1421,7 +1462,10 @@ function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
   const verifiedHistory = history.filter((h) => (h.edges?.length ?? 0) > 0);
   // The persistent record: each visible round has real CAP orders (pay + settle tx).
-  const totalTx = verifiedHistory.reduce((s, h) => s + (h.edges?.length ?? 0) * 2, 0);
+  const totalTx = verifiedHistory.reduce(
+    (s, h) => s + (h.edges?.length ?? 0) * 2,
+    0,
+  );
   const cap = (id: string) => id.charAt(0).toUpperCase() + id.slice(1);
   return (
     <section
@@ -1437,7 +1481,8 @@ function Ledger({ state }: { state: ArenaState | null }) {
         }
       />
       <p className="mt-2 text-[12px] leading-relaxed text-dim">
-        Only rounds with real CROO orders are shown. Forecast-only fallback rounds stay out of this journal.
+        Only rounds with real CROO orders are shown. Forecast-only fallback
+        rounds stay out of this journal.
       </p>
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {verifiedHistory.length === 0 ? (
@@ -1706,6 +1751,8 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
 function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
   const [open, setOpen] = useState(false); // collapse store activity + provider table by default
+  const capName = (s?: string) => (s ? s.replace(/-/g, " ") : "data");
+  const visibleWired = (dm?.wired ?? []).filter((w) => !w.ours);
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
@@ -1727,14 +1774,19 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             <span className="font-mono text-[11px] uppercase leading-tight tracking-wider text-dim">
               data agents in the CROO store
               <br />
-              our racers source live from here
-              {dm.wired?.length ? (
+              {dm.matched != null ? (
+                <>
+                  <b className="text-ink">{dm.matched}</b> match current race
+                  routes
+                </>
+              ) : (
+                "our racers source live from here"
+              )}
+              {visibleWired.length ? (
                 <>
                   {" "}
                   ·{" "}
-                  <b className="text-ink">
-                    {dm.wired.filter((w) => !w.ours).length}
-                  </b>{" "}
+                  <b className="text-ink">{visibleWired.length}</b>{" "}
                   wired last race
                 </>
               ) : null}
@@ -1747,12 +1799,35 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             needed.
           </p>
 
+          {visibleWired.length ? (
+            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
+              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                last race route
+              </div>
+              <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
+                {visibleWired.map((w, i) => (
+                  <div
+                    key={`${w.serviceId || w.label}-${i}`}
+                    className="flex items-center gap-2 rounded-md border border-line/60 px-2.5 py-2 text-[12.5px]"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-ink">
+                      {w.label}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim">
+                      {capName(w.capability)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {!open ? (
             <button
               onClick={() => setOpen(true)}
               className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
             >
-              ▾ show store activity
+              ▾ show routing detail
             </button>
           ) : (
             <button
@@ -1764,6 +1839,40 @@ function DataMarket({ state }: { state: ArenaState | null }) {
           )}
           {open && (
             <>
+              {dm.routing?.length ? (
+                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                    route matching
+                  </div>
+                  <div className="mt-2.5 space-y-1.5">
+                    {dm.routing.map((r) => (
+                      <div
+                        key={r.capability}
+                        className="grid gap-1 rounded-md border border-line/50 px-2.5 py-2 text-[12.5px] sm:grid-cols-[120px_56px_1fr]"
+                      >
+                        <span className="font-mono uppercase tracking-wider text-volt">
+                          {capName(r.capability)}
+                        </span>
+                        <span className="font-mono tnum text-dim">
+                          {r.candidates} cand.
+                        </span>
+                        <span className="min-w-0 truncate text-ink/80">
+                          {r.selected ? (
+                            <>
+                              chose <b className="text-ink">{r.selected}</b>
+                            </>
+                          ) : r.top.length ? (
+                            <>top: {r.top.join(" · ")}</>
+                          ) : (
+                            "no live match; fallback seed"
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
               {dm.events && dm.events.length ? (
                 <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
@@ -1826,7 +1935,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                     </span>
                   </div>
                   <div className="space-y-1.5">
-                    {dm.providerStats.slice(0, 6).map((p, i) => (
+                    {dm.providerStats.slice(0, 8).map((p, i) => (
                       <div
                         key={i}
                         className="flex items-center gap-2 text-[13.5px]"
@@ -2135,7 +2244,8 @@ function Join() {
             </div>
             <div className="mt-3 space-y-3 pl-9">
               <p className="text-[13.5px] leading-relaxed text-dim">
-                Give your agent the race engine. When Axion hires it, return this tiny JSON.
+                Give your agent the race engine. When Axion hires it, return
+                this tiny JSON.
               </p>
               <div className="rounded-md border border-line/70 bg-panel2/60 px-3 py-2.5">
                 <div className="font-mono text-[11px] uppercase tracking-wider text-dim">

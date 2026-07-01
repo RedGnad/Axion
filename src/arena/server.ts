@@ -5,7 +5,7 @@ import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, typ
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
-import { discoverProviders } from './discovery.js';
+import { candidatesForCapability, discoverProviders } from './discovery.js';
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
 
@@ -43,6 +43,8 @@ interface CompetitorView {
 }
 interface RoundView {
   id: string;
+  format?: 'blitz' | 'thesis';
+  windowSeconds?: number;
   // open = hiring · betting = COMMIT window (bets open, move not measured) · racing = reveal (bets CLOSED) · settled
   phase: 'open' | 'betting' | 'racing' | 'settled';
   openPrice: number;
@@ -69,6 +71,7 @@ interface RoundView {
 }
 interface HistoryEdge {
   competitor: string;
+  capability?: string;
   label: string;
   serviceId?: string;
   ours: boolean;
@@ -78,6 +81,8 @@ interface HistoryEdge {
 }
 interface HistoryItem {
   id: string;
+  format?: 'blitz' | 'thesis';
+  windowSeconds?: number;
   openPrice: number;
   closePrice: number;
   amplitude: number;
@@ -93,13 +98,20 @@ interface FeedItem {
   text: string;
   txUrl?: string;
 }
+interface WiredProvider {
+  competitor?: string;
+  capability?: string;
+  label: string;
+  serviceId: string;
+  ours: boolean;
+}
 interface ArenaState {
   status: 'idle' | 'running' | 'view-only';
   asset: string;
   /** Live ETH/USD from Pyth, streamed every ~2s so the screen is never static. */
   livePrice?: number;
   priceSeries: number[];
-  /** When the next scheduled round is due (the heartbeat) → the UI shows a "next race in MM:SS". */
+  /** When the next scheduled round is due (the heartbeat) → the UI shows a "next MM:SS". */
   nextRoundAtMs?: number;
   round?: RoundView;
   history: HistoryItem[];
@@ -120,10 +132,12 @@ interface ArenaState {
   /** Live CROO store data-market (discovery): pool size grows with the store; wired = hired last round. */
   dataMarket?: {
     discovered: number;
+    matched: number;
     maxPriceUSDC: number;
     censusAt: number;
     top: { name: string; orders7d: number; priceUSDC: number }[];
-    wired: { label: string; serviceId: string; ours: boolean }[];
+    wired: WiredProvider[];
+    routing?: { capability: string; candidates: number; top: string[]; selected?: string }[];
     /** Structured per-provider stats from real hires: count, avg latency (ms), USDC paid. */
     providerStats?: { label: string; serviceId: string; hires: number; avgMs: number | null; paidUSDC: number }[];
     /** "The store evolves" timeline — REAL deltas only: a provider newly appearing in the public CROO
@@ -141,6 +155,7 @@ process.on('unhandledRejection', (e) => console.error('[arena-server] unhandledR
 const PORT = Number(process.env.PORT ?? '8787');
 const HISTORY_FILE = process.env.ARENA_HISTORY_FILE ?? 'arena-history.json';
 const WINDOW = Number(process.env.ARENA_WINDOW_SECONDS ?? '60');
+const THESIS_WINDOW = Number(process.env.ARENA_THESIS_WINDOW_SECONDS ?? '900');
 let HIRING_ETA_MS = 90_000; // estimated hiring time; AUTO-CALIBRATED from each round's real open→betting duration
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
@@ -206,10 +221,15 @@ function detectAdoptions(edges: { competitor: string; label: string; ours: boole
   }
 }
 
-/** Recent real volatility: average |move| over WINDOW seconds across the live Pyth series (2s apart). */
-function computeRecentVol(): number {
+type RaceFormat = 'blitz' | 'thesis';
+function windowForFormat(format: RaceFormat): number {
+  return format === 'thesis' ? THESIS_WINDOW : WINDOW;
+}
+
+/** Recent real volatility: average |move| over a round window across the live Pyth series (2s apart). */
+function computeRecentVol(windowSeconds = WINDOW): number {
   const s = state.priceSeries;
-  const lag = Math.max(1, Math.round(WINDOW / 2)); // points ~ WINDOW seconds apart
+  const lag = Math.max(1, Math.round(windowSeconds / 2)); // points ~ windowSeconds apart
   if (s.length <= lag) return 0;
   let sum = 0, n = 0;
   for (let i = lag; i < s.length; i++) { sum += Math.abs(s[i] - s[i - lag]); n++; }
@@ -407,9 +427,25 @@ function refreshUsdcBet(): void {
 
 /** Refresh the live store data-market panel (free, read-only). `wired` = the providers actually
  *  hired in the most recent round (from its edges) so the demo shows real A2A, not just the catalog. */
-async function refreshDataMarket(wired?: { label: string; serviceId: string; ours: boolean }[]): Promise<void> {
+async function refreshDataMarket(wired?: WiredProvider[]): Promise<void> {
   try {
     const pool = await discoverProviders();
+    const capabilities = [...new Set(PERSONALITIES.flatMap((p) => p.capabilities))];
+    const selectedByCapability = new Map<string, string>();
+    for (const w of wired ?? state.dataMarket?.wired ?? []) {
+      if (w.capability && w.label) selectedByCapability.set(w.capability, w.label);
+    }
+    const matched = new Set<string>();
+    const routing = await Promise.all(capabilities.map(async (capability) => {
+      const cands = await candidatesForCapability(capability);
+      for (const p of cands) matched.add(p.serviceId);
+      return {
+        capability,
+        candidates: cands.length,
+        top: cands.slice(0, 3).map((p) => p.name),
+        selected: selectedByCapability.get(capability),
+      };
+    }));
     // "Joined the store" deltas — REAL: a serviceId now in the public CROO catalog that wasn't before.
     // First census ever seeds the baseline SILENTLY (no 32-event spam); after that, only true newcomers
     // emit. The known set is persisted so a restart never re-floods the timeline.
@@ -431,10 +467,12 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
     for (const h of state.history) {
       for (const e of h.edges ?? []) {
         if (e.ours) continue;
-        const key = e.label; // dedupe by label (older seed edges have no serviceId → would double-count)
+        const key = e.serviceId || e.label; // dedupe by serviceId; old rows without ids fall back to label
         const row = stats.get(key) ?? { label: e.label, serviceId: e.serviceId ?? '', hires: 0, latSum: 0, latN: 0 };
         row.hires += 1;
         if (!row.serviceId && e.serviceId) row.serviceId = e.serviceId;
+        // Keep the shorter current catalog label when old history had a longer hand label.
+        if (e.label.length < row.label.length) row.label = e.label;
         if (typeof e.latencyMs === 'number') { row.latSum += e.latencyMs; row.latN += 1; }
         stats.set(key, row);
       }
@@ -446,10 +484,12 @@ async function refreshDataMarket(wired?: { label: string; serviceId: string; our
     const eventDeny = /subscription|monthly|plan|days|swap|execute|execution|executor|bridge|deploy|mint|airdrop|faucet|pay|payout|split|resolver|ens|logo|design|buyer.?ping|\becho\b|\btest\b|arena|axion|racer|race|forecast/i;
     state.dataMarket = {
       discovered: pool.length,
+      matched: matched.size,
       maxPriceUSDC: Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.10,
       censusAt: Date.now(),
       top: pool.slice(0, 6).map((p) => ({ name: p.name, orders7d: p.orders7d, priceUSDC: p.priceUSDC })),
       wired: wired ?? state.dataMarket?.wired ?? [],
+      routing,
       providerStats,
       events: storeEvents.filter((e) => !eventDeny.test(e.text)).slice(0, 14),
     };
@@ -584,7 +624,11 @@ function refreshBudget(): void {
 }
 
 /** Trigger a round respecting the cost ceiling (cooldown) + running guard + bounded daily subsidy. */
-function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, reason: string): { started: boolean; nextAtMs?: number; reason?: string } {
+function tryRunRound(
+  cfg: { baseURL: string; wsURL: string; rpcURL?: string },
+  reason: string,
+  format: RaceFormat = 'blitz',
+): { started: boolean; nextAtMs?: number; reason?: string; format?: RaceFormat; windowSeconds?: number } {
   if (running) return { started: false, reason: 'a race is already running', nextAtMs: state.nextRoundAtMs };
   const since = Date.now() - lastRoundStartMs;
   if (lastRoundStartMs && since < MIN_ROUND_MS) return { started: false, reason: 'cooldown', nextAtMs: lastRoundStartMs + MIN_ROUND_MS };
@@ -593,31 +637,38 @@ function tryRunRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }, r
   racesToday++;
   refreshBudget();
   saveHistory(); // persist the subsidy counter immediately so the cap survives a restart mid-round
-  console.log(`[arena-server] round trigger: ${reason} (${racesToday}/${DAILY_RACES} today)`);
-  void runOneRound(cfg);
-  return { started: true };
+  const windowSeconds = windowForFormat(format);
+  console.log(`[arena-server] round trigger: ${reason}/${format} ${windowSeconds}s (${racesToday}/${DAILY_RACES} today)`);
+  void runOneRound(cfg, { format, windowSeconds });
+  return { started: true, format, windowSeconds };
 }
 
-async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: string }): Promise<void> {
+async function runOneRound(
+  cfg: { baseURL: string; wsURL: string; rpcURL?: string },
+  opts: { format: RaceFormat; windowSeconds: number } = { format: 'blitz', windowSeconds: WINDOW },
+): Promise<void> {
   if (running || competitors.length === 0) return;
+  const { format, windowSeconds } = opts;
   running = true;
   lastRoundStartMs = Date.now();
-  // Schedule the next AUTOMATIC race and PERSIST it, so the "next race in" countdown is reliable and
+  // Schedule the next AUTOMATIC race and PERSIST it, so the "next" countdown is reliable and
   // SURVIVES restarts (Render redeploy/spin-down) instead of resetting to the full period each boot.
   if (AUTO_MS) { state.nextRoundAtMs = lastRoundStartMs + AUTO_MS; saveHistory(); }
   state.status = 'running';
   try {
-    await runRound(competitors, cfg, WINDOW, {
+    await runRound(competitors, cfg, windowSeconds, {
       onOpen: ({ id, openPrice, dqAtMs }) => {
         roundOpenMs = Date.now();
         state.round = {
           id,
+          format,
+          windowSeconds,
           phase: 'open',
           openPrice,
           // Calibrated expected race start (descending countdown target), and the DQ cutoff = that + grace
           // (known upfront, computed in loop) → the red grace bar fills over [etaRaceStartMs, dqAtMs].
           etaRaceStartMs: roundOpenMs + HIRING_ETA_MS,
-          etaSettleMs: roundOpenMs + HIRING_ETA_MS + WINDOW * 1000,
+          etaSettleMs: roundOpenMs + HIRING_ETA_MS + windowSeconds * 1000,
           dqAtMs,
           competitors: competitors.map((c) => ({
             id: c.id,
@@ -635,7 +686,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
           nextPredictPending = [];
         }
         refreshUsdcBet(); // betting opens NOW (early, highest odds) → fresh pool from the hiring phase
-        pushFeed(`Round open. ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
+        pushFeed(`${format === 'thesis' ? '15m thesis' : '60s blitz'} round open. ETH/USD $${openPrice.toFixed(2)}; agents hiring · early bets open at top odds`);
         broadcast();
       },
       onSourcing: ({ competitor, services }) => {
@@ -744,6 +795,8 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         }
         const item: HistoryItem = {
           id: round.id,
+          format,
+          windowSeconds,
           openPrice: round.openPrice,
           closePrice: round.closePrice ?? round.openPrice,
           amplitude: o.actual,
@@ -758,7 +811,7 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
             error: o.errors[f.competitor],
             isWinner: winners.includes(f.competitor),
           })),
-          edges: edges.map((e) => ({ competitor: e.competitor, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash, latencyMs: e.latencyMs })),
+          edges: edges.map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash, latencyMs: e.latencyMs })),
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
@@ -782,10 +835,10 @@ async function runOneRound(cfg: { baseURL: string; wsURL: string; rpcURL?: strin
         detectAdoptions(item.edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(item.settledAt) || Date.now(), true);
         saveHistory();
         // Reflect the providers actually wired this round into the live data-market panel.
-        void refreshDataMarket(item.edges.map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));
+        void refreshDataMarket(item.edges.map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));
         broadcast();
       },
-    }, { recentVol: computeRecentVol() });
+    }, { recentVol: computeRecentVol(windowSeconds) });
   } catch (err) {
     pushFeed(`Round error: ${(err as Error).message}`);
     broadcast();
@@ -804,6 +857,8 @@ function showLastSettledRound(): void {
   if (!last) { state.round = undefined; return; }
   state.round = {
     id: last.id,
+    format: last.format,
+    windowSeconds: last.windowSeconds,
     phase: 'settled',
     openPrice: last.openPrice,
     closePrice: last.closePrice,
@@ -819,7 +874,7 @@ async function main(): Promise<void> {
   console.log(`[arena-server] durable store: ${storeEnabled() ? 'Upstash (on)' : 'off (seed/file fallback)'}`);
 
   // Live store data-market: census at boot (seed `wired` from the last replayed round) + every 10min.
-  const lastEdges = (state.history[0]?.edges ?? []).map((e) => ({ label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
+  const lastEdges = (state.history[0]?.edges ?? []).map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
   void refreshDataMarket(lastEdges.length ? lastEdges : undefined);
   setInterval(() => void refreshDataMarket(), 10 * 60_000);
   refreshUsdcBet();
@@ -840,7 +895,7 @@ async function main(): Promise<void> {
         const p = await fetchPythPrice();
         state.livePrice = p.price;
         state.priceSeries.push(Number(p.price.toFixed(2)));
-        if (state.priceSeries.length > 90) state.priceSeries.shift();
+        if (state.priceSeries.length > 600) state.priceSeries.shift(); // enough context for 15m thesis races
         broadcast();
       } catch {
         /* transient Hermes hiccup */
@@ -947,9 +1002,18 @@ async function main(): Promise<void> {
     }
     if (req.method === 'POST' && url === '/api/round') {
       // Demand trigger (a user predicts/bets) — cooldown-gated so it can't spam-burn USDC.
-      const t = tryRunRound(cfg, 'demand');
-      res.writeHead(t.started ? 202 : 409, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(t));
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 1000) req.destroy(); });
+      req.on('end', () => {
+        let format: RaceFormat = 'blitz';
+        try {
+          const j = JSON.parse(body || '{}') as { format?: string };
+          if (j.format === 'thesis') format = 'thesis';
+        } catch { /* keep default */ }
+        const t = tryRunRound(cfg, 'demand', format);
+        res.writeHead(t.started ? 202 : 409, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(t));
+      });
       return;
     }
     if (req.method === 'POST' && url === '/api/competitor') {
