@@ -462,7 +462,6 @@ function RaceControl({
   const r = state?.round;
   const active = state?.status === "running" && r && r.phase !== "settled";
   const nextAt = state?.nextRoundAtMs;
-  const [format, setFormat] = useState<"blitz" | "thesis">("blitz");
   const [busy, setBusy] = useState(false);
   const [startMsg, setStartMsg] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -475,31 +474,16 @@ function RaceControl({
 
   const startNow = async () => {
     setBusy(true);
-    setStartMsg(
-      format === "thesis"
-        ? "waking the arena & starting 15m thesis…"
-        : "waking the arena & starting…",
-    );
+    setStartMsg("waking the arena & starting…");
     try {
-      const res = await fetch(`${RUNNER_URL}/api/round`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format }),
-      });
+      const res = await fetch(`${RUNNER_URL}/api/round`, { method: "POST" });
       const j = (await res.json().catch(() => ({}))) as {
         started?: boolean;
         nextAtMs?: number;
         reason?: string;
         error?: string;
-        format?: "blitz" | "thesis";
-        windowSeconds?: number;
       };
-      if (j.started)
-        setStartMsg(
-          j.format === "thesis"
-            ? "✓ 15m thesis starting. Agents hiring richer data…"
-            : "✓ race starting. Agents hiring data…",
-        );
+      if (j.started) setStartMsg("✓ race starting. Agents hiring data…");
       else if (j.reason) setStartMsg(j.reason);
       else if (j.nextAtMs)
         setStartMsg(
@@ -562,6 +546,7 @@ function RaceControl({
   } else if (active && r) {
     showStart = false;
     const mult = state?.usdcBet?.multiplier ?? (r.phase === "open" ? 4 : 2);
+    const realBetOpen = state?.usdcBet?.open !== false;
     const ready = r.competitors.filter((c) => c.estimate != null).length;
     const total = r.competitors.length || 1;
     const openMs = Number((r.id || "").split("-")[1]) || now;
@@ -572,7 +557,12 @@ function RaceControl({
       ready < total;
     if (r.phase === "betting") {
       // The race is live → odds (dropping) is the hero; keep the suspense (no settle countdown).
-      kicker = r.format === "thesis" ? "15M THESIS LIVE" : "RACE LIVE · BET NOW";
+      kicker =
+        r.format === "thesis"
+          ? "15M THESIS LIVE"
+          : realBetOpen
+            ? "RACE LIVE · BET NOW"
+            : "RACE LIVE";
       big = `×${mult.toFixed(1)}`;
       note = "";
     } else if (graceOpen) {
@@ -671,39 +661,13 @@ function RaceControl({
         ) : null}
       </div>
       {showStart ? (
-        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:items-end">
-          <div className="grid w-full grid-cols-2 gap-1 rounded-md border border-line bg-panel2/50 p-1 sm:w-[190px]">
-            {([
-              ["blitz", "60s"],
-              ["thesis", "15m"],
-            ] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setFormat(id)}
-                className={cn(
-                  "rounded px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider transition",
-                  format === id
-                    ? "bg-volt text-[#0a0a0b]"
-                    : "text-dim hover:text-ink",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            onClick={startNow}
-            disabled={busy}
-            className="w-full rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-3.5"
-          >
-            {busy
-              ? "starting…"
-              : format === "thesis"
-                ? "▶ start 15m"
-                : "▶ start 60s"}
-          </button>
-        </div>
+        <button
+          onClick={startNow}
+          disabled={busy}
+          className="w-full shrink-0 rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] shadow-[0_0_24px_rgba(182,255,58,.25)] transition hover:brightness-110 disabled:opacity-50 sm:w-auto sm:px-7 sm:py-3.5"
+        >
+          {busy ? "starting…" : "▶ start a race"}
+        </button>
       ) : null}
     </div>
   );
@@ -1166,7 +1130,8 @@ function UsdcBet({
 }) {
   const ub = state?.usdcBet;
   const r = state?.round;
-  const live = r?.phase === "open" || r?.phase === "betting"; // bet through hiring + the race (odds decay over time)
+  const raceBettable = r?.phase === "open" || r?.phase === "betting";
+  const live = !!ub?.open && raceBettable; // real-money bets close early; free picks can stay simple
   const { address, isConnected, chainId } = useAccount();
   const { connectors, connect, isPending: connecting } = useConnect();
   const { switchChainAsync } = useSwitchChain();
@@ -1238,8 +1203,10 @@ function UsdcBet({
               <>
                 odds{" "}
                 <b style={{ color: "var(--color-volt)" }}>×{mult.toFixed(1)}</b>{" "}
-                and dropping · bet early, win a bigger share
+                and dropping fast · early bets get the edge
               </>
+            ) : raceBettable && ub.open === false ? (
+              "real bets closed for this race"
             ) : (
               "back an agent; if it wins you split its pool"
             )}
@@ -1332,7 +1299,9 @@ function UsdcBet({
               {busy
                 ? "placing…"
                 : !live
-                  ? "opens when a race is live"
+                  ? raceBettable && ub.open === false
+                    ? "real bets closed"
+                    : "opens when a race is live"
                   : pickedAgent
                     ? `bet ${Math.min(Math.max(0.01, amount), max)} USDC on ${pickedLabel}`
                     : "tap an agent above to back it"}
@@ -1934,8 +1903,8 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                       paid
                     </span>
                   </div>
-                  <div className="space-y-1.5">
-                    {dm.providerStats.slice(0, 8).map((p, i) => (
+                  <div className="max-h-[260px] space-y-1.5 overflow-auto pr-1">
+                    {dm.providerStats.map((p, i) => (
                       <div
                         key={i}
                         className="flex items-center gap-2 text-[13.5px]"

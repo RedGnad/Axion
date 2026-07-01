@@ -48,6 +48,8 @@ services:
       #   HOUSE_EOA_ADDRESS / HOUSE_EOA_PRIVATE_KEY — dedicated throwaway EOA (small Base ETH) that
       #                           receives bettor USDC and pays winners + the winning-agent purse.
       #   HOUSE_MAX_BET_USDC    — per-bet cap (default 1).
+      #   BET_DECAY_FRACTION    — reveal-window fraction before USDC bets close and odds hit x1
+      #                           (default 0.30; free picks can stay open after this).
       #   BOOKMAKER_RAKE_BPS    — house rake (default 300 = 3%).
       #   WINNER_RAKE_BPS       — winning-agent purse (default 200 = 2%); only withheld when payable.
       #   ARENA_PAYOUT_SLICER / ARENA_PAYOUT_TANKER / ARENA_PAYOUT_WIZORD — payout address per persona

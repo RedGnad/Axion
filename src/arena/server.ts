@@ -123,7 +123,7 @@ interface ArenaState {
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
-  usdcBet?: { enabled: boolean; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
+  usdcBet?: { enabled: boolean; open: boolean; betCutoffAtMs?: number; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   /** Bounded daily cold-start subsidy: free races we'll fund today (resets UTC midnight). */
   budget?: { used: number; cap: number; resetsAt: number };
   /** Health banner: surfaced (never silent) when data hires fail. Kept user-facing and action-oriented:
@@ -160,6 +160,9 @@ let HIRING_ETA_MS = 90_000; // estimated hiring time; AUTO-CALIBRATED from each 
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
+// Real-money bets keep their edge only early in reveal; after this fraction the display multiplier is
+// x1 and the USDC endpoint closes. Free picks stay open as a low-stakes spectator action.
+const BET_DECAY_FRACTION = Math.min(1, Math.max(0.1, Number(process.env.BET_DECAY_FRACTION ?? '0.30')));
 // Cold-start subsidy is BOUNDED: at most N free races/day from our treasury (each ~0.6 USDC of data
 // hires). Beyond it, "start" is paused till tomorrow (UTC) — a bot/spam can never drain us.
 const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '12'));
@@ -402,13 +405,29 @@ function displayMultNow(): number {
   if (r.phase === 'open') return 4; // blind (no line, no move) = max reward
   if (r.phase === 'betting' && r.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs) {
     const frac = Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs)));
-    return Math.round((2 - 1 * frac) * 100) / 100; // 2.0 at race start → 1.0 at settle
+    const pricedFrac = Math.min(1, frac / BET_DECAY_FRACTION);
+    return Math.round((2 - pricedFrac) * 100) / 100; // 2.0 at race start → 1.0 early, then closed
   }
   return 1;
 }
 /** Internal pari-mutuel share weight = displayMult / 4 (so ×4→1.0 … ×1→0.25). */
 function betWeightNow(): number {
   return displayMultNow() / 4;
+}
+
+function betCutoffAtMs(): number | undefined {
+  const r = state.round;
+  if (!r?.raceStartMs || !r.settleAtMs || r.settleAtMs <= r.raceStartMs) return undefined;
+  return r.raceStartMs + Math.round((r.settleAtMs - r.raceStartMs) * BET_DECAY_FRACTION);
+}
+
+function realBetOpenNow(): boolean {
+  const r = state.round;
+  if (!r) return false;
+  if (r.phase === 'open') return true;
+  if (r.phase !== 'betting') return false;
+  const cutoff = betCutoffAtMs();
+  return cutoff == null ? true : Date.now() < cutoff;
 }
 
 /** Reflect the human-USDC-bet config + current round pool into state (for the UI). */
@@ -418,6 +437,8 @@ function refreshUsdcBet(): void {
   const byAgent = Object.entries(p.byAgent).map(([id, amount]) => { total += amount; return { id, amount: (Number(amount) / 1e6).toFixed(2) }; });
   state.usdcBet = {
     enabled: houseEnabled(),
+    open: realBetOpenNow(),
+    betCutoffAtMs: betCutoffAtMs(),
     houseAddress: houseAddress(),
     maxBetUSDC: MAX_BET_USDC,
     multiplier: displayMultNow(),
@@ -479,8 +500,7 @@ async function refreshDataMarket(wired?: WiredProvider[]): Promise<void> {
     }
     const providerStats = [...stats.values()]
       .map((r) => ({ label: r.label, serviceId: r.serviceId, hires: r.hires, avgMs: r.latN ? Math.round(r.latSum / r.latN) : null, paidUSDC: Math.round(r.hires * PRICE * 100) / 100 }))
-      .sort((a, b) => b.hires - a.hires)
-      .slice(0, 8);
+      .sort((a, b) => b.hires - a.hires);
     const eventDeny = /subscription|monthly|plan|days|swap|execute|execution|executor|bridge|deploy|mint|airdrop|faucet|pay|payout|split|resolver|ens|logo|design|buyer.?ping|\becho\b|\btest\b|arena|axion|racer|race|forecast/i;
     state.dataMarket = {
       discovered: pool.length,
@@ -751,7 +771,7 @@ async function runOneRound(
           const hiringMs = Date.now() - roundOpenMs;
           HIRING_ETA_MS = Math.max(45_000, Math.min(150_000, Math.round(HIRING_ETA_MS * 0.5 + hiringMs * 0.5)));
         }
-        // SINGLE window: the race is on AND betting is OPEN throughout (odds decay over time → no cheat).
+        // SINGLE reveal window: free picks stay simple; real USDC bets close early as odds decay.
         state.round.phase = 'betting';
         state.round.line = line;
         state.round.settleAtMs = betCloseAtMs; // race + betting both end here
@@ -762,13 +782,13 @@ async function runOneRound(
         for (const c of state.round.competitors) if (dqIds.includes(c.id)) c.dq = true;
         refreshUsdcBet(); // new round → fresh (empty) USDC pool
         const dqNote = dqIds.length ? ` · ${dqIds.length} agent(s) cut (too slow)` : '';
-        pushFeed(`They're off! Betting open at line $${line.toFixed(2)}. Odds drop as the move reveals${dqNote}`);
+        pushFeed(`They're off! Line $${line.toFixed(2)}. Real bets close early as the move reveals${dqNote}`);
         broadcast();
       },
       onTick: ({ liveAmplitude }) => {
         if (!state.round) return;
         state.round.liveAmplitude = liveAmplitude;
-        refreshUsdcBet(); // recompute the decaying odds every tick (×2 at race start → ×1 at settle)
+        refreshUsdcBet(); // recompute decaying odds + early real-bet cutoff every tick
         broadcast();
       },
       onSettled: ({ round, line, edges }) => {
@@ -1112,6 +1132,7 @@ async function main(): Promise<void> {
             const amt = Number(amountUSDC);
             if (!(amt > 0) || amt > MAX_BET_USDC) return reply(400, { error: `amount must be 0 < x ≤ ${MAX_BET_USDC} USDC` });
             if (!roundId || roundId !== state.round?.id || (state.round?.phase !== 'open' && state.round?.phase !== 'betting')) return reply(409, { error: 'no live betting round' });
+            if (!realBetOpenNow()) return reply(409, { error: 'real bets are closed for this race' });
             if (!agentId || !state.round.competitors.some((c) => c.id === agentId)) return reply(400, { error: 'agentId must be a racer in this round' });
             const amount = BigInt(Math.round(amt * 1e6));
             const ok = await verifyBetTx(txHash, eoa, amount).catch(() => false);
