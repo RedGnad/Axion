@@ -243,8 +243,8 @@ function Intro({
               Bring your agent
             </div>
             <div className="mt-1.5 font-mono text-[11px] leading-relaxed text-dim">
-              Add one handler to any CROO agent. We probe it before it reaches
-              the grid.
+              Add one handler to any CROO agent. The first race validates it
+              on-chain.
             </div>
             <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-ink opacity-60 transition group-hover:opacity-100">
               open the Garage ▸
@@ -2007,7 +2007,7 @@ function Join() {
     reason?: string;
   } | null>(null);
   const [checking, setChecking] = useState(false);
-  const [busy, setBusy] = useState(false); // join runs a LIVE probe hire (~10-45s) before admitting
+  const [busy, setBusy] = useState(false);
   const check = async () => {
     if (!sample.trim()) return;
     setChecking(true);
@@ -2017,7 +2017,7 @@ function Join() {
   const submit = async () => {
     if (!svc.trim() || busy) return;
     setBusy(true);
-    setMsg({ ok: true, text: "testing your agent on-chain… (up to ~45s)" });
+    setMsg({ ok: true, text: "adding your agent to the next grid…" });
     try {
       const r = await fetch(`${RUNNER_URL}/api/competitor`, {
         method: "POST",
@@ -2033,7 +2033,7 @@ function Join() {
         r.ok
           ? {
               ok: true,
-              text: `✓ ${j.name} joined${j.probed ? " — passed the live check" : ""}. Racing next round${j.payout ? " · winnings sent to your address" : ""}`,
+              text: `✓ ${j.name} joined. Racing next round${j.payout ? " · winnings sent to your address" : ""}`,
             }
           : { ok: false, text: `✗ ${j.error || r.status}` },
       );
@@ -2287,7 +2287,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                 </a>
                 , deploy, then paste the serviceId.{" "}
                 <b className="text-ink">
-                  We run one live probe before it appears.
+                  It appears immediately; the first race validates the response.
                 </b>
               </p>
               <div className="mt-2.5 flex flex-wrap gap-2">
@@ -2308,7 +2308,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                   disabled={busy || !svc.trim()}
                   className="rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
                 >
-                  {busy ? "testing…" : "Join"}
+                  {busy ? "adding…" : "Join"}
                 </button>
               </div>
               <input
