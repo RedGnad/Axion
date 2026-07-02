@@ -56,7 +56,7 @@ export default function Page() {
         <>
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-2 overflow-hidden rounded-lg border border-line bg-panel/70"
+            className="reveal mt-2 overflow-hidden rounded-lg border border-line bg-panel/70 sm:min-h-[calc(100svh-9.5rem)]"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
@@ -846,6 +846,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const myLabel = active
     ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId)
     : "";
+  const showPickStatus = active || !!pick?.resolved;
 
   return (
     <div>
@@ -1087,6 +1088,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             : "racers line up when a race starts"}
         </div>
       )}
+      {showPickStatus ? (
       <div className="mt-3 min-h-[1.25rem] text-center font-mono text-[13px] text-dim">
         {pick?.resolved ? (
           <span
@@ -1108,13 +1110,16 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           </span>
         ) : null}
       </div>
-      <UsdcBet
-        state={state}
-        pickedAgent={active ? pick!.agentId : null}
-        pickedLabel={myLabel}
-        committed={!!pick?.committed}
-        onPlaced={() => setPick((p) => (p ? { ...p, committed: true } : p))}
-      />
+      ) : null}
+      {active ? (
+        <UsdcBet
+          state={state}
+          pickedAgent={pick!.agentId}
+          pickedLabel={myLabel}
+          committed={!!pick?.committed}
+          onPlaced={() => setPick((p) => (p ? { ...p, committed: true } : p))}
+        />
+      ) : null}
     </div>
   );
 }
