@@ -39,7 +39,7 @@ services:
       - key: ARENA_ESTIMATE_GRACE_SECONDS
         value: "45"
       - key: BET_DECAY_FRACTION
-        value: "0.45"
+        value: "0.62"
       - key: BET_MIN_MULTIPLIER
         value: "1.25"
       # ── Optional env (set in the Render dashboard, sync:false; each enables a feature) ──
@@ -69,7 +69,7 @@ services:
       #   HOUSE_EOA_ADDRESS / HOUSE_EOA_PRIVATE_KEY — dedicated throwaway EOA (small Base ETH) that
       #                           receives bettor USDC and pays winners + the winning-agent purse.
       #   HOUSE_MAX_BET_USDC    — per-bet cap (default 1).
-      #   BET_DECAY_FRACTION    — reveal-window fraction before USDC bets close (default 0.45).
+      #   BET_DECAY_FRACTION    — reveal-window fraction before USDC bets close (default 0.62).
       #   BET_MIN_MULTIPLIER    — lowest displayed real-bet odds before close (default x1.25).
       #   BOOKMAKER_RAKE_BPS    — house rake (default 300 = 3%).
       #   WINNER_RAKE_BPS       — winning-agent purse (default 200 = 2%); only withheld when payable.
