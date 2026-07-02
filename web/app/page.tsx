@@ -763,7 +763,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     correct?: boolean;
   } | null>(null);
   const [open, setOpen] = useState<string | null>(null); // which agent's "why" is expanded
-  const [showMoney, setShowMoney] = useState(false);
   const [rec, setRec] = useState<{ c: number; t: number }>({ c: 0, t: 0 });
   useEffect(() => {
     try {
@@ -838,25 +837,18 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const realClosed = !!ub?.enabled && raceBettable && ub.open === false;
   const activeCommitted = active && !!pick?.committed;
 
-  useEffect(() => {
-    if (active && realOpen && !activeCommitted) setShowMoney(true);
-  }, [active, realOpen, activeCommitted]);
-
   const choose = (agentId: string) => {
     if (pick?.committed || pick?.resolved) return; // locked once you bet real money / race is over
     if (active && pick!.agentId === agentId) {
       setPick(null);
-      setShowMoney(false);
       void cancelPredict();
       return;
     } // tap again = cancel
     if (live && r) {
-      setShowMoney(realOpen);
       setPick({ round: r.id, agentId });
       void postPredict(agentId);
     } // pick or change
     else if (idlePickable) {
-      setShowMoney(false);
       setPick({ round: "next", agentId, afterRound: r?.id });
       void postPredict(agentId);
     }
@@ -1135,28 +1127,18 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               </span>
             )}
           </div>
-          {active && ub?.enabled ? (
-            <button
-              type="button"
-              disabled={activeCommitted || (!realOpen && !showMoney)}
-              aria-expanded={showMoney}
-              onClick={() => setShowMoney((v) => !v)}
-              className="rounded-md border border-volt/45 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
-            >
-              {activeCommitted
-                ? "USDC in"
-                : showMoney
-                  ? "hide USDC"
-                  : realOpen
-                    ? `USDC ×${formatOdds(ub.multiplier)}`
-                    : realClosed
-                      ? "bets closed"
-                      : "USDC opens live"}
-            </button>
+          {active && ub?.enabled && !activeCommitted ? (
+            <span className="font-mono text-[11px] uppercase tracking-wide text-dim">
+              {realOpen
+                ? `real bet ×${formatOdds(ub.multiplier)} below`
+                : realClosed
+                  ? "real bets closed"
+                  : "real bet opens at race start"}
+            </span>
           ) : null}
         </div>
       ) : null}
-      {active && ub?.enabled && (showMoney || realOpen) ? (
+      {active && ub?.enabled && (realOpen || activeCommitted) ? (
         <UsdcBet
           state={state}
           pickedAgent={pick!.agentId}
