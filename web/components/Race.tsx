@@ -109,7 +109,7 @@ export default function Race({ round }: { round: RoundView | null }) {
   // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
   const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-11" : "h-9 sm:h-14";
   return (
-    <div ref={wrap} className="relative pr-1 sm:flex sm:h-full sm:flex-col sm:pr-2">
+    <div ref={wrap} className="relative pr-1 sm:flex sm:h-full sm:flex-1 sm:flex-col sm:pr-2">
       {round.competitors.map((c) => {
         const col = livery(c.id);
         return (
