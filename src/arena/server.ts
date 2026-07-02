@@ -169,7 +169,7 @@ const BET_DECAY_FRACTION = Math.min(1, Math.max(0.1, Number(process.env.BET_DECA
 const BET_MIN_MULTIPLIER = Math.min(1.9, Math.max(1.05, Number(process.env.BET_MIN_MULTIPLIER ?? '1.25')));
 // Cold-start subsidy is BOUNDED: at most N free races/day from our treasury (each ~0.6 USDC of data
 // hires). Beyond it, "start" is paused till tomorrow (UTC) — a bot/spam can never drain us.
-const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '12'));
+const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '3'));
 const BASESCAN = 'https://basescan.org/tx/';
 
 const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [], predictStats: { total: 0, correct: 0, visitors: 0 } };
@@ -820,6 +820,14 @@ async function runOneRound(
           const dataMsById = new Map((state.round?.competitors ?? []).map((c) => [c.id, c.dataMs ?? Infinity]));
           winners = [[...winners].sort((a, b) => (dataMsById.get(a) ?? Infinity) - (dataMsById.get(b) ?? Infinity))[0]];
         }
+        let settledCompetitors: CompetitorView[] = round.forecasts.map((f) => ({
+          id: f.competitor,
+          ...personaMeta(f.competitor),
+          estimate: f.prediction,
+          rationale: f.rationale,
+          error: o.errors[f.competitor],
+          isWinner: winners.includes(f.competitor),
+        }));
         if (state.round) {
           state.round.phase = 'settled';
           state.round.closePrice = round.closePrice;
@@ -829,6 +837,7 @@ async function runOneRound(
             error: o.errors[c.id],
             isWinner: winners.includes(c.id),
           }));
+          settledCompetitors = state.round.competitors;
         }
         const item: HistoryItem = {
           id: round.id,
@@ -840,14 +849,7 @@ async function runOneRound(
           line,
           winners,
           settledAt: o.settledAt,
-          competitors: round.forecasts.map((f) => ({
-            id: f.competitor,
-            ...personaMeta(f.competitor),
-            estimate: f.prediction,
-            rationale: f.rationale,
-            error: o.errors[f.competitor],
-            isWinner: winners.includes(f.competitor),
-          })),
+          competitors: settledCompetitors,
           edges: edges.map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash, latencyMs: e.latencyMs })),
         };
         state.history.unshift(item);

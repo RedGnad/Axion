@@ -171,6 +171,7 @@ function buildRequirements(capability: string): string {
 // from the live catalog, with light exploration to qualify new high-demand providers on-chain.
 const LIVE_SOURCING = process.env.ARENA_LIVE_SOURCING === '1';
 const isCuratedSeed = (serviceId: string): boolean => DATA_AGENTS.some((e) => e.serviceId === serviceId);
+const PROVIDER_EXPLORATION_RATE = Math.max(0, Math.min(1, Number(process.env.ARENA_PROVIDER_EXPLORATION_RATE ?? '0.02')));
 
 /** Choose the data provider for a capability: curated seed by default; with live sourcing on, the best
  *  store provider by real 7d demand, occasionally an untried high-demand newcomer (to qualify it). */
@@ -186,7 +187,7 @@ async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   const pool = cands.slice(0, 6);
   const untried = cands.filter((c) => isProviderUntried(c.serviceId) && c.orders7d >= 5);
   let pick: (typeof cands)[number];
-  if (untried.length && Math.random() < 0.2) {
+  if (untried.length && Math.random() < PROVIDER_EXPLORATION_RATE) {
     pick = untried[Math.floor(Math.random() * Math.min(untried.length, 5))];
   } else {
     // sqrt-dampened demand weighting: still favors high-demand providers, but not so overwhelmingly
