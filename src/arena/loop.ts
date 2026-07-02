@@ -328,7 +328,7 @@ export async function runRound(
   // DQ CUTOFF, RELATIVE to the fastest agent = first-estimate + grace. Anyone finishing within `grace`
   // of the fastest is safe → healthy providers (which cluster together) are NEVER cut; only a real
   // outlier (>grace slower than its peers) is. Hard ceiling = backstop for total provider failure.
-  const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '45')) * 1000;
+  const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '150')) * 1000;
   const hardCap = Math.max(grace + 60_000, Number(process.env.ARENA_ESTIMATE_HARDCAP_SECONDS ?? '300') * 1000);
   const hiringStart = Date.now();
   let firstAt = 0;

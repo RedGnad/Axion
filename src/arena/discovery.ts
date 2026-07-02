@@ -105,8 +105,14 @@ const CAP_KEYWORDS: Record<string, RegExp> = {
   valuation: /valuation|ahr|mvrv|nupl|rainbow|fair.?value|indicator|regime/i,
   'dca-signal': /dca|accumulat|bottom|buy.?signal/i,
   // Wizord — microstructure
-  'token-price': /price|quote|spot/i,
+  'token-price': /(?:token|eth|base|chainlink|cex|dex).*(?:price|quote|spot|snapshot|feed)|(?:price|quote|spot|snapshot|feed).*(?:token|eth|base|chainlink|cex|dex)/i,
   gas: /gas|\bfees?\b/i,
+};
+
+const CAP_DENY: Record<string, RegExp> = {
+  // "Liquidation Price Calculator" matched the old broad /price/ rule and repeatedly timed out for
+  // Wizord. Token-price means a market quote/feed, not a leverage/risk calculator.
+  'token-price': /liquidation|margin|leverage|risk|health|safety|audit|depeg|portfolio|wallet|gas|fee|optimizer/i,
 };
 
 // In-memory learning cache (resets on restart → re-probes occasionally, bounded). Curated seeds are
@@ -122,5 +128,10 @@ export function isProviderUntried(serviceId: string): boolean { return !!service
 export async function candidatesForCapability(capability: string): Promise<DiscoveredProvider[]> {
   const kw = CAP_KEYWORDS[capability];
   if (!kw) return [];
-  return (await discoverProviders()).filter((p) => kw.test(p.name) && !failedProviders.has(p.serviceId));
+  const deny = CAP_DENY[capability];
+  return (await discoverProviders()).filter((p) =>
+    kw.test(p.name) &&
+    !(deny?.test(p.name)) &&
+    !failedProviders.has(p.serviceId),
+  );
 }

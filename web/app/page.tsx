@@ -832,6 +832,16 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     !!pick &&
     !pick.resolved &&
     (pick.round === "next" || (!!r && pick.round === r.id));
+  const ub = state?.usdcBet;
+  const raceBettable = r?.phase === "open" || r?.phase === "betting";
+  const realOpen = !!ub?.enabled && ub.open === true && raceBettable;
+  const realClosed = !!ub?.enabled && raceBettable && ub.open === false;
+  const activeCommitted = active && !!pick?.committed;
+
+  useEffect(() => {
+    if (active && realOpen && !activeCommitted) setShowMoney(true);
+  }, [active, realOpen, activeCommitted]);
+
   const choose = (agentId: string) => {
     if (pick?.committed || pick?.resolved) return; // locked once you bet real money / race is over
     if (active && pick!.agentId === agentId) {
@@ -841,7 +851,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
       return;
     } // tap again = cancel
     if (live && r) {
-      setShowMoney(false);
+      setShowMoney(realOpen);
       setPick({ round: r.id, agentId });
       void postPredict(agentId);
     } // pick or change
@@ -863,11 +873,6 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const myLabel = active
     ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId)
     : "";
-  const ub = state?.usdcBet;
-  const raceBettable = r?.phase === "open" || r?.phase === "betting";
-  const realOpen = !!ub?.enabled && ub.open === true && raceBettable;
-  const realClosed = !!ub?.enabled && raceBettable && ub.open === false;
-  const activeCommitted = active && !!pick?.committed;
 
   return (
     <div>
@@ -1151,7 +1156,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           ) : null}
         </div>
       ) : null}
-      {active && showMoney ? (
+      {active && ub?.enabled && (showMoney || realOpen) ? (
         <UsdcBet
           state={state}
           pickedAgent={pick!.agentId}

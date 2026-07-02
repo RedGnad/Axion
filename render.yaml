@@ -36,6 +36,8 @@ services:
         value: "900000"
       - key: ARENA_PROVIDER_EXPLORATION_RATE
         value: "0.02"
+      - key: ARENA_ESTIMATE_GRACE_SECONDS
+        value: "150"
       - key: BET_DECAY_FRACTION
         value: "0.45"
       - key: BET_MIN_MULTIPLIER
@@ -51,6 +53,8 @@ services:
       #   ARENA_DAILY_RACES     — bounded free races/day from our treasury (default 2; resets UTC).
       #   ARENA_PROVIDER_EXPLORATION_RATE — chance per capability to try an unproven live-store
       #                           provider when live sourcing is on. Keep low while funds are scarce.
+      #   ARENA_ESTIMATE_GRACE_SECONDS — DQ grace after the first estimate lands. CROO providers often
+      #                           answer in 2-4 min; keep this high enough to avoid false DQs.
       #   ARENA_AUTORUN=1       — run one round immediately at boot (demo only).
       # OPEN ROSTER (external agents):
       #   ALLOW_AGENT_SUBMIT=1  — enable the Garage "join" endpoint (/api/competitor).
