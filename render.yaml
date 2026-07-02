@@ -31,7 +31,7 @@ services:
       - key: ARENA_DAILY_THESIS_RACES
         value: "1"
       - key: ARENA_DAILY_RACES
-        value: "3"
+        value: "2"
       - key: ARENA_MIN_ROUND_MS
         value: "900000"
       - key: ARENA_PROVIDER_EXPLORATION_RATE
@@ -48,7 +48,7 @@ services:
       #   ARENA_DAILY_THESIS_RACES — daily cap for the Thesis event (default 1; resets UTC).
       #   ARENA_AUTO_ROUND_MS   — ms between scheduled rounds (the "NEXT" countdown). Keep it
       #                           high while funds are low; lower it once the persona wallets are funded.
-      #   ARENA_DAILY_RACES     — bounded free races/day from our treasury (default 3; resets UTC).
+      #   ARENA_DAILY_RACES     — bounded free races/day from our treasury (default 2; resets UTC).
       #   ARENA_PROVIDER_EXPLORATION_RATE — chance per capability to try an unproven live-store
       #                           provider when live sourcing is on. Keep low while funds are scarce.
       #   ARENA_AUTORUN=1       — run one round immediately at boot (demo only).

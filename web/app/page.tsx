@@ -1837,59 +1837,39 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
 
 function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
-  const [open, setOpen] = useState(false); // collapse store activity + provider table by default
   const capName = (s?: string) => (s ? s.replace(/-/g, " ") : "data");
   const visibleWired = (dm?.wired ?? []).filter((w) => !w.ours);
+  const paid = dm?.providerStats ?? [];
+  const usedCount = paid.length;
+  const totalPaid = paid.reduce((sum, p) => sum + p.paidUSDC, 0);
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "240ms" }}
     >
       <SectionTitle
-        title="Data agents earn here"
+        title="Data Axion Paid"
         right={
           <span className="font-mono text-[11px] uppercase tracking-wider text-dim"></span>
         }
       />
       {dm ? (
         <>
-          {/* §C takeaway-first: one number that GROWS with the store + how many were actually wired. */}
-          <div className="mt-4 flex items-baseline gap-2.5">
+          <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="font-display text-5xl tnum text-volt">
-              {dm.discovered}
+              {usedCount}
             </span>
             <span className="font-mono text-[11px] uppercase leading-tight tracking-wider text-dim">
-              data agents in the CROO store
+              providers used by our racers
               <br />
-              {dm.matched != null ? (
-                <>
-                  <b className="text-ink">{dm.matched}</b> match current race
-                  routes
-                </>
-              ) : (
-                "our racers source live from here"
-              )}
-              {visibleWired.length ? (
-                <>
-                  {" "}
-                  ·{" "}
-                  <b className="text-ink">{visibleWired.length}</b>{" "}
-                  wired last race
-                </>
-              ) : null}
+              <b className="text-ink">${totalPaid.toFixed(2)}</b> paid on-chain
             </span>
           </div>
-          <p className="mt-3 text-[14px] leading-relaxed text-dim">
-            List a useful data agent. Racers source from the CROO store and{" "}
-            <b className="text-ink">pay providers they use</b>. Best fits:
-            sentiment, price, gas, valuation, smart-money. No racer integration
-            needed.
-          </p>
 
           {visibleWired.length ? (
             <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
               <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                last race route
+                last race providers
               </div>
               <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
                 {visibleWired.map((w, i) => (
@@ -1909,105 +1889,10 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             </div>
           ) : null}
 
-          {!open ? (
-            <button
-              onClick={() => setOpen(true)}
-              className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
-            >
-              ▾ show routing detail
-            </button>
-          ) : (
-            <button
-              onClick={() => setOpen(false)}
-              className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
-            >
-              ▴ hide
-            </button>
-          )}
-          {open && (
-            <>
-              {dm.routing?.length ? (
-                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
-                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                    route matching
-                  </div>
-                  <div className="mt-2.5 space-y-1.5">
-                    {dm.routing.map((r) => (
-                      <div
-                        key={r.capability}
-                        className="grid gap-1 rounded-md border border-line/50 px-2.5 py-2 text-[12.5px] sm:grid-cols-[120px_56px_1fr]"
-                      >
-                        <span className="font-mono uppercase tracking-wider text-volt">
-                          {capName(r.capability)}
-                        </span>
-                        <span className="font-mono tnum text-dim">
-                          {r.candidates} cand.
-                        </span>
-                        <span className="min-w-0 truncate text-ink/80">
-                          {r.selected ? (
-                            <>
-                              chose <b className="text-ink">{r.selected}</b>
-                            </>
-                          ) : r.top.length ? (
-                            <>top: {r.top.join(" · ")}</>
-                          ) : (
-                            "no live match; fallback seed"
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Real activity log: a provider newly in the public catalog, or an agent's first on-chain hire. */}
-              {dm.events && dm.events.length ? (
-                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/40 p-3.5">
-                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                    store activity
-                  </div>
-                  <div className="mt-2.5 max-h-[170px] space-y-2 overflow-auto pr-1">
-                    {dm.events.map((e, i) => (
-                      <div
-                        key={i}
-                        className="flex items-baseline gap-2.5 text-[13px] leading-snug"
-                      >
-                        <span className="w-9 shrink-0 font-mono text-[11px] tnum text-dim">
-                          {ago(e.ts)}
-                        </span>
-                        <span
-                          className="w-[72px] shrink-0 font-mono text-[11px] uppercase tracking-wider"
-                          style={{
-                            color:
-                              e.kind === "joined"
-                                ? "var(--color-volt)"
-                                : "var(--color-under)",
-                          }}
-                        >
-                          {e.kind === "joined" ? "new listing" : "first hire"}
-                        </span>
-                        <span className="flex-1 text-ink/80">{e.text}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 space-y-1 border-t border-white/5 pt-2.5 text-[12px] leading-relaxed text-dim">
-                    <p>
-                      <b style={{ color: "var(--color-volt)" }}>New listing</b>:
-                      a data agent appeared in the public CROO catalog.
-                    </p>
-                    <p>
-                      <b style={{ color: "var(--color-under)" }}>First hire</b>:
-                      an agent paid it on-chain for the first time.
-                    </p>
-                    <p></p>
-                  </div>
-                </div>
-              ) : null}
-
-              {dm.providerStats && dm.providerStats.length ? (
+          {paid.length ? (
                 <div className="mt-4">
                   <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                    providers paid by Axion
+                    all paid providers
                   </div>
                   <div className="mb-1.5 mt-2.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-dim">
                     <span className="flex-1">provider</span>
@@ -2022,7 +1907,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                     </span>
                   </div>
                   <div className="max-h-[260px] space-y-1.5 overflow-auto pr-1">
-                    {dm.providerStats.map((p, i) => (
+                    {paid.map((p, i) => (
                       <div
                         key={i}
                         className="flex items-center gap-2 text-[13.5px]"
@@ -2053,8 +1938,11 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                     ))}
                   </div>
                 </div>
-              ) : null}
-            </>
+          ) : (
+            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-4 text-[13px] leading-relaxed text-dim">
+              No paid data hires yet. When racers buy data, the providers will
+              appear here.
+            </div>
           )}
         </>
       ) : (
