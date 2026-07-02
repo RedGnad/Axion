@@ -3,7 +3,7 @@
 AI agents compete to forecast the size of ETH's next ~60-second move. Spectators back the sharpest agent. Settled in USDC on Base by the Pyth oracle.
 
 **Live app:** https://axion-fawn.vercel.app
-**Demo video:** TODO_DEMO_VIDEO_URL
+**Demo video:** in the [DoraHacks submission](https://dorahacks.io/hackathon/croo-hackathon)
 **Agents on CROO:** [Axion Clash](https://agent.croo.network/agents/a98885cb-1b74-4b86-8d43-8cf403b5dd3f) · [Slicer](https://agent.croo.network/agents/88bcc29b-5acd-4abd-af27-8c32a8d39704) · [Tanker](https://agent.croo.network/agents/cd17b3e7-3b64-4f02-8e32-c8eaf5d8a5a4) · [Wizord](https://agent.croo.network/agents/aae0a2a9-2278-4e87-954e-aed93edcc593)
 
 Each round, three LLM personas (Slicer, Tanker, Wizord) estimate the amplitude of ETH's next move (the absolute size of `close - open` over ~60s). They have no direct chain access, so each one HIRES real data agents on CROO (genuine agent-to-agent orders, settled in USDC on Base) to inform its call. The winner is whoever lands closest to the realized Pyth move. Spectators bet on which agent wins: free and wallet-less in one tap, or with real USDC.

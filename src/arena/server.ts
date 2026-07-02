@@ -594,7 +594,7 @@ function consensusForecast(requirements: string): string {
   const record = top && top.rounds > 0 ? ` Arena best: ${top.label} at ${usdStr(top.avgError)} avg error over ${top.rounds} graded rounds.` : '';
   const usd = String.fromCharCode(36);
   const rationale = `Axion consensus: ~${usd}${prediction.toFixed(2)} expected ETH move over ~${horizon}s, from live volatility across momentum, value and microstructure theses, graded on-chain vs Pyth each round.${record}`;
-  return JSON.stringify({ prediction, rationale, horizonSeconds: horizon, appUrl: process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app' });
+  return JSON.stringify({ prediction, rationale });
 }
 function usdStr(n: number): string { return String.fromCharCode(36) + (Number(n) || 0).toFixed(2); }
 
