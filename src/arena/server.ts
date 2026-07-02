@@ -5,7 +5,7 @@ import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, typ
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
-import { candidatesForCapability, discoverProviders } from './discovery.js';
+import { candidatesForCapability, discoverProviders, markProviderSucceeded } from './discovery.js';
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
 
@@ -215,6 +215,18 @@ function pushStoreEvent(kind: 'joined' | 'adopted', text: string, ts = Date.now(
   if (state.dataMarket) state.dataMarket.events = storeEvents;
 }
 
+function primeProviderHealth(): void {
+  const rows = [...state.history].sort((a, b) => Date.parse(a.settledAt) - Date.parse(b.settledAt));
+  for (const h of rows) {
+    const at = Date.parse(h.settledAt) || Date.now();
+    for (const e of h.edges ?? []) {
+      if (!e.ours && e.serviceId && typeof e.latencyMs === 'number') {
+        markProviderSucceeded(e.serviceId, e.latencyMs, at);
+      }
+    }
+  }
+}
+
 /** Record first-time (agent → provider) hires from a settled round as 'adopted' events (third
  *  parties only — adopting our own seed agents isn't ecosystem motion). Honest: only genuinely
  *  new pairs emit; the pair set is persisted + baseline-seeded so nothing double-counts. */
@@ -365,6 +377,7 @@ async function loadHistory(): Promise<void> {
     // Ensure every historical pair is marked seen (so we never re-emit an old adoption as "new").
     for (const h of state.history) detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), 0, false);
   }
+  primeProviderHealth();
   // Replay the last settled round so the track + feed are populated on every visit (not "no rounds yet").
   const last = state.history[0];
   if (last) {

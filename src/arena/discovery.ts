@@ -102,7 +102,7 @@ const CAP_KEYWORDS: Record<string, RegExp> = {
   'smart-money': /smart.?money|top.?trader|whale|inflow|netflow|exchange.?flow|\bflow\b|position/i,
   sentiment: /fear|greed|sentiment|social|mood/i,
   // Tanker — contrarian value
-  valuation: /valuation|ahr|mvrv|nupl|rainbow|fair.?value|indicator|regime/i,
+  valuation: /\bvaluation\b|ahr|mvrv|nupl|rainbow|fair.?value|market.?value|indicator|regime/i,
   'dca-signal': /dca|accumulat|bottom|buy.?signal/i,
   // Wizord — microstructure
   'token-price': /(?:token|eth|base|chainlink|cex|dex).*(?:price|quote|spot|snapshot|feed)|(?:price|quote|spot|snapshot|feed).*(?:token|eth|base|chainlink|cex|dex)/i,
@@ -113,25 +113,83 @@ const CAP_DENY: Record<string, RegExp> = {
   // "Liquidation Price Calculator" matched the old broad /price/ rule and repeatedly timed out for
   // Wizord. Token-price means a market quote/feed, not a leverage/risk calculator.
   'token-price': /liquidation|margin|leverage|risk|health|safety|audit|depeg|portfolio|wallet|gas|fee|optimizer/i,
+  valuation: /evaluation|trust|reputation|security|audit|safety|risk|wallet/i,
+  gas: /optimizer|optimization|audit|security|contract|wallet|risk/i,
 };
 
-// In-memory learning cache (resets on restart → re-probes occasionally, bounded). Curated seeds are
-// NEVER blacklisted (protected in loop.ts); only unproven dynamic providers land here.
-const failedProviders = new Set<string>();
+interface ProviderSignal {
+  failScore: number;
+  slowScore: number;
+  updatedAt: number;
+  lastLatencyMs?: number;
+}
+
+// In-memory provider health. This is deliberately a soft score, not a banlist: slow/failed services
+// become less likely for fast Blitz races, then recover over time if the store/provider improves.
+const providerSignals = new Map<string, ProviderSignal>();
 const triedProviders = new Set<string>();
-export function markProviderFailed(serviceId: string): void { if (serviceId) failedProviders.add(serviceId); }
 export function markProviderTried(serviceId: string): void { if (serviceId) triedProviders.add(serviceId); }
 export function isProviderUntried(serviceId: string): boolean { return !!serviceId && !triedProviders.has(serviceId); }
 
+function slowThresholdMs(): number {
+  const v = Number(process.env.ARENA_PROVIDER_SLOW_MS);
+  return Number.isFinite(v) && v > 0 ? v : 150_000;
+}
+
+function halfLifeMs(): number {
+  const v = Number(process.env.ARENA_PROVIDER_HEALTH_HALFLIFE_MS);
+  return Number.isFinite(v) && v > 0 ? v : 6 * 60 * 60_000;
+}
+
+function withDecay(serviceId: string, atMs = Date.now()): ProviderSignal {
+  const prev = providerSignals.get(serviceId) ?? { failScore: 0, slowScore: 0, updatedAt: atMs };
+  const elapsed = Math.max(0, atMs - prev.updatedAt);
+  const decay = Math.pow(0.5, elapsed / halfLifeMs());
+  return {
+    failScore: prev.failScore * decay,
+    slowScore: prev.slowScore * decay,
+    updatedAt: atMs,
+    lastLatencyMs: prev.lastLatencyMs,
+  };
+}
+
+export function markProviderFailed(serviceId: string, atMs = Date.now()): void {
+  if (!serviceId) return;
+  const next = withDecay(serviceId, atMs);
+  next.failScore = Math.min(8, next.failScore + 1);
+  providerSignals.set(serviceId, next);
+}
+
+export function markProviderSucceeded(serviceId: string, latencyMs: number, atMs = Date.now()): void {
+  if (!serviceId || !Number.isFinite(latencyMs)) return;
+  const next = withDecay(serviceId, atMs);
+  next.failScore *= 0.5;
+  const slowRatio = latencyMs / slowThresholdMs();
+  next.slowScore = slowRatio > 1
+    ? Math.min(8, next.slowScore + Math.min(2, slowRatio - 1))
+    : next.slowScore * 0.6;
+  next.lastLatencyMs = latencyMs;
+  providerSignals.set(serviceId, next);
+}
+
+export function providerHealthWeight(serviceId: string): number {
+  if (!serviceId) return 1;
+  const s = providerSignals.get(serviceId);
+  if (!s) return 1;
+  const now = withDecay(serviceId);
+  const penalty = now.failScore * 1.8 + now.slowScore;
+  return Math.max(0.08, Math.min(1, 1 / (1 + penalty)));
+}
+
 /** Live candidates for a capability: store providers whose name matches the capability, under the
- *  price cap, not previously failed, ranked by real 7d demand (already sorted by discoverProviders). */
+ *  price cap, ranked by real 7d demand (already sorted by discoverProviders). Health weighting happens
+ *  in loop.ts so slow providers are less likely, not removed forever. */
 export async function candidatesForCapability(capability: string): Promise<DiscoveredProvider[]> {
   const kw = CAP_KEYWORDS[capability];
   if (!kw) return [];
   const deny = CAP_DENY[capability];
   return (await discoverProviders()).filter((p) =>
     kw.test(p.name) &&
-    !(deny?.test(p.name)) &&
-    !failedProviders.has(p.serviceId),
+    !(deny?.test(p.name)),
   );
 }
