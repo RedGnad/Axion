@@ -46,7 +46,7 @@ export default function Page() {
     setIntro(false);
   };
   return (
-    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-4 sm:px-5 sm:pb-24 sm:pt-6">
+    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-4 sm:px-5 sm:pb-24 sm:pt-3">
       <Intro open={intro} setTab={setTab} onClose={closeIntro} />
       <Header state={state} online={online} onHelp={() => setIntro(true)} />
       <Tabs tab={tab} setTab={setTab} />
@@ -57,18 +57,18 @@ export default function Page() {
           <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70 sm:flex sm:min-h-[calc(100svh-17rem)] sm:flex-col"
+            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70 sm:flex sm:flex-col"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
-              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
+              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-3.5">
                 <Telemetry state={state} />
               </div>
-              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
+              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-3.5">
                 <RaceControl state={state} online={online} />
               </div>
             </div>
-            <div className="border-t border-line px-3 py-3 sm:flex sm:flex-1 sm:flex-col sm:px-5 sm:py-4">
+            <div className="border-t border-line px-3 py-3 sm:flex sm:flex-1 sm:flex-col sm:px-5 sm:py-3">
               <SectionTitle
                 title="The grid"
                 right={
@@ -78,13 +78,13 @@ export default function Page() {
                   </div>
                 }
               />
-              <div className="mt-4 sm:flex sm:flex-1 sm:flex-col">
+              <div className="mt-2.5 sm:flex sm:flex-1 sm:flex-col">
                 <Race round={state?.round ?? null} />
               </div>
               <EstimatingRotator state={state} />
             </div>
             {online ? (
-              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-5 sm:py-4">
+              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-5 sm:py-3.5">
                 <SpectatorCoach armed={!intro} />
                 <ToteBoard state={state} />
               </div>
@@ -621,7 +621,7 @@ function RaceControl({
     note =
       startMsg ??
       (exhausted
-        ? "today's free races are used up. Back at UTC midnight"
+        ? "free races used up today"
         : budLeft != null
           ? `${budLeft} free races left today`
           : "");

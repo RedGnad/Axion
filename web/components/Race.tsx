@@ -107,13 +107,13 @@ export default function Race({ round }: { round: RoundView | null }) {
 
   // Compact the lanes as the field grows so a big roster doesn't flood the track (keeps the start/
   // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
-  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-11" : "h-9 sm:h-14";
+  const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-10" : "h-9 sm:h-11";
   return (
     <div ref={wrap} className="relative pr-1 sm:flex sm:h-full sm:flex-1 sm:flex-col sm:pr-2">
       {round.competitors.map((c) => {
         const col = livery(c.id);
         return (
-          <div key={c.id} className={`relative ${laneH} border-b border-dashed border-white/5 sm:min-h-[3.5rem] sm:flex-1`}>
+          <div key={c.id} className={`relative ${laneH} border-b border-dashed border-white/5 sm:min-h-[2.75rem]`}>
             <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[12px] sm:text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
               {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
@@ -149,9 +149,6 @@ export default function Race({ round }: { round: RoundView | null }) {
       <div className="absolute -top-3 z-10 rounded bg-panel px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim" style={{ left: `${RACE_L}%`, transform: 'translateX(-50%)' }}>start</div>
       {/* finish line — anchored to RACE_R% so the leader's kart lands exactly on it */}
       <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_R}%`, marginLeft: -1.5, width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
-      <div className="mt-3 hidden border-t border-line/50 pt-2 sm:block">
-        <span className="text-[11px] leading-snug text-dim">Closer forecasts move farther. Closest to Pyth wins.</span>
-      </div>
     </div>
   );
 }
