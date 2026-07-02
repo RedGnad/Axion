@@ -46,7 +46,7 @@ export default function Page() {
     setIntro(false);
   };
   return (
-    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-3 sm:px-5 sm:pb-24 sm:pt-4">
+    <main className="mx-auto max-w-[1180px] px-4 pb-20 pt-4 sm:px-5 sm:pb-24 sm:pt-6">
       <Intro open={intro} setTab={setTab} onClose={closeIntro} />
       <Header state={state} online={online} onHelp={() => setIntro(true)} />
       <Tabs tab={tab} setTab={setTab} />
@@ -54,20 +54,21 @@ export default function Page() {
 
       {tab === "play" && (
         <>
+          <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-2 overflow-hidden rounded-lg border border-line bg-panel/70"
+            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
-              <div className="bg-panel px-3 py-3 sm:px-4 sm:py-3">
+              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
                 <Telemetry state={state} />
               </div>
-              <div className="bg-panel px-3 py-3 sm:px-4 sm:py-3">
+              <div className="bg-panel px-3 py-3 sm:px-5 sm:py-4">
                 <RaceControl state={state} online={online} />
               </div>
             </div>
-            <div className="border-t border-line px-3 py-3 sm:px-4 sm:py-3">
+            <div className="border-t border-line px-3 py-3 sm:px-5 sm:py-4">
               <SectionTitle
                 title="The grid"
                 right={
@@ -77,13 +78,13 @@ export default function Page() {
                   </div>
                 }
               />
-              <div className="mt-3">
+              <div className="mt-4">
                 <Race round={state?.round ?? null} />
               </div>
               <EstimatingRotator state={state} />
             </div>
             {online ? (
-              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-4 sm:py-3">
+              <div className="border-t border-volt/20 bg-volt/[0.02] px-3 py-3 sm:px-5 sm:py-4">
                 <SpectatorCoach armed={!intro} />
                 <ToteBoard state={state} />
               </div>
@@ -129,13 +130,13 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
     { id: "proof", label: "Journal" },
   ];
   return (
-    <div className="reveal mt-2 flex gap-1 sm:mt-3">
+    <div className="reveal mt-3 flex gap-1 sm:mt-5">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => setTab(t.id)}
           className={cn(
-            "-mb-px border-b-2 px-4 py-1.5 font-display text-[13px] uppercase tracking-wide transition sm:py-2",
+            "-mb-px border-b-2 px-4 py-2 font-display text-[13px] uppercase tracking-wide transition sm:py-2.5",
             tab === t.id
               ? "border-volt text-volt"
               : "border-transparent text-dim hover:text-ink",
@@ -273,9 +274,9 @@ function Header({
 }) {
   const status = !online ? "offline" : (state?.status ?? "—");
   return (
-    <header className="reveal flex flex-wrap items-end justify-between gap-3 pb-2 sm:gap-4 sm:pb-3">
+    <header className="reveal flex flex-wrap items-end justify-between gap-3 pb-3 sm:gap-4 sm:pb-4">
       <div>
-        <h1 className="font-display text-3xl uppercase leading-none tracking-[0.04em] sm:text-4xl">
+        <h1 className="font-display text-3xl uppercase leading-none tracking-[0.04em] sm:text-5xl">
           Axion <span className="text-volt">Clash</span>
         </h1>
       </div>
