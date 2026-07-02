@@ -549,43 +549,54 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   if (!key || !serviceId) return;
   const client = new AgentClient({ baseURL: cfg.baseURL, wsURL: cfg.wsURL }, key);
   try { await client.connectWebSocket(); } catch { /* WS just keeps "online" status */ }
-  console.log(`[axion] provider online (arena brief) on service ${serviceId}`);
-  const brief = (): string => {
-    const last = state.history[0];
-    const appUrl = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';
-    return JSON.stringify({
-      service: 'Axion Clash arena brief',
-      appUrl,
-      asset: state.asset,
-      status: state.status,
-      livePrice: state.livePrice ?? null,
-      nextRoundAtMs: state.nextRoundAtMs ?? null,
-      topAgent: state.leaderboard[0]?.label ?? null,
-      lastRound: last
-        ? {
-            realizedMoveUSD: last.amplitude,
-            lineUSD: last.line,
-            winners: last.winners,
-            settledAt: last.settledAt,
-          }
-        : null,
-      racerContract: {
-        requirements: { spot: 'number', deadlineSeconds: 'number', recentVol: 'number' },
-        deliverable: { prediction: 'positive USD move estimate', rationale: 'short string' },
-      },
-      note: 'To race, deploy a CROO service that returns the racerContract deliverable, then join from the Garage in appUrl.',
-    });
-  };
+  console.log(`[axion] forecast provider online on service ${serviceId}`);
+  const done = new Set<string>();
+  const inFlight = new Set<string>();
   const tick = async (): Promise<void> => {
     try {
       const negs = await client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 20 });
       for (const n of negs) if (n.serviceId === serviceId) { try { await client.acceptNegotiation(n.negotiationId); console.log(`[axion] accepted hire ${n.negotiationId}`); } catch { /* retry next tick */ } }
       const orders = await client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 20 });
-      for (const o of orders) if (o.serviceId === serviceId) { try { await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: brief() }); console.log(`[axion] delivered brief ${o.orderId}`); } catch { /* retry next tick */ } }
+      for (const o of orders) {
+        if (o.serviceId !== serviceId || done.has(o.orderId) || inFlight.has(o.orderId)) continue;
+        inFlight.add(o.orderId);
+        void (async () => {
+          try {
+            const neg = await client.getNegotiation(o.negotiationId);
+            await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: consensusForecast(neg.requirements ?? '{}') });
+            done.add(o.orderId);
+            console.log(`[axion] delivered consensus forecast ${o.orderId}`);
+          } catch (err) {
+            console.warn('[axion] forecast delivery failed: ' + (err as Error).message);
+          } finally { inFlight.delete(o.orderId); }
+        })();
+      }
     } catch { /* transient */ }
   };
-  setInterval(() => void tick(), 6000);
+  setInterval(() => void tick(), 4000);
 }
+
+/** Axion's flagship buyable service: the ARENA CONSENSUS ETH move forecast. Averages the three theses
+ *  (momentum / value / microstructure) into one {prediction, rationale} — the same contract racers
+ *  answer — so any agent can hire "an ETH short-horizon move forecast" and get a call backed by the
+ *  arena's public, on-chain-graded track record. Honest: an estimate from live volatility, not alpha. */
+function consensusForecast(requirements: string): string {
+  let req: { spot?: number; deadlineSeconds?: number; recentVol?: number } = {};
+  try { req = JSON.parse(requirements || '{}') as typeof req; } catch { /* fallback below */ }
+  const spot = Number(req.spot) || state.livePrice || 3000;
+  const horizon = Number(req.deadlineSeconds) || WINDOW;
+  const recent = Number(req.recentVol) > 0 ? Number(req.recentVol) : Math.max(0.5, spot * 0.0004);
+  const avgMult = PERSONALITIES.reduce((s, p) => s + p.volMultiplier, 0) / PERSONALITIES.length;
+  // Scale a ~60s baseline to the requested horizon (vol grows ~sqrt(time)); bounded and honest.
+  const scaled = recent * avgMult * Math.sqrt(Math.max(1, horizon) / WINDOW);
+  const prediction = Math.max(0.01, Number(scaled.toFixed(2)));
+  const top = state.leaderboard[0];
+  const record = top && top.rounds > 0 ? ` Arena best: ${top.label} at ${usdStr(top.avgError)} avg error over ${top.rounds} graded rounds.` : '';
+  const usd = String.fromCharCode(36);
+  const rationale = `Axion consensus: ~${usd}${prediction.toFixed(2)} expected ETH move over ~${horizon}s, from live volatility across momentum, value and microstructure theses, graded on-chain vs Pyth each round.${record}`;
+  return JSON.stringify({ prediction, rationale, horizonSeconds: horizon, appUrl: process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app' });
+}
+function usdStr(n: number): string { return String.fromCharCode(36) + (Number(n) || 0).toFixed(2); }
 
 /** Optional: make the seed racers callable CROO services from the same Render runner.
  * External users can hire Slicer/Tanker/Wizord as generic short-horizon market forecasters, while
