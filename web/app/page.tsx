@@ -78,7 +78,7 @@ export default function Page() {
                   </div>
                 }
               />
-              <div className="mt-4">
+              <div className="mt-4 sm:flex-1">
                 <Race round={state?.round ?? null} />
               </div>
               <EstimatingRotator state={state} />
