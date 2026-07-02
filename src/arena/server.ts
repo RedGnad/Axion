@@ -163,9 +163,10 @@ let HIRING_ETA_MS = 90_000; // estimated hiring time; AUTO-CALIBRATED from each 
 const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled heartbeat cadence (0 = off)
 // Cost ceiling: minimum gap between rounds, so demand triggers can't spam-burn USDC (~0.6/round).
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
-// Real-money bets keep their edge only early in reveal; after this fraction the display multiplier is
-// x1 and the USDC endpoint closes. Free picks stay open as a low-stakes spectator action.
-const BET_DECAY_FRACTION = Math.min(1, Math.max(0.1, Number(process.env.BET_DECAY_FRACTION ?? '0.30')));
+// Real-money bets keep their edge only early in reveal; after this fraction the USDC endpoint closes.
+// Free picks stay open as a low-stakes spectator action.
+const BET_DECAY_FRACTION = Math.min(1, Math.max(0.1, Number(process.env.BET_DECAY_FRACTION ?? '0.45')));
+const BET_MIN_MULTIPLIER = Math.min(1.9, Math.max(1.05, Number(process.env.BET_MIN_MULTIPLIER ?? '1.25')));
 // Cold-start subsidy is BOUNDED: at most N free races/day from our treasury (each ~0.6 USDC of data
 // hires). Beyond it, "start" is paused till tomorrow (UTC) — a bot/spam can never drain us.
 const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '12'));
@@ -402,8 +403,8 @@ function saveHistory(): void {
   void saveState(blob); // durable (Upstash) — survives Render restarts
 }
 
-/** DISPLAY odds multiplier (×N), decaying with INFORMATION — reward strictly drops as you learn more,
- *  so betting is fair + non-farmable: blind during hiring = ×4, line set (race start) = ×2, → ×1 at settle. */
+/** DISPLAY odds multiplier (×N), decaying with INFORMATION — reward strictly drops as you learn more.
+ *  Real-money bets close before the odds hit x1, so the UI never invites a "no edge" bet. */
 function displayMultNow(): number {
   const r = state.round;
   if (!r) return 4;
@@ -411,11 +412,12 @@ function displayMultNow(): number {
   if (r.phase === 'betting' && r.raceStartMs && r.settleAtMs && r.settleAtMs > r.raceStartMs) {
     const frac = Math.min(1, Math.max(0, (Date.now() - r.raceStartMs) / (r.settleAtMs - r.raceStartMs)));
     const pricedFrac = Math.min(1, frac / BET_DECAY_FRACTION);
-    return Math.round((2 - pricedFrac) * 100) / 100; // 2.0 at race start → 1.0 early, then closed
+    const mult = 2 - pricedFrac * (2 - BET_MIN_MULTIPLIER);
+    return Math.round(mult * 100) / 100; // 2.0 at race start → min edge at cutoff, then closed
   }
   return 1;
 }
-/** Internal pari-mutuel share weight = displayMult / 4 (so ×4→1.0 … ×1→0.25). */
+/** Internal pari-mutuel share weight = displayMult / 4 (so ×4→1.0; accepted live bets floor above x1). */
 function betWeightNow(): number {
   return displayMultNow() / 4;
 }
@@ -999,6 +1001,7 @@ async function main(): Promise<void> {
     }
     if (req.method === 'GET' && url === '/api/state') {
       refreshBudget(); // keep the daily-subsidy display current so it rolls over at UTC midnight (never a stale "used up")
+      refreshUsdcBet();
       refreshPredictStats();
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify(state));

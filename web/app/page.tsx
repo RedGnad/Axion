@@ -387,6 +387,10 @@ function clock(ms: number) {
   return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${m}:${p(sec)}`;
 }
 
+function formatOdds(mult: number): string {
+  return mult >= 2 ? mult.toFixed(1) : mult.toFixed(2);
+}
+
 /** Short relative time for activity rows ("now", "6m", "3h", "2d", then a date). */
 function ago(ts: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -552,7 +556,8 @@ function RaceControl({
   } else if (active && r) {
     showStart = false;
     const mult = state?.usdcBet?.multiplier ?? (r.phase === "open" ? 4 : 2);
-    const realBetOpen = state?.usdcBet?.open !== false;
+    const realBetOpen = state?.usdcBet?.open === true;
+    const betCutoffAt = state?.usdcBet?.betCutoffAtMs;
     const ready = r.competitors.filter((c) => c.estimate != null).length;
     const total = r.competitors.length || 1;
     const openMs = Number((r.id || "").split("-")[1]) || now;
@@ -562,15 +567,22 @@ function RaceControl({
       r.dqAtMs > r.dqFromMs &&
       ready < total;
     if (r.phase === "betting") {
-      // The race is live → odds (dropping) is the hero; keep the suspense (no settle countdown).
-      kicker =
-        r.format === "thesis"
-          ? "15M THESIS LIVE"
-          : realBetOpen
-            ? "RACE LIVE · BET NOW"
-            : "RACE LIVE";
-      big = `×${mult.toFixed(1)}`;
-      note = "";
+      if (realBetOpen) {
+        // The money window is open → odds is the hero, with the close timer visible.
+        kicker = r.format === "thesis" ? "15M THESIS LIVE" : "RACE LIVE · BET WINDOW";
+        big = `×${formatOdds(mult)}`;
+        secondary =
+          betCutoffAt && betCutoffAt > now
+            ? { label: "bets close", value: clock(betCutoffAt - now) }
+            : null;
+        note = "real bets close early; free picks stay open";
+      } else {
+        // After the paid window, do not advertise x1; show the race clock + closed status.
+        kicker = r.format === "thesis" ? "15M THESIS LIVE" : "RACE LIVE";
+        big = clock((r.settleAtMs ?? now) - now);
+        secondary = { label: "real bets", value: "closed" };
+        note = "free picks stay open";
+      }
     } else if (graceOpen) {
       // Grace: controlled countdown (hero) + odds (secondary, still visible) + red bar.
       kicker = "STRAGGLERS CUT IN";
@@ -750,6 +762,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     correct?: boolean;
   } | null>(null);
   const [open, setOpen] = useState<string | null>(null); // which agent's "why" is expanded
+  const [showMoney, setShowMoney] = useState(false);
   const [rec, setRec] = useState<{ c: number; t: number }>({ c: 0, t: 0 });
   useEffect(() => {
     try {
@@ -822,14 +835,17 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     if (pick?.committed || pick?.resolved) return; // locked once you bet real money / race is over
     if (active && pick!.agentId === agentId) {
       setPick(null);
+      setShowMoney(false);
       void cancelPredict();
       return;
     } // tap again = cancel
     if (live && r) {
+      setShowMoney(false);
       setPick({ round: r.id, agentId });
       void postPredict(agentId);
     } // pick or change
     else if (idlePickable) {
+      setShowMoney(false);
       setPick({ round: "next", agentId, afterRound: r?.id });
       void postPredict(agentId);
     }
@@ -846,7 +862,11 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   const myLabel = active
     ? (cards.find((c) => c.id === pick!.agentId)?.label ?? pick!.agentId)
     : "";
-  const showPickStatus = active || !!pick?.resolved;
+  const ub = state?.usdcBet;
+  const raceBettable = r?.phase === "open" || r?.phase === "betting";
+  const realOpen = !!ub?.enabled && ub.open === true && raceBettable;
+  const realClosed = !!ub?.enabled && raceBettable && ub.open === false;
+  const activeCommitted = active && !!pick?.committed;
 
   return (
     <div>
@@ -1088,30 +1108,54 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             : "racers line up when a race starts"}
         </div>
       )}
-      {showPickStatus ? (
-      <div className="mt-3 min-h-[1.25rem] text-center font-mono text-[13px] text-dim">
-        {pick?.resolved ? (
-          <span
-            className="text-base"
-            style={{
-              color: pick.correct ? "var(--color-under)" : "var(--color-over)",
-            }}
+      <div className="mt-3 flex min-h-[44px] flex-wrap items-center justify-between gap-2 rounded-lg border border-line/70 bg-panel2/35 px-3 py-2 sm:px-4">
+        <div className="min-w-0 font-mono text-[11px] uppercase tracking-wider text-dim">
+          {pick?.resolved ? (
+            <span
+              className="font-display text-[13px] tracking-wide"
+              style={{
+                color: pick.correct ? "var(--color-under)" : "var(--color-over)",
+              }}
+            >
+              {pick.correct ? "winner picked" : "pick missed"}
+            </span>
+          ) : active ? (
+            <span>
+              <b className="font-display text-[13px] tracking-wide text-ink">
+                {myLabel}
+              </b>{" "}
+              {activeCommitted ? "USDC in" : "selected"}
+            </span>
+          ) : (
+            <span>tap a racer</span>
+          )}
+          {rec.t > 0 ? (
+            <span className="ml-2 text-volt">
+              {rec.c}/{rec.t} · {Math.round((100 * rec.c) / rec.t)}%
+            </span>
+          ) : null}
+        </div>
+        {active && ub?.enabled ? (
+          <button
+            type="button"
+            disabled={activeCommitted || (!realOpen && !showMoney)}
+            aria-expanded={showMoney}
+            onClick={() => setShowMoney((v) => !v)}
+            className="rounded-md border border-volt/45 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
           >
-            {pick.correct ? "winner picked" : "pick missed"}
-          </span>
-        ) : active ? (
-          <span className="text-ink">
-            <b>{myLabel}</b> selected{pick!.committed ? " · USDC in" : ""}
-          </span>
-        ) : null}
-        {rec.t > 0 ? (
-          <span className="ml-2 text-volt">
-            {rec.c}/{rec.t} ({Math.round((100 * rec.c) / rec.t)}%)
-          </span>
+            {activeCommitted
+              ? "USDC in"
+              : showMoney
+                ? "hide USDC"
+                : realOpen
+                  ? `USDC ×${formatOdds(ub.multiplier)}`
+                  : realClosed
+                    ? "bets closed"
+                    : "USDC opens live"}
+          </button>
         ) : null}
       </div>
-      ) : null}
-      {active ? (
+      {active && showMoney ? (
         <UsdcBet
           state={state}
           pickedAgent={pick!.agentId}
@@ -1213,8 +1257,8 @@ function UsdcBet({
             {live ? (
               <>
                 odds{" "}
-                <b style={{ color: "var(--color-volt)" }}>×{mult.toFixed(1)}</b>{" "}
-                and dropping fast · early bets get the edge
+                <b style={{ color: "var(--color-volt)" }}>×{formatOdds(mult)}</b>{" "}
+                · closes early to prevent late farming
               </>
             ) : raceBettable && ub.open === false ? (
               "real bets closed for this race"
