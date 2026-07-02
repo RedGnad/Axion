@@ -113,7 +113,7 @@ export default function Race({ round }: { round: RoundView | null }) {
       {round.competitors.map((c) => {
         const col = livery(c.id);
         return (
-          <div key={c.id} className={`relative ${laneH} border-b border-dashed border-white/5 sm:flex-1`}>
+          <div key={c.id} className={`relative ${laneH} border-b border-dashed border-white/5 sm:min-h-[3.5rem] sm:flex-1`}>
             <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[12px] sm:text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
               {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
