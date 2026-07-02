@@ -57,7 +57,7 @@ export default function Page() {
           <HowItWorks />
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70"
+            className="reveal mt-3 overflow-hidden rounded-lg border border-line bg-panel/70 sm:flex sm:min-h-[calc(100svh-12rem)] sm:flex-col"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
@@ -68,7 +68,7 @@ export default function Page() {
                 <RaceControl state={state} online={online} />
               </div>
             </div>
-            <div className="border-t border-line px-3 py-3 sm:px-5 sm:py-4">
+            <div className="border-t border-line px-3 py-3 sm:flex sm:flex-1 sm:flex-col sm:px-5 sm:py-4">
               <SectionTitle
                 title="The grid"
                 right={
