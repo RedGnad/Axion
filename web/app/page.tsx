@@ -90,9 +90,9 @@ export default function Page() {
             ) : null}
             <LiveTicker state={state} />
           </section>
-          <DailyThesis state={state} online={online} />
           <ZoneLabel title="Standings" blurb="which agent calls ETH best" />
           <Leaderboard state={state} />
+          <DailyThesis state={state} online={online} />
         </>
       )}
 
@@ -1108,53 +1108,48 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             : "racers line up when a race starts"}
         </div>
       )}
-      <div className="mt-3 flex min-h-[44px] flex-wrap items-center justify-between gap-2 rounded-lg border border-line/70 bg-panel2/35 px-3 py-2 sm:px-4">
-        <div className="min-w-0 font-mono text-[11px] uppercase tracking-wider text-dim">
-          {pick?.resolved ? (
-            <span
-              className="font-display text-[13px] tracking-wide"
-              style={{
-                color: pick.correct ? "var(--color-under)" : "var(--color-over)",
-              }}
+      {active || pick?.resolved ? (
+        <div className="mt-3 flex min-h-[44px] flex-wrap items-center justify-between gap-2 rounded-lg border border-line/70 bg-panel2/35 px-3 py-2 sm:px-4">
+          <div className="min-w-0 font-mono text-[11px] uppercase tracking-wider text-dim">
+            {pick?.resolved ? (
+              <span
+                className="font-display text-[13px] tracking-wide"
+                style={{
+                  color: pick.correct ? "var(--color-under)" : "var(--color-over)",
+                }}
+              >
+                {pick.correct ? "winner picked" : "pick missed"}
+              </span>
+            ) : (
+              <span>
+                <b className="font-display text-[13px] tracking-wide text-ink">
+                  {myLabel}
+                </b>{" "}
+                {activeCommitted ? "USDC in" : "selected"}
+              </span>
+            )}
+          </div>
+          {active && ub?.enabled ? (
+            <button
+              type="button"
+              disabled={activeCommitted || (!realOpen && !showMoney)}
+              aria-expanded={showMoney}
+              onClick={() => setShowMoney((v) => !v)}
+              className="rounded-md border border-volt/45 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
             >
-              {pick.correct ? "winner picked" : "pick missed"}
-            </span>
-          ) : active ? (
-            <span>
-              <b className="font-display text-[13px] tracking-wide text-ink">
-                {myLabel}
-              </b>{" "}
-              {activeCommitted ? "USDC in" : "selected"}
-            </span>
-          ) : (
-            <span>tap a racer</span>
-          )}
-          {rec.t > 0 ? (
-            <span className="ml-2 text-volt">
-              {rec.c}/{rec.t} · {Math.round((100 * rec.c) / rec.t)}%
-            </span>
+              {activeCommitted
+                ? "USDC in"
+                : showMoney
+                  ? "hide USDC"
+                  : realOpen
+                    ? `USDC ×${formatOdds(ub.multiplier)}`
+                    : realClosed
+                      ? "bets closed"
+                      : "USDC opens live"}
+            </button>
           ) : null}
         </div>
-        {active && ub?.enabled ? (
-          <button
-            type="button"
-            disabled={activeCommitted || (!realOpen && !showMoney)}
-            aria-expanded={showMoney}
-            onClick={() => setShowMoney((v) => !v)}
-            className="rounded-md border border-volt/45 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
-          >
-            {activeCommitted
-              ? "USDC in"
-              : showMoney
-                ? "hide USDC"
-                : realOpen
-                  ? `USDC ×${formatOdds(ub.multiplier)}`
-                  : realClosed
-                    ? "bets closed"
-                    : "USDC opens live"}
-          </button>
-        ) : null}
-      </div>
+      ) : null}
       {active && showMoney ? (
         <UsdcBet
           state={state}
@@ -1391,7 +1386,7 @@ function DailyThesis({
   const used = thesis ? thesis.usedToday >= thesis.capToday : false;
   const start = async () => {
     setBusy(true);
-    setMsg("starting the thesis race…");
+    setMsg("starting the long race...");
     try {
       const res = await fetch(`${RUNNER_URL}/api/round`, {
         method: "POST",
@@ -1405,7 +1400,7 @@ function DailyThesis({
       };
       setMsg(
         j.started
-          ? "Daily thesis starting. Agents are hiring richer data."
+          ? "Long race starting. Agents have more time to think."
           : j.reason || j.error || "not available right now",
       );
     } catch {
@@ -1418,18 +1413,18 @@ function DailyThesis({
     }
   };
   return (
-    <section className="reveal mt-4 rounded-lg border border-line bg-panel/55 px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:px-5">
+    <section className="reveal mt-8 rounded-lg border border-line bg-panel/55 px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-4 sm:px-5">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-display text-base uppercase tracking-wide text-ink">
-            Daily Thesis Race
+            Daily Long Race
           </span>
           <span className="rounded border border-line px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
             15m
           </span>
         </div>
         <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-dim">
-          One slower data-rich race for research, wallet, sentiment and macro agents. Blitz stays the main game.
+          One slower round per day. More time, richer calls, bigger drama.
         </p>
         {msg ? <div className="mt-1.5 font-mono text-[11px] text-volt">{msg}</div> : null}
       </div>
@@ -1438,7 +1433,7 @@ function DailyThesis({
         disabled={!online || running || busy || used}
         className="mt-3 w-full rounded-md border border-volt/55 px-4 py-2.5 font-display text-[13px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60 sm:mt-0 sm:w-auto"
       >
-        {used ? "today done" : busy ? "starting…" : "start thesis"}
+        {used ? "today done" : busy ? "starting..." : "start long race"}
       </button>
     </section>
   );
