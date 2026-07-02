@@ -146,20 +146,9 @@ export default function Race({ round }: { round: RoundView | null }) {
       })}
       {/* start line — where the scored race begins; karts idle just behind it during agent evaluation */}
       <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_L}%`, marginLeft: -1, width: 2, background: 'repeating-linear-gradient(180deg, var(--color-dim) 0 5px, transparent 5px 10px)', opacity: 0.8 }} />
-      <div className="absolute -top-1 z-0 font-mono text-[9px] uppercase tracking-[0.15em] text-dim" style={{ left: `${RACE_L}%`, transform: 'translateX(-50%)' }}>start</div>
+      <div className="absolute -top-3 z-10 rounded bg-panel px-1 font-mono text-[9px] uppercase tracking-[0.15em] text-dim" style={{ left: `${RACE_L}%`, transform: 'translateX(-50%)' }}>start</div>
       {/* finish line — anchored to RACE_R% so the leader's kart lands exactly on it */}
       <div className="absolute top-0 bottom-1.5 z-0" style={{ left: `${RACE_R}%`, marginLeft: -1.5, width: 3, background: 'linear-gradient(var(--color-volt), var(--color-gold))', boxShadow: '0 0 18px rgba(182,255,58,.55)' }} />
-      {/* clean CSS checkered finish marker (no cheap emoji) */}
-      <div
-        className="absolute -top-2.5 z-10"
-        style={{
-          left: `${RACE_R}%`, transform: 'translateX(-50%)', width: 14, height: 10, borderRadius: 1,
-          backgroundColor: '#0a0a0b',
-          backgroundImage: 'conic-gradient(#fff 90deg, transparent 0 180deg, #fff 0 270deg, transparent 0)',
-          backgroundSize: '7px 5px',
-          outline: '1px solid rgba(255,255,255,.6)',
-        }}
-      />
       <div className="mt-3 hidden border-t border-line/50 pt-2 sm:block">
         <span className="text-[11px] leading-snug text-dim">Closer forecasts move farther. Closest to Pyth wins.</span>
       </div>
