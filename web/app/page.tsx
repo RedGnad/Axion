@@ -56,7 +56,7 @@ export default function Page() {
         <>
           {/* ── COMMAND CENTER — everything live, above the fold (2026 real-time UX) ── */}
           <section
-            className="reveal mt-2 overflow-hidden rounded-lg border border-line bg-panel/70 sm:min-h-[calc(100svh-9.5rem)]"
+            className="reveal mt-2 overflow-hidden rounded-lg border border-line bg-panel/70"
             style={{ animationDelay: "80ms" }}
           >
             <div className="grid gap-px bg-line sm:grid-cols-[1.05fr_1fr]">
@@ -851,9 +851,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
   return (
     <div>
       {/* Free no-wallet on-ramp; USDC is an optional upgrade on the SAME pick (one decision). */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2 sm:px-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-volt/30 bg-volt/[0.04] px-3 py-2 sm:px-4 sm:py-2.5">
         <div>
-          <div className="font-display text-[15px] uppercase tracking-wide text-volt sm:text-base">
+          <div className="font-display text-[15px] uppercase tracking-wide text-volt sm:text-lg">
             Back the winner. Free.
           </div>
         </div>
@@ -882,10 +882,10 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
         <div
           className={cn(
             cards.length === 1
-              ? "mt-2 grid grid-cols-1 gap-2"
+              ? "mt-3 grid grid-cols-1 gap-2 sm:gap-3"
               : cards.length === 2
-                ? "mt-2 grid grid-cols-2 gap-2"
-                : "mt-2 grid grid-cols-3 gap-2",
+                ? "mt-3 grid grid-cols-2 gap-2 sm:gap-3"
+                : "mt-3 grid grid-cols-3 gap-2 sm:gap-3",
             cards.length > 6 && "max-h-[520px] overflow-auto pr-1", // many agents → scroll, never flood
           )}
         >
@@ -938,7 +938,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                   onClick={() => choose(c.id)}
                   disabled={!tappable && !isPick}
                   className={cn(
-                    "flex min-h-[62px] w-full flex-col justify-between px-2.5 py-2 text-left sm:min-h-[70px] sm:px-3 sm:py-2.5",
+                    "flex min-h-[78px] w-full flex-col justify-between px-3 py-2.5 text-left sm:min-h-[104px] sm:px-4 sm:py-3.5",
                     tappable ? "cursor-pointer" : "cursor-default",
                   )}
                 >
@@ -948,13 +948,13 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       style={{ background: livery(c.id) }}
                     />
                     <div
-                      className="min-w-0 truncate font-display text-[15px] uppercase leading-none tracking-wide sm:text-base"
+                      className="min-w-0 truncate font-display text-base uppercase leading-none tracking-wide sm:text-xl"
                       style={{ opacity: boxed ? 1 : 0.78 }}
                     >
                       {c.label}
                     </div>
                   </div>
-                  <div className="mt-1 min-h-[0.9rem] font-mono text-[10px] uppercase tracking-wider text-dim sm:text-[11px]">
+                  <div className="mt-2 min-h-[1rem] font-mono text-[10px] uppercase tracking-wider text-dim sm:text-[11px]">
                     {live ? (
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
@@ -970,7 +970,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                     )}
                   </div>
                   <div
-                    className="mt-0.5 min-h-[0.9rem] font-mono text-[10px] font-bold uppercase tracking-[0.16em] sm:text-[11px] sm:tracking-[0.18em]"
+                    className="mt-1 min-h-[1rem] font-mono text-[10px] font-bold uppercase tracking-[0.16em] sm:text-[11px] sm:tracking-[0.18em]"
                     style={{
                       color: won
                         ? "var(--color-gold)"
