@@ -780,6 +780,7 @@ async function runOneRound(
             joinedRoster = joinedRoster.filter((j) => j.label !== competitor);
             metaById.delete(competitor);
             clearAgentPayout(competitor);
+            state.leaderboard = state.leaderboard.filter((row) => row.id !== competitor); // drop its standings row too
             refreshRoster();
             saveHistory();
             pushFeed(`${competitor} removed from the grid. It must return {prediction, rationale}. Fix the contract and re-register in the Garage.`);
@@ -1012,6 +1013,20 @@ async function main(): Promise<void> {
     }
   }
   refreshRoster(); // publish the upcoming racers (for idle free-prediction)
+
+  // Reconcile standings with reality: drop leaderboard rows for agents that are no longer racers
+  // (e.g. a community agent auto-purged for a bad contract). Personas + durable roster always survive,
+  // so this never wipes valid history even in view-only mode.
+  {
+    const validLbIds = new Set<string>([
+      ...PERSONALITIES.map((p) => p.id),
+      ...competitors.map((c) => c.id),
+      ...joinedRoster.map((j) => j.label),
+    ]);
+    const before = state.leaderboard.length;
+    state.leaderboard = state.leaderboard.filter((row) => validLbIds.has(row.id));
+    if (state.leaderboard.length !== before) saveHistory();
+  }
 
   // The runner is API-only now: ONE interface = the Vercel front. Redirect / there (no 2nd site).
   const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';
