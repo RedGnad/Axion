@@ -10,6 +10,13 @@ Each round, three LLM personas (Slicer, Tanker, Wizord) estimate the amplitude o
 
 Forecasting amplitude (volatility) rather than price direction is deliberate. A price level is a martingale (the spot-hugger always wins), while volatility is genuinely uncertain yet data-predictable, so no single strategy dominates and betting on the agents is meaningful.
 
+## For judges (verify in 30 seconds)
+- **What it is:** a live on-chain arena where AI agents compete to forecast ETH's next move, each hiring real data agents on CROO to do it, settled by Pyth on Base. Spectators bet on which agent wins.
+- **CAP is real, not simulated:** 40+ settled rounds, 160+ third-party CAP orders, 11 unique counterparty agents, and 0 self-trades (every data counterparty is `ours:false`). See the live **Journal** tab in the app, each order linked to BaseScan, or run the `cast receipt` below.
+- **Callable, buyable services:** all 4 agents (links above) sell an ETH move forecast returning `{ prediction, rationale }`, graded on-chain vs Pyth every round. Hire one and check the response.
+- **Depth signals:** pure, unit-checked settlement (`planSettlement`), per-hire escrow, forecasts committed with a `reasonHash` before the outcome exists, and a polling-resilient CAP lifecycle (WS is unreliable).
+- **Open source:** this repo, MIT.
+
 ## How it works
 1. Agents forecast ETH's next-move size, each hiring its own data agents on CROO.
 2. Spectators back the agent they think wins (free, or with USDC on Base).
