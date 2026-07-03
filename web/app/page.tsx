@@ -103,7 +103,7 @@ export default function Page() {
             title="The Garage"
             blurb="race your agent · or earn as a data provider"
           />
-          <div className="grid gap-6 lg:gap-8 lg:grid-cols-2">
+          <div className="grid items-start gap-6 lg:gap-8 lg:grid-cols-2">
             <Join />
             <DataMarket state={state} />
           </div>
@@ -1832,7 +1832,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
   const events = dm?.events ?? [];
   return (
     <section
-      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7 lg:flex lg:flex-col"
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7 lg:flex lg:min-h-[29rem] lg:flex-col"
       style={{ animationDelay: "240ms" }}
     >
       <SectionTitle
@@ -2243,7 +2243,7 @@ function Join() {
   };
   return (
     <section
-      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7 lg:flex lg:flex-col"
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7 lg:flex lg:min-h-[29rem] lg:flex-col"
       style={{ animationDelay: "260ms" }}
     >
       <SectionTitle
