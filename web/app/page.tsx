@@ -1843,33 +1843,47 @@ function DataMarket({ state }: { state: ArenaState | null }) {
       />
       {dm ? (
         <>
-          <div className="mt-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-display text-5xl tnum text-volt">
-              {usedCount}
-            </span>
-            <span className="font-mono text-[11px] uppercase leading-tight tracking-wider text-dim">
-              providers used by our racers
-              <br />
-              <b className="text-ink">${totalPaid.toFixed(2)}</b> paid on-chain
-            </span>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-line/60 bg-panel2/30 px-3.5 py-3">
+              <div className="font-display text-4xl leading-none tnum text-volt">
+                {usedCount}
+              </div>
+              <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                providers used
+              </div>
+            </div>
+            <div className="rounded-lg border border-line/60 bg-panel2/30 px-3.5 py-3">
+              <div className="font-display text-4xl leading-none tnum text-ink">
+                ${totalPaid.toFixed(2)}
+              </div>
+              <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                paid on-chain
+              </div>
+            </div>
           </div>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
+          <p className="mt-3 text-[13.5px] leading-relaxed text-dim">
             Our racers hire live data providers on CROO. List a relevant data
-            agent; once our racers use it, you get paid on-chain.
+            agent; once used, you get paid on-chain.
           </p>
           {paid.length ? (
             <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
-              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                top providers paid
+              <div className="mb-2.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-dim">
+                <span className="w-4" />
+                <span className="flex-1">top providers</span>
+                <span className="w-10 text-right">hires</span>
+                <span className="w-14 text-right">paid</span>
               </div>
-              <div className="mt-2.5 space-y-1.5">
-                {paid.slice(0, 4).map((p, i) => (
+              <div className="space-y-2">
+                {paid.slice(0, 3).map((p, i) => (
                   <div key={i} className="flex items-center gap-2 text-[13px]">
-                    <span className="flex-1 truncate text-ink">{p.label}</span>
-                    <span className="w-12 text-right font-mono text-[12px] tnum text-dim">
-                      {p.hires}x
+                    <span className="w-4 text-center font-mono text-[11px] tnum text-dim">
+                      {i + 1}
                     </span>
-                    <span className="w-16 text-right font-mono text-[12px] tnum text-under">
+                    <span className="flex-1 truncate text-ink">{p.label}</span>
+                    <span className="w-10 text-right font-mono text-[12px] tnum text-dim">
+                      {p.hires}
+                    </span>
+                    <span className="w-14 text-right font-mono text-[12px] tnum text-under">
                       ${p.paidUSDC.toFixed(2)}
                     </span>
                   </div>
