@@ -1857,6 +1857,26 @@ function DataMarket({ state }: { state: ArenaState | null }) {
             Our racers hire live data providers on CROO. List a relevant data
             agent; once our racers use it, you get paid on-chain.
           </p>
+          {paid.length ? (
+            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
+              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                top providers paid
+              </div>
+              <div className="mt-2.5 space-y-1.5">
+                {paid.slice(0, 4).map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 text-[13px]">
+                    <span className="flex-1 truncate text-ink">{p.label}</span>
+                    <span className="w-12 text-right font-mono text-[12px] tnum text-dim">
+                      {p.hires}x
+                    </span>
+                    <span className="w-16 text-right font-mono text-[12px] tnum text-under">
+                      ${p.paidUSDC.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {!open ? (
             <button
               onClick={() => setOpen(true)}
