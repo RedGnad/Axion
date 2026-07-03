@@ -173,12 +173,23 @@ const LIVE_SOURCING = process.env.ARENA_LIVE_SOURCING === '1';
 const isCuratedSeed = (serviceId: string): boolean => DATA_AGENTS.some((e) => e.serviceId === serviceId);
 const PROVIDER_EXPLORATION_RATE = Math.max(0, Math.min(1, Number(process.env.ARENA_PROVIDER_EXPLORATION_RATE ?? '0.02')));
 
+// NEVER hire our OWN agents as data providers. Axion + the personas are now listed as forecast
+// services on the store; a persona buying from Axion (or another persona) would be a SELF-TRADE, the
+// exact pattern the hackathon flags/DQs. Data counterparties must stay genuine third parties.
+const OWN_SERVICE_IDS = new Set<string>(
+  [
+    process.env.AXION_SERVICE_ID,
+    process.env.COMPETITOR_BULL_SERVICE_ID, process.env.COMPETITOR_BEAR_SERVICE_ID, process.env.COMPETITOR_QUANT_SERVICE_ID,
+    process.env.SLICER_SERVICE_ID, process.env.TANKER_SERVICE_ID, process.env.WIZORD_SERVICE_ID,
+  ].filter((x): x is string => !!x),
+);
+
 /** Choose the data provider for a capability: curated seed by default; with live sourcing on, the best
  *  store provider by real 7d demand, occasionally an untried high-demand newcomer (to qualify it). */
 async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   const seed = getDataAgent(capability) ?? null;
   if (!LIVE_SOURCING) return seed;
-  const cands = await candidatesForCapability(capability); // ranked desc by orders7d; speed/health weighted below
+  const cands = (await candidatesForCapability(capability)).filter((c) => !OWN_SERVICE_IDS.has(c.serviceId)); // never self-trade
   if (!cands.length) return seed;
   // ROTATE so WHICH provider is hired varies round to round (real store dynamism), demand-weighted so
   // high-demand providers show up more often but never EXCLUSIVELY (previously it always took the
