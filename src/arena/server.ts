@@ -78,6 +78,7 @@ interface HistoryEdge {
   payTxHash: string;
   clearTxHash: string;
   latencyMs?: number; // hire latency → provider-speed leaderboard
+  raceEntry?: boolean; // arena -> racer order (real tx, not a data-provider purchase)
 }
 interface HistoryItem {
   id: string;
@@ -230,9 +231,9 @@ function primeProviderHealth(): void {
 /** Record first-time (agent → provider) hires from a settled round as 'adopted' events (third
  *  parties only — adopting our own seed agents isn't ecosystem motion). Honest: only genuinely
  *  new pairs emit; the pair set is persisted + baseline-seeded so nothing double-counts. */
-function detectAdoptions(edges: { competitor: string; label: string; ours: boolean }[], ts: number, emit: boolean): void {
+function detectAdoptions(edges: { competitor: string; label: string; ours: boolean; raceEntry?: boolean }[], ts: number, emit: boolean): void {
   for (const e of edges) {
-    if (e.ours) continue;
+    if (e.ours || e.raceEntry) continue; // race-entry orders aren't data-agent adoptions
     const pair = `${e.competitor}|${e.label}`;
     if (seenPairs.has(pair)) continue;
     seenPairs.add(pair);
@@ -374,11 +375,11 @@ async function loadHistory(): Promise<void> {
   // newest adoptions sort to the top. Not fabricated: every entry is a real settled on-chain hire.
   if (!storeEvents.length && seenPairs.size === 0) {
     for (const h of [...state.history].sort((a, b) => Date.parse(a.settledAt) - Date.parse(b.settledAt))) {
-      detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(h.settledAt) || Date.now(), true);
+      detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours, raceEntry: e.raceEntry })), Date.parse(h.settledAt) || Date.now(), true);
     }
   } else {
     // Ensure every historical pair is marked seen (so we never re-emit an old adoption as "new").
-    for (const h of state.history) detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), 0, false);
+    for (const h of state.history) detectAdoptions((h.edges ?? []).map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours, raceEntry: e.raceEntry })), 0, false);
   }
   primeProviderHealth();
   // Replay the last settled round so the track + feed are populated on every visit (not "no rounds yet").
@@ -397,7 +398,7 @@ async function loadHistory(): Promise<void> {
       competitors: last.competitors ?? [],
     };
     for (const e of (last.edges ?? []).slice().reverse()) {
-      pushFeed(`${e.label} hired. Round settled`, BASESCAN + e.payTxHash);
+      pushFeed(e.raceEntry ? `Arena hired ${e.label} to race. Round settled` : `${e.label} hired. Round settled`, BASESCAN + e.payTxHash);
     }
     pushFeed(`Last round: amplitude $${last.amplitude.toFixed(2)} vs line $${last.line.toFixed(2)}. Winner(s): ${last.winners.map((w) => personaMeta(w).label).join(', ')}`);
   }
@@ -510,7 +511,7 @@ async function refreshDataMarket(wired?: WiredProvider[]): Promise<void> {
     const stats = new Map<string, { label: string; serviceId: string; hires: number; latSum: number; latN: number }>();
     for (const h of state.history) {
       for (const e of h.edges ?? []) {
-        if (e.ours) continue;
+        if (e.ours || e.raceEntry) continue; // data providers only, not race-entry orders
         const key = e.serviceId || e.label; // dedupe by serviceId; old rows without ids fall back to label
         const row = stats.get(key) ?? { label: e.label, serviceId: e.serviceId ?? '', hires: 0, latSum: 0, latN: 0 };
         row.hires += 1;
@@ -799,10 +800,15 @@ async function runOneRound(
           // This agent's data is in → it launches NOW; record its latency (fast = head-start + ⚡).
           c.launchAtMs = Date.now();
           c.dataMs = roundOpenMs ? Date.now() - roundOpenMs : undefined;
-          c.hires = edges.map((e) => e.label); // which providers it bought this round (live, per agent)
+          c.hires = edges.filter((e) => !e.raceEntry).map((e) => e.label); // data providers it bought this round (live, per agent)
         }
         for (const e of edges) {
-          pushFeed(`${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`, BASESCAN + e.payTxHash);
+          pushFeed(
+            e.raceEntry
+              ? `Arena hired ${e.label} to race [3rd-party]`
+              : `${personaMeta(e.competitor).label} hired ${e.label} [${e.ours ? 'ours' : '3rd-party'}]`,
+            BASESCAN + e.payTxHash,
+          );
         }
         pushFeed(`${personaMeta(forecast.competitor).label} estimates $${forecast.prediction.toFixed(2)}`);
         broadcast();
@@ -878,7 +884,7 @@ async function runOneRound(
           winners,
           settledAt: o.settledAt,
           competitors: settledCompetitors,
-          edges: edges.map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash, latencyMs: e.latencyMs })),
+          edges: edges.map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId, ours: e.ours, payTxHash: e.payTxHash, clearTxHash: e.clearTxHash, latencyMs: e.latencyMs, raceEntry: e.raceEntry })),
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
@@ -899,10 +905,10 @@ async function runOneRound(
         })();
         pushFeed(`Settled. Amplitude $${o.actual.toFixed(2)} (line $${line.toFixed(2)}). Winner: ${winners.map((w) => personaMeta(w).label).join(', ')}`);
         // "Adopted" deltas: any agent→provider pair hired for the first time this round (real new A2A edge).
-        detectAdoptions(item.edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours })), Date.parse(item.settledAt) || Date.now(), true);
+        detectAdoptions(item.edges.map((e) => ({ competitor: e.competitor, label: e.label, ours: e.ours, raceEntry: e.raceEntry })), Date.parse(item.settledAt) || Date.now(), true);
         saveHistory();
-        // Reflect the providers actually wired this round into the live data-market panel.
-        void refreshDataMarket(item.edges.map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));
+        // Reflect the providers actually wired this round into the live data-market panel (data hires only, not race-entry orders).
+        void refreshDataMarket(item.edges.filter((e) => !e.raceEntry).map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours })));
         broadcast();
       },
     }, { recentVol: computeRecentVol(windowSeconds) });
@@ -941,7 +947,7 @@ async function main(): Promise<void> {
   console.log(`[arena-server] durable store: ${storeEnabled() ? 'Upstash (on)' : 'off (seed/file fallback)'}`);
 
   // Live store data-market: census at boot (seed `wired` from the last replayed round) + every 10min.
-  const lastEdges = (state.history[0]?.edges ?? []).map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
+  const lastEdges = (state.history[0]?.edges ?? []).filter((e) => !e.raceEntry).map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
   void refreshDataMarket(lastEdges.length ? lastEdges : undefined);
   setInterval(() => void refreshDataMarket(), 10 * 60_000);
   refreshUsdcBet();

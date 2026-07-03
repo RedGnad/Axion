@@ -49,6 +49,9 @@ export interface ArenaEdge {
   ours: boolean;
   /** Wall-clock latency of this hire (ms) — the provider-speed signal for the ecosystem leaderboard. */
   latencyMs?: number;
+  /** True when this edge is the arena HIRING a racer (arena -> external agent), not a data-agent
+   *  purchase. Real on-chain order (counts as a verified tx), but excluded from data-provider stats. */
+  raceEntry?: boolean;
 }
 
 export interface RoundResult {
@@ -316,10 +319,25 @@ async function playRemote(
     hiredServiceIds: [c.serviceId],
     reasonHash: reasonHash({ competitor: c.id, prediction, rationale, inputs: `remote:${c.serviceId}` }),
   };
-  // A remote composes its data INTERNALLY (multi-hop, not in our manifest), so there is no "who it paid"
-  // edge to show — emitting one rendered the confusing self-hire "X hired X". The arena→remote order is
-  // real on-chain, but it's the race entry, not a data hire, so it doesn't belong in the agent's hires.
-  return { forecast: f, edges: [], fails: [] as HireFail[] };
+  // A remote composes its data INTERNALLY (multi-hop, not in our manifest), so we don't emit a "data
+  // hire" edge for it. But the arena→remote order IS a real on-chain CAP order: for an INDEPENDENT
+  // agent (ours:false) it is our strongest adoption proof, so we record it as a `raceEntry` edge (real
+  // tx, shown in the journal, excluded from data-provider stats). For our OWN remotes we suppress it to
+  // avoid the confusing self-hire "X hired X".
+  const edges: ArenaEdge[] = c.ours
+    ? []
+    : [{
+        competitor: c.id,
+        capability: 'competitor',
+        serviceId: c.serviceId,
+        label: c.label,
+        orderId: hire.orderId,
+        payTxHash: hire.payTxHash,
+        clearTxHash: hire.clearTxHash,
+        ours: false,
+        raceEntry: true,
+      }];
+  return { forecast: f, edges, fails: [] as HireFail[] };
 }
 
 /**

@@ -920,7 +920,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
             const isOpen = showCallDetail && open === c.id;
             const d = detail(c.id);
             const hires = (hiresSrc?.edges ?? []).filter(
-              (e) => e.competitor === c.id,
+              (e) => e.competitor === c.id && !e.raceEntry,
             );
             return (
               <div
@@ -1530,6 +1530,8 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 }
 
 const BASESCAN = "https://basescan.org/tx/";
+// Minimum graded rounds before an agent is ranked (below this it shows as "new", unranked).
+const MIN_RANKED_ROUNDS = 3;
 
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
@@ -1691,8 +1693,18 @@ function Ledger({ state }: { state: ArenaState | null }) {
                           }}
                         />
                         <span className="text-ink/75">
-                          <b className="text-ink">{cap(e.competitor)}</b>→
-                          {e.label}
+                          {e.raceEntry ? (
+                            <>
+                              <b className="text-ink">Arena</b>→
+                              {cap(e.competitor)}
+                              <span className="ml-1 text-dim">(race entry)</span>
+                            </>
+                          ) : (
+                            <>
+                              <b className="text-ink">{cap(e.competitor)}</b>→
+                              {e.label}
+                            </>
+                          )}
                         </span>
                         {e.payTxHash ? (
                           <a
@@ -1743,6 +1755,15 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   const lb = (state?.leaderboard ?? []).filter(
     (r) => activeIds.size > 0 && activeIds.has(r.id),
   );
+  // Fairness: an agent must have MIN_RANKED_ROUNDS graded rounds before it is ranked, so a newcomer
+  // can't top the board on one lucky round. Ranked agents keep the server's accuracy order; provisional
+  // ones stay visible (adoption proof) but sort to the bottom by how close they are to being ranked.
+  const lbRanked = lb.filter((r) => r.rounds >= MIN_RANKED_ROUNDS);
+  const lbProvisional = lb
+    .filter((r) => r.rounds < MIN_RANKED_ROUNDS)
+    .sort((a, b) => b.rounds - a.rounds);
+  const lbOrdered = [...lbRanked, ...lbProvisional];
+  const lbRankedCount = lbRanked.length;
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
@@ -1751,7 +1772,10 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
       <SectionTitle
         title="Standings"
         right={
-          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
+          <span
+            className="font-mono text-[11px] uppercase tracking-wider text-dim"
+            title={`ranked by accuracy once an agent has ${MIN_RANKED_ROUNDS} graded rounds — new agents stay unranked so one lucky round can't top the board`}
+          >
             ranked by accuracy
           </span>
         }
@@ -1773,36 +1797,58 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
       <div
         className={cn(
           "space-y-1.5",
-          lb.length > 8 && "max-h-[460px] overflow-auto pr-1",
+          lbOrdered.length > 8 && "max-h-[460px] overflow-auto pr-1",
         )}
       >
-        {lb.length === 0 ? (
+        {lbOrdered.length === 0 ? (
           <div className="py-6 text-center font-mono text-sm text-dim">
             no rounds yet
           </div>
         ) : (
-          lb.map((r, i) => {
+          lbOrdered.map((r, i) => {
             const winRate = r.rounds
               ? Math.round((100 * r.wins) / r.rounds)
               : 0;
+            const provisional = r.rounds < MIN_RANKED_ROUNDS;
             return (
               <div
                 key={r.id}
-                className="flex items-center gap-3 rounded-md border border-line px-3 py-2"
+                className={cn(
+                  "flex items-center gap-3 rounded-md border px-3 py-2",
+                  provisional ? "border-line/50 bg-panel/20" : "border-line",
+                )}
               >
                 <span className="w-5 font-display text-lg tnum text-dim">
-                  {i + 1}
+                  {provisional ? "·" : lbRankedCount >= i + 1 ? i + 1 : ""}
                 </span>
                 <span
                   className="h-3 w-3 rounded-sm"
-                  style={{ background: livery(r.id) }}
+                  style={{
+                    background: livery(r.id),
+                    opacity: provisional ? 0.5 : 1,
+                  }}
                 />
-                <span className="flex-1 truncate font-display text-sm uppercase tracking-wide">
-                  {r.label}
+                <span className="flex flex-1 items-center gap-2 truncate font-display text-sm uppercase tracking-wide">
+                  <span className="truncate">{r.label}</span>
+                  {provisional ? (
+                    <span
+                      className="shrink-0 rounded bg-line/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-dim"
+                      title={`unranked until ${MIN_RANKED_ROUNDS} graded rounds`}
+                    >
+                      new · {r.rounds}/{MIN_RANKED_ROUNDS}
+                    </span>
+                  ) : null}
                 </span>
                 <span
-                  className="w-14 text-right font-mono text-[11px] tnum text-volt"
-                  title="avg error (lower is better)"
+                  className={cn(
+                    "w-14 text-right font-mono text-[11px] tnum",
+                    provisional ? "text-dim" : "text-volt",
+                  )}
+                  title={
+                    provisional
+                      ? "provisional — not yet ranked"
+                      : "avg error (lower is better)"
+                  }
                 >
                   {usd(r.avgError)}
                 </span>

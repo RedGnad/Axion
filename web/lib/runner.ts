@@ -48,6 +48,7 @@ export interface HistoryEdge {
   payTxHash: string;
   clearTxHash: string;
   latencyMs?: number;
+  raceEntry?: boolean; // arena -> racer order (real tx, not a data-provider purchase)
 }
 export interface HistoryItem {
   id: string;
