@@ -287,7 +287,6 @@ function Header({
         >
           how it works
         </button>
-        <Chip label="asset" value={state?.asset ?? "ETH"} />
         <span
           className={cn(
             "inline-flex items-center gap-2 rounded-md border border-line px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider",
@@ -1824,11 +1823,13 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
 
 function DataMarket({ state }: { state: ArenaState | null }) {
   const dm = state?.dataMarket;
+  const [open, setOpen] = useState(false); // collapse to match the Join card height by default
   const capName = (s?: string) => (s ? s.replace(/-/g, " ") : "data");
   const visibleWired = (dm?.wired ?? []).filter((w) => !w.ours);
   const paid = dm?.providerStats ?? [];
   const usedCount = paid.length;
   const totalPaid = paid.reduce((sum, p) => sum + p.paidUSDC, 0);
+  const events = dm?.events ?? [];
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
@@ -1852,31 +1853,83 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               <b className="text-ink">${totalPaid.toFixed(2)}</b> paid on-chain
             </span>
           </div>
-
-          {visibleWired.length ? (
-            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
-              <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
-                last race providers
-              </div>
-              <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
-                {visibleWired.map((w, i) => (
-                  <div
-                    key={`${w.serviceId || w.label}-${i}`}
-                    className="flex items-center gap-2 rounded-md border border-line/60 px-2.5 py-2 text-[12.5px]"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-ink">
-                      {w.label}
-                    </span>
-                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim">
-                      {capName(w.capability)}
-                    </span>
+          <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
+            Our racers hire live data providers on CROO. List a relevant data
+            agent; once our racers use it, you get paid on-chain.
+          </p>
+          {!open ? (
+            <button
+              onClick={() => setOpen(true)}
+              className="mt-4 w-full rounded-lg border border-volt/50 bg-volt/[0.06] py-3 font-display text-[14px] uppercase tracking-wide text-volt transition hover:bg-volt/10"
+            >
+              Show data market ▾
+            </button>
+          ) : (
+            <button
+              onClick={() => setOpen(false)}
+              className="mt-4 font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink"
+            >
+              ▴ hide
+            </button>
+          )}
+          {open && (
+            <>
+              {events.length ? (
+                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                    store activity
                   </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+                  <div className="mt-2.5 max-h-[190px] space-y-2 overflow-auto pr-1">
+                    {events.map((e, i) => (
+                      <div
+                        key={i}
+                        className="flex items-baseline gap-2.5 text-[12.5px] leading-snug"
+                      >
+                        <span className="w-9 shrink-0 font-mono text-[11px] tnum text-dim">
+                          {ago(e.ts)}
+                        </span>
+                        <span
+                          className="w-[70px] shrink-0 font-mono text-[10px] uppercase tracking-wider"
+                          style={{
+                            color:
+                              e.kind === "joined"
+                                ? "var(--color-volt)"
+                                : "var(--color-under)",
+                          }}
+                        >
+                          {e.kind === "joined" ? "new listing" : "first hire"}
+                        </span>
+                        <span className="flex-1 text-ink/80">{e.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
-          {paid.length ? (
+              {visibleWired.length ? (
+                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-3.5">
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
+                    last race providers
+                  </div>
+                  <div className="mt-2.5 grid gap-1.5 sm:grid-cols-2">
+                    {visibleWired.map((w, i) => (
+                      <div
+                        key={`${w.serviceId || w.label}-${i}`}
+                        className="flex items-center gap-2 rounded-md border border-line/60 px-2.5 py-2 text-[12.5px]"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-ink">
+                          {w.label}
+                        </span>
+                        <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-dim">
+                          {capName(w.capability)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {paid.length ? (
                 <div className="mt-4">
                   <div className="font-mono text-[11px] uppercase tracking-wider text-dim">
                     all paid providers
@@ -1930,6 +1983,8 @@ function DataMarket({ state }: { state: ArenaState | null }) {
               No paid data hires yet. When racers buy data, the providers will
               appear here.
             </div>
+          )}
+            </>
           )}
         </>
       ) : (

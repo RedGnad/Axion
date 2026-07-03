@@ -283,7 +283,10 @@ function degradedNotice(why: string): string {
 /** A bad competitor RESPONSE (didn't honor the contract) is the builder's issue, not our infra. It
  *  should be surfaced to them, but must not raise the arena health banner. */
 function isInfraFail(reason: string): boolean {
-  return /insufficient|balance|funds|timed out|timeout|AGENT_NOT_FOUND|requester agent not found/i.test(reason);
+  // Only OUR actionable problems raise the user-facing health banner: an agent wallet out of USDC, or
+  // a seed agent removed from CROO. A third-party provider being slow/rejecting is normal flakiness
+  // (the round falls back gracefully) and must NOT alarm spectators; it is surfaced in the feed only.
+  return /insufficient|balance|funds|AGENT_NOT_FOUND|requester agent not found/i.test(reason);
 }
 
 function pendingPredictionCount(): number {
@@ -834,9 +837,10 @@ async function runOneRound(
       },
       onSettled: ({ round, line, edges }) => {
         const o = round.outcome!;
-        // Data flowed this round → clear the health banner; none → keep/raise it (A2A is hollow).
+        // Data flowed this round → clear the health banner. If none flowed, keep an existing funding
+        // banner (set by onHireFail) but do NOT raise a generic one: a round can fall back to baseline
+        // for benign reasons (slow providers), which shouldn't alarm spectators.
         if (edges.length > 0) { state.notice = undefined; lastHireFailReason = ''; }
-        else if (!state.notice) state.notice = { level: 'warn', text: 'Live data degraded: no data was purchased this round. Races used fallback forecasts; see Journal for details.' };
         // Accuracy decides the win; SPEED only breaks exact ties — among co-winners, the agent whose
         // data landed first takes it (legitimate edge for choosing fast data-providers).
         let winners = o.winners;
