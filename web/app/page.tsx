@@ -1626,13 +1626,33 @@ function Ledger({ state }: { state: ArenaState | null }) {
                       >
                         move {usd(h.amplitude)}
                       </span>
-                      {comps.map((c) => (
+                      {(() => {
+                        // Spread dots that land on (nearly) the same x so ties/near-ties don't hide
+                        // each other (e.g. two agents both calling $0.51 would stack into one dot).
+                        const order = comps
+                          .map((c) => ({ c, x: pct(c.estimate as number) }))
+                          .sort((a, b) => a.x - b.x);
+                        const laid: { c: (typeof comps)[number]; x: number; y: number }[] = [];
+                        let gStart = 0;
+                        for (let i = 1; i <= order.length; i++) {
+                          if (i === order.length || order[i].x - order[i - 1].x > 3) {
+                            const size = i - gStart;
+                            for (let k = gStart; k < i; k++) {
+                              const y = size <= 1 ? 50 : 22 + ((k - gStart) / (size - 1)) * 56;
+                              laid.push({ c: order[k].c, x: order[k].x, y });
+                            }
+                            gStart = i;
+                          }
+                        }
+                        return laid.map(({ c, x, y }) => (
                         <span
                           key={c.id}
                           title={`${c.label} called ${usd(c.estimate)}`}
-                          className="absolute top-1/2 z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                          className="absolute z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
                           style={{
-                            left: `${pct(c.estimate as number)}%`,
+                            left: `${x}%`,
+                            top: `${y}%`,
+                            zIndex: c.isWinner ? 25 : 20,
                             background: livery(c.id),
                             outline: c.isWinner
                               ? "2px solid var(--color-gold)"
@@ -1642,7 +1662,8 @@ function Ledger({ state }: { state: ArenaState | null }) {
                               : `0 0 6px ${livery(c.id)}99`,
                           }}
                         />
-                      ))}
+                        ));
+                      })()}
                     </div>
                     {/* compact legend: each call; winner in gold */}
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-[12px]">
