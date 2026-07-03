@@ -171,12 +171,20 @@ const BET_MIN_MULTIPLIER = Math.min(1.9, Math.max(1.05, Number(process.env.BET_M
 // Cold-start subsidy is BOUNDED: at most N free races/day from our treasury (each ~0.6 USDC of data
 // hires). Beyond it, "start" is paused till tomorrow (UTC) — a bot/spam can never drain us.
 const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '2'));
+// Bounded field: at most this many agents race per round (0 = no cap). Personas always race; the
+// remaining slots rotate through community agents by "least-recently-raced" so the treasury cost is
+// fixed regardless of how many agents join, and every agent still races within a bounded window.
+const MAX_RACERS = Math.max(0, Number(process.env.ARENA_MAX_RACERS_PER_ROUND ?? '8'));
 const BASESCAN = 'https://basescan.org/tx/';
 
 const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [], predictStats: { total: 0, correct: 0, visitors: 0 } };
 const clients = new Set<import('node:http').ServerResponse>();
 let competitors: Competitor[] = [];
 let metaById = new Map<string, { label: string; blurb: string }>();
+// Rotation for the bounded field: a FIFO queue of community agent ids (front = highest priority to
+// race next). Each round takes from the front; the ones that raced go to the back, the benched stay
+// at the front → strict round-robin, so over a cycle every agent races the same number of times.
+let rotationQueue: string[] = [];
 // Community agents that joined via /api/competitor — PERSISTED (Upstash) so the open roster survives
 // restarts/redeploys; re-instantiated as remote competitors at boot.
 let joinedRoster: { serviceId: string; label: string; payout?: string }[] = [];
@@ -207,6 +215,32 @@ function personaMeta(id: string): { label: string; blurb: string } {
 /** Publish the upcoming racers so the UI can let visitors free-predict the NEXT race while idle. */
 function refreshRoster(): void {
   state.roster = competitors.map((c) => ({ id: c.id, label: personaMeta(c.id).label }));
+}
+
+/**
+ * Pick who races THIS round under the bounded-field cap, and advance the rotation. Personas (kind
+ * 'local') always race — they are the arena's own show. The remaining slots (MAX_RACERS - personas) go
+ * to the front of a FIFO queue of community agents; the ones that race move to the back and the benched
+ * stay in front, so it is a strict round-robin: over a cycle every agent races the same number of times,
+ * no one is permanently benched, and it is deterministic. With the cap off (MAX_RACERS = 0) or a field
+ * that already fits, everyone races. This keeps the per-round hire cost fixed no matter how many join.
+ * MUTATES rotationQueue (call once per round).
+ */
+function pickRacers(all: Competitor[]): Competitor[] {
+  const personas = all.filter((c) => c.kind === 'local');
+  const remotes = all.filter((c) => c.kind === 'remote');
+  const remoteById = new Map(remotes.map((c) => [c.id, c] as const));
+  // Sync the queue with the live roster: drop departed agents, and add newcomers at the FRONT so a
+  // freshly joined agent races on the very next round (fast first race).
+  rotationQueue = rotationQueue.filter((id) => remoteById.has(id));
+  for (const c of remotes) if (!rotationQueue.includes(c.id)) rotationQueue.unshift(c.id);
+
+  const remoteSlots = MAX_RACERS > 0 ? Math.max(0, MAX_RACERS - personas.length) : remotes.length;
+  if (remotes.length <= remoteSlots) return [...personas, ...remotes]; // whole field fits — everyone races
+
+  const racingIds = rotationQueue.slice(0, remoteSlots);
+  rotationQueue = [...rotationQueue.slice(remoteSlots), ...racingIds]; // benched stay front, racers to back
+  return [...personas, ...racingIds.map((id) => remoteById.get(id)!)];
 }
 
 /** Append a real store-evolution event (newest first, capped). No causation, no fabrication. */
@@ -715,13 +749,19 @@ async function runOneRound(
   if (running || competitors.length === 0) return;
   const { format, windowSeconds } = opts;
   running = true;
+  // Bounded field: pick who races this round (personas + the next community agents in the rotation) and
+  // advance the round-robin. Everyone races when the field fits under the cap.
+  const racers = pickRacers(competitors);
+  if (racers.length < competitors.length) {
+    pushFeed(`Field rotated: ${racers.length} of ${competitors.length} agents race this round (bounded field)`);
+  }
   lastRoundStartMs = Date.now();
   // Schedule the next AUTOMATIC race and PERSIST it, so the "next" countdown is reliable and
   // SURVIVES restarts (Render redeploy/spin-down) instead of resetting to the full period each boot.
   if (AUTO_MS) { state.nextRoundAtMs = lastRoundStartMs + AUTO_MS; saveHistory(); }
   state.status = 'running';
   try {
-    await runRound(competitors, cfg, windowSeconds, {
+    await runRound(racers, cfg, windowSeconds, {
       onOpen: ({ id, openPrice, dqAtMs }) => {
         roundOpenMs = Date.now();
         state.round = {
@@ -735,7 +775,7 @@ async function runOneRound(
           etaRaceStartMs: roundOpenMs + HIRING_ETA_MS,
           etaSettleMs: roundOpenMs + HIRING_ETA_MS + windowSeconds * 1000,
           dqAtMs,
-          competitors: competitors.map((c) => ({
+          competitors: racers.map((c) => ({
             id: c.id,
             ...personaMeta(c.id),
             targets: c.kind === 'local' ? c.persona.capabilities : ['arena forecast'],
@@ -745,8 +785,8 @@ async function runOneRound(
         lastHireFailReason = ''; // fresh round; failures (if any) will re-arm the banner
         // Carry over predictions placed during the idle gap (on the now-racing roster), deduped.
         if (nextPredictPending.length) {
-          const racing = new Set(competitors.map((c) => c.id));
-          const carried = nextPredictPending.filter((g) => racing.has(g.agentId)); // drop picks on agents not racing
+          const racing = new Set(racers.map((c) => c.id));
+          const carried = nextPredictPending.filter((g) => racing.has(g.agentId)); // drop picks on agents not racing this round
           predictPending.set(id, carried);
           nextPredictPending = [];
         }

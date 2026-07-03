@@ -32,6 +32,9 @@ services:
         value: "1"
       - key: ARENA_DAILY_RACES
         value: "2"
+      # Bounded field: max agents per round (personas always race; community slots rotate least-recently-raced). 0 = no cap.
+      - key: ARENA_MAX_RACERS_PER_ROUND
+        value: "8"
       - key: ARENA_MIN_ROUND_MS
         value: "900000"
       - key: ARENA_PROVIDER_EXPLORATION_RATE
