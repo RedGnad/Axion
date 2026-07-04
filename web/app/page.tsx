@@ -1718,7 +1718,12 @@ function Ledger({ state }: { state: ArenaState | null }) {
                             <>
                               <b className="text-ink">Arena</b>→
                               {cap(e.competitor)}
-                              <span className="ml-1 text-dim">(race entry)</span>
+                              <span
+                                className="ml-1 cursor-help text-dim"
+                                title="The arena hires this external agent to enter the race. Independent agents compose their own data privately, so only this order is on our books; a persona hire instead shows the exact data agent it bought."
+                              >
+                                (race entry)
+                              </span>
                             </>
                           ) : (
                             <>
