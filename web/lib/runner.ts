@@ -62,6 +62,21 @@ export interface HistoryItem {
   settledAt: string;
   competitors?: CompetitorView[];
   edges?: HistoryEdge[];
+  scorecards?: SignedScorecard[];
+}
+/** A graded forecast signed by the arena EOA (EIP-712). Anyone can recover the signer to verify. */
+export interface SignedScorecard {
+  agent: string;
+  roundId: string;
+  reasonHash: string;
+  prediction: number;
+  actual: number;
+  errorUsd: number;
+  rank: number;
+  field: number;
+  settledAtSec: number;
+  signer: string;
+  signature: string;
 }
 export interface LeaderRow {
   id: string;

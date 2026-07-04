@@ -8,6 +8,7 @@ import { loadState, saveState, storeEnabled } from './store.js';
 import { candidatesForCapability, discoverProviders, markProviderSucceeded } from './discovery.js';
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
+import { signScorecard, type SignedScorecard } from './scorecard.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -93,6 +94,8 @@ interface HistoryItem {
   /** Final standings + the on-chain A2A edges, so a fresh visit can replay a populated, verifiable round. */
   competitors: CompetitorView[];
   edges: HistoryEdge[];
+  /** Tamper-proof signed accuracy scorecards (one per graded agent), attached shortly after settle. */
+  scorecards?: SignedScorecard[];
 }
 interface FeedItem {
   ts: number;
@@ -930,6 +933,44 @@ async function runOneRound(
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
         bumpLeaderboard(round.forecasts.map((f) => f.competitor), winners, o.errors);
+        // Sign each graded forecast into a tamper-proof accuracy scorecard (the verifiable track record).
+        // Pre-committed (reasonHash) + graded vs Pyth + signed by our published EOA → an agent's record
+        // cannot be silently rewritten. Async + best-effort: absent key or failure just skips it, no break.
+        const scoreKey = process.env.HOUSE_EOA_PRIVATE_KEY;
+        if (scoreKey) {
+          const graded = round.forecasts.filter((f) => Number.isFinite(o.errors[f.competitor]));
+          const ranked = [...graded].sort((a, b) => o.errors[a.competitor] - o.errors[b.competitor]);
+          const rankOf = new Map(ranked.map((f, i) => [f.competitor, i + 1]));
+          const settledAtSec = Math.round((Date.parse(o.settledAt) || Date.now()) / 1000);
+          void (async () => {
+            try {
+              const cards = await Promise.all(
+                graded.map((f) =>
+                  signScorecard(
+                    {
+                      agent: f.competitor,
+                      roundId: round.id,
+                      reasonHash: f.reasonHash,
+                      prediction: f.prediction,
+                      actual: o.actual,
+                      errorUsd: o.errors[f.competitor],
+                      rank: rankOf.get(f.competitor) ?? 0,
+                      field: graded.length,
+                      settledAtSec,
+                    },
+                    scoreKey,
+                  ),
+                ),
+              );
+              item.scorecards = cards;
+              saveHistory();
+              broadcast();
+              console.log(`[scorecard] signed ${cards.length} scorecard(s) for ${round.id}`);
+            } catch (err) {
+              console.warn('[scorecard] signing failed: ' + (err as Error).message);
+            }
+          })();
+        }
         // Resolve free guest predictions: a guess is correct if it backed a winning agent (ties = co-winners).
         const winSet = new Set(winners);
         const guesses = predictPending.get(round.id);

@@ -7,6 +7,7 @@ import {
   validateAgentOutput,
   RUNNER_URL,
   type ArenaState,
+  type SignedScorecard,
 } from "@/lib/runner";
 import { postUsdcBet, USDC_ADDRESS, ERC20_TRANSFER_ABI } from "@/lib/bet";
 import { cn, livery, usd } from "@/lib/utils";
@@ -18,7 +19,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { base } from "wagmi/chains";
-import { parseUnits } from "viem";
+import { parseUnits, verifyTypedData } from "viem";
 
 type Tab = "play" | "builders" | "proof";
 
@@ -1542,6 +1543,94 @@ const BASESCAN = "https://basescan.org/tx/";
 // Minimum graded rounds before an agent is ranked (below this it shows as "new", unranked).
 const MIN_RANKED_ROUNDS = 3;
 
+// EIP-712 schema for accuracy scorecards — MUST match src/arena/scorecard.ts exactly so a judge can
+// recover the signer independently in their own browser (the verifiability moat).
+const SCORECARD_DOMAIN = { name: "Axion Clash", version: "1", chainId: 8453 } as const;
+const SCORECARD_TYPES = {
+  Scorecard: [
+    { name: "agent", type: "string" },
+    { name: "roundId", type: "string" },
+    { name: "reasonHash", type: "string" },
+    { name: "predictionMicro", type: "uint256" },
+    { name: "actualMicro", type: "uint256" },
+    { name: "errorMicro", type: "uint256" },
+    { name: "rank", type: "uint256" },
+    { name: "field", type: "uint256" },
+    { name: "settledAtSec", type: "uint256" },
+  ],
+} as const;
+const usdMicro = (usd: number) => BigInt(Math.round(Math.max(0, usd) * 1_000_000));
+
+/** Recover the signer of a scorecard in-browser and confirm it matches the claimed signer. */
+async function verifyScorecard(c: SignedScorecard): Promise<boolean> {
+  try {
+    return await verifyTypedData({
+      address: c.signer as `0x${string}`,
+      domain: SCORECARD_DOMAIN,
+      types: SCORECARD_TYPES,
+      primaryType: "Scorecard",
+      message: {
+        agent: c.agent,
+        roundId: c.roundId,
+        reasonHash: c.reasonHash,
+        predictionMicro: usdMicro(c.prediction),
+        actualMicro: usdMicro(c.actual),
+        errorMicro: usdMicro(c.errorUsd),
+        rank: BigInt(Math.trunc(c.rank)),
+        field: BigInt(Math.trunc(c.field)),
+        settledAtSec: BigInt(Math.trunc(c.settledAtSec)),
+      },
+      signature: c.signature as `0x${string}`,
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Compact "verify in 30s" affordance: recovers every scorecard's signer client-side on click. */
+function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<{ ok: number; total: number } | null>(null);
+  if (!cards || cards.length === 0) return null;
+  const signer = cards[0].signer;
+  const run = async () => {
+    setBusy(true);
+    let ok = 0;
+    for (const c of cards) if (await verifyScorecard(c)) ok++;
+    setRes({ ok, total: cards.length });
+    setBusy(false);
+  };
+  const allOk = res && res.ok === res.total;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2 font-mono text-[10px] text-dim">
+      <span>
+        {cards.length} score{cards.length > 1 ? "s" : ""} signed · {signer.slice(0, 6)}…{signer.slice(-4)}
+      </span>
+      <button
+        onClick={run}
+        disabled={busy}
+        className={cn(
+          "rounded border px-1.5 py-0.5 uppercase tracking-wider transition disabled:opacity-50",
+          allOk
+            ? "border-volt/50 text-volt"
+            : res
+              ? "border-over/50 text-over"
+              : "border-line hover:text-ink",
+        )}
+        title="Recovers each signature in your browser and checks it matches the published signer — no trust in us required."
+      >
+        {busy
+          ? "verifying…"
+          : res
+            ? allOk
+              ? `✓ ${res.ok}/${res.total} verified`
+              : `✗ ${res.ok}/${res.total}`
+            : "verify signatures"}
+      </button>
+    </div>
+  );
+}
+
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
   const verifiedHistory = history.filter((h) => (h.edges?.length ?? 0) > 0);
@@ -1756,6 +1845,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
                     ))}
                   </div>
                 ) : null}
+                <VerifyScores cards={h.scorecards} />
               </div>
             );
           })
