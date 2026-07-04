@@ -898,12 +898,21 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
       {cards.length ? (
         <div
           className={cn(
+            "mt-3 grid gap-2 sm:gap-3",
+            // Responsive field: fewer agents fill the row; more agents wrap into balanced rows with
+            // narrower cards (never a lone stretched orphan). Mobile keeps 2 across for tappable targets.
             cards.length === 1
-              ? "mt-3 grid grid-cols-1 gap-2 sm:gap-3"
+              ? "grid-cols-1"
               : cards.length === 2
-                ? "mt-3 grid grid-cols-2 gap-2 sm:gap-3"
-                : "mt-3 grid grid-cols-3 gap-2 sm:gap-3",
-            cards.length > 6 && "max-h-[520px] overflow-auto pr-1", // many agents → scroll, never flood
+                ? "grid-cols-2"
+                : cards.length === 3
+                  ? "grid-cols-3"
+                  : cards.length === 4
+                    ? "grid-cols-2 lg:grid-cols-4"
+                    : cards.length <= 6
+                      ? "grid-cols-2 sm:grid-cols-3"
+                      : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4",
+            cards.length > 8 && "max-h-[520px] overflow-auto pr-1", // beyond a full field → scroll, never flood
           )}
         >
           {cards.map((c) => {
@@ -980,7 +989,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       ) : (
                         "forecasting…"
                       )
-                    ) : raced.has(c.id) || c.estimate != null ? null : (
+                    ) : c.estimate != null ? (
+                      <>last {usd(c.estimate)}</>
+                    ) : raced.has(c.id) ? null : (
                       <span className="text-volt">new</span>
                     )}
                   </div>
