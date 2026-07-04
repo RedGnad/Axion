@@ -78,4 +78,11 @@ services:
       #   WINNER_RAKE_BPS       — winning-agent purse (default 200 = 2%); only withheld when payable.
       #   ARENA_PAYOUT_SLICER / ARENA_PAYOUT_TANKER / ARENA_PAYOUT_WIZORD — payout address per persona
       #                           (the 2% purse goes here when that agent wins). No address → no purse.
+      # BENCHMARK SERVICE (pay-to-be-scored revenue):
+      #   AXION_BENCHMARK_SERVICE_ID — serviceId of the "benchmark my forecast" service (register it in
+      #                           the CROO Dashboard on the Axion agent). A buyer sends {prediction},
+      #                           pays the eval fee, and after the next round settles gets a SIGNED
+      #                           scorecard {actual, error, rank, field, signature}. Needs HOUSE_EOA_
+      #                           PRIVATE_KEY (to sign). Revenue is booked only on delivery; leave unset
+      #                           until the service exists. Never self-call (self-trade = invalid).
       # FRONTEND_URL            — where GET / redirects (the Vercel app).

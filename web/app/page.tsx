@@ -1653,6 +1653,33 @@ function Ledger({ state }: { state: ArenaState | null }) {
           </span>
         }
       />
+      {state?.economics ? (
+        <div
+          className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-line/70 bg-panel2/40 px-3 py-2 font-mono text-[11px]"
+          title="Honest unit economics. Spend is our own data cost (never presented as traction). Revenue is real external agents paying to be scored. On-demand grading is positive-sum: a paid benchmark is graded against a round we run anyway, so the fee is margin."
+        >
+          <span className="uppercase tracking-wider text-dim">unit economics</span>
+          <span className="text-dim">
+            data spend{" "}
+            <b className="text-ink">≈ ${state.economics.spendUSDC.toFixed(2)}</b>
+            {state.economics.rounds > 0 ? (
+              <span className="text-dim">
+                {" "}(${(state.economics.spendUSDC / state.economics.rounds).toFixed(3)}/round)
+              </span>
+            ) : null}
+          </span>
+          <span className="text-dim">
+            external revenue{" "}
+            <b className={state.economics.revenueUSDC > 0 ? "text-volt" : "text-ink"}>
+              ${state.economics.revenueUSDC.toFixed(2)}
+            </b>
+          </span>
+          <span className="text-dim">
+            {state.economics.benchmarkOrders} paid benchmark
+            {state.economics.benchmarkOrders === 1 ? "" : "s"}
+          </span>
+        </div>
+      ) : null}
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {verifiedHistory.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">

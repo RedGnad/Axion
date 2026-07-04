@@ -9,6 +9,7 @@ import { candidatesForCapability, discoverProviders, markProviderSucceeded } fro
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
 import { signScorecard, type SignedScorecard } from './scorecard.js';
+import { reasonHash } from './settle.js';
 
 /**
  * The Arena live server: one long-running process that runs real on-chain rounds and serves the
@@ -151,6 +152,9 @@ interface ArenaState {
      *  claimed, no fabricated entries; backfilled from real history at boot so the view is never empty. */
     events?: { ts: number; kind: 'joined' | 'adopted'; text: string }[];
   };
+  /** Honest unit-economics: what the arena SPENDS on hires vs REVENUE from external agents paying to be
+   *  scored. Kept separate so spend is never presented as traction; revenue is real external orders only. */
+  economics?: { spendUSDC: number; revenueUSDC: number; benchmarkOrders: number; rounds: number };
 }
 
 // Long-running server: a stray WebSocket/async error must never take down the HTTP server.
@@ -188,6 +192,45 @@ let metaById = new Map<string, { label: string; blurb: string }>();
 // race next). Each round takes from the front; the ones that raced go to the back, the benched stay
 // at the front → strict round-robin, so over a cycle every agent races the same number of times.
 let rotationQueue: string[] = [];
+
+// Benchmark service: external agents PAY an eval fee to have their forecast graded + signed. Positive-
+// sum by construction (the fee is revenue; we grade against a round we run anyway, so no extra cost).
+// Delivery waits for the next round that OPENS after submission, so the outcome provably postdates the
+// pre-committed forecast. Coordinated in-process: the provider loop captures + delivers, onSettled grades.
+interface PendingBenchmark {
+  orderId: string;
+  prediction: number;
+  agentLabel: string;
+  reasonHash: string; // pre-commit at submission, before any outcome exists
+  submitMs: number;
+  priceUSDC: number; // the eval fee → counted as revenue only once delivered
+  scorecard?: SignedScorecard; // set by onSettled; the provider loop then delivers it + books revenue
+}
+const pendingBenchmarks = new Map<string, PendingBenchmark>();
+let benchmarkRevenueUSDC = 0;
+let benchmarkOrders = 0;
+
+/** Pure: grade one external prediction against the realized move, ranked among the round field + itself. */
+function benchmarkRank(prediction: number, actual: number, fieldErrors: number[]): { errorUsd: number; rank: number; field: number } {
+  const errorUsd = Math.abs(prediction - actual);
+  const better = fieldErrors.filter((e) => e < errorUsd).length; // strictly-closer agents rank ahead
+  return { errorUsd, rank: better + 1, field: fieldErrors.length + 1 };
+}
+
+/** Publish honest unit-economics: our SPEND on hires (data + racer, plus ~10% on-chain escrow fee) vs
+ *  REVENUE from external agents paying to be scored. Revenue is real delivered orders only; never faked. */
+function refreshEconomics(): void {
+  const PRICE = Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.1;
+  let hires = 0;
+  for (const h of state.history) for (const e of h.edges ?? []) if (e.raceEntry || !e.ours) hires += 1;
+  const spendUSDC = Math.round(hires * PRICE * 1.1 * 100) / 100; // hire notional + ~10% escrow fee
+  state.economics = {
+    spendUSDC,
+    revenueUSDC: Math.round(benchmarkRevenueUSDC * 100) / 100,
+    benchmarkOrders,
+    rounds: state.history.length,
+  };
+}
 // Community agents that joined via /api/competitor — PERSISTED (Upstash) so the open roster survives
 // restarts/redeploys; re-instantiated as remote competitors at boot.
 let joinedRoster: { serviceId: string; label: string; payout?: string }[] = [];
@@ -587,30 +630,96 @@ async function refreshDataMarket(wired?: WiredProvider[]): Promise<void> {
 async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Promise<void> {
   const key = process.env.CROO_SDK_KEY;
   const serviceId = process.env.AXION_SERVICE_ID;
-  if (!key || !serviceId) return;
+  const benchmarkId = process.env.AXION_BENCHMARK_SERVICE_ID; // pay-to-be-scored service (optional)
+  if (!key || (!serviceId && !benchmarkId)) return;
   const client = new AgentClient({ baseURL: cfg.baseURL, wsURL: cfg.wsURL }, key);
   try { await client.connectWebSocket(); } catch { /* WS just keeps "online" status */ }
-  console.log(`[axion] forecast provider online on service ${serviceId}`);
+  if (serviceId) console.log(`[axion] forecast provider online on service ${serviceId}`);
+  if (benchmarkId) console.log(`[axion] benchmark provider online on service ${benchmarkId}`);
   const done = new Set<string>();
   const inFlight = new Set<string>();
   const tick = async (): Promise<void> => {
     try {
       const negs = await client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 20 });
-      for (const n of negs) if (n.serviceId === serviceId) { try { await client.acceptNegotiation(n.negotiationId); console.log(`[axion] accepted hire ${n.negotiationId}`); } catch { /* retry next tick */ } }
+      for (const n of negs) {
+        if (n.serviceId !== serviceId && n.serviceId !== benchmarkId) continue;
+        try { await client.acceptNegotiation(n.negotiationId); console.log(`[axion] accepted ${n.serviceId === benchmarkId ? 'benchmark' : 'hire'} ${n.negotiationId}`); } catch { /* retry next tick */ }
+      }
       const orders = await client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 20 });
       for (const o of orders) {
-        if (o.serviceId !== serviceId || done.has(o.orderId) || inFlight.has(o.orderId)) continue;
-        inFlight.add(o.orderId);
-        void (async () => {
-          try {
-            const neg = await client.getNegotiation(o.negotiationId);
-            await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: consensusForecast(neg.requirements ?? '{}') });
-            done.add(o.orderId);
-            console.log(`[axion] delivered consensus forecast ${o.orderId}`);
-          } catch (err) {
-            console.warn('[axion] forecast delivery failed: ' + (err as Error).message);
-          } finally { inFlight.delete(o.orderId); }
-        })();
+        // ---- Flagship forecast service: deliver the consensus forecast immediately ----
+        if (o.serviceId === serviceId) {
+          if (done.has(o.orderId) || inFlight.has(o.orderId)) continue;
+          inFlight.add(o.orderId);
+          void (async () => {
+            try {
+              const neg = await client.getNegotiation(o.negotiationId);
+              await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: consensusForecast(neg.requirements ?? '{}') });
+              done.add(o.orderId);
+              console.log(`[axion] delivered consensus forecast ${o.orderId}`);
+            } catch (err) {
+              console.warn('[axion] forecast delivery failed: ' + (err as Error).message);
+            } finally { inFlight.delete(o.orderId); }
+          })();
+          continue;
+        }
+        // ---- Benchmark service: capture the caller's forecast now, deliver the SIGNED scorecard after
+        // the next round settles (revenue is booked only on successful delivery) ----
+        if (o.serviceId === benchmarkId) {
+          const pending = pendingBenchmarks.get(o.orderId);
+          // (1) newly paid, not captured yet → parse + pre-commit (do NOT deliver until graded)
+          if (!pending && !done.has(o.orderId) && !inFlight.has(o.orderId)) {
+            inFlight.add(o.orderId);
+            void (async () => {
+              try {
+                const neg = await client.getNegotiation(o.negotiationId);
+                let req: { prediction?: number; agent?: string } = {};
+                try { req = JSON.parse(neg.requirements || '{}'); } catch { /* invalid below */ }
+                const prediction = Number(req.prediction);
+                const priceUSDC = Number(o.price) / 1_000_000 || 0;
+                if (!Number.isFinite(prediction) || prediction <= 0) {
+                  await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include a numeric "prediction" (USD amplitude of the next ~60s ETH move)' }) });
+                  done.add(o.orderId);
+                  console.warn(`[benchmark] rejected ${o.orderId}: no numeric prediction`);
+                  return;
+                }
+                const agentLabel = (String(req.agent || `caller-${o.orderId.slice(0, 4)}`)).replace(/[^\w -]/g, '').slice(0, 24);
+                pendingBenchmarks.set(o.orderId, {
+                  orderId: o.orderId,
+                  prediction,
+                  agentLabel,
+                  reasonHash: reasonHash({ competitor: agentLabel, prediction, rationale: 'benchmark', inputs: `benchmark:${o.orderId}` }),
+                  submitMs: Date.now(),
+                  priceUSDC,
+                });
+                pushFeed(`Benchmark request: ${agentLabel} submitted $${prediction.toFixed(2)}, grading next round`);
+                console.log(`[benchmark] captured ${o.orderId} (${agentLabel} @ $${prediction})`);
+              } catch (err) {
+                console.warn('[benchmark] capture failed: ' + (err as Error).message);
+              } finally { inFlight.delete(o.orderId); }
+            })();
+            continue;
+          }
+          // (2) graded (scorecard ready) → deliver it and book the revenue
+          if (pending?.scorecard && !done.has(o.orderId) && !inFlight.has(o.orderId)) {
+            inFlight.add(o.orderId);
+            void (async () => {
+              try {
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify(pending.scorecard) });
+                done.add(o.orderId);
+                benchmarkRevenueUSDC += pending.priceUSDC;
+                benchmarkOrders += 1;
+                pendingBenchmarks.delete(o.orderId);
+                refreshEconomics();
+                pushFeed(`Benchmark scored: ${pending.agentLabel} ranked #${pending.scorecard!.rank}/${pending.scorecard!.field}, signed scorecard delivered`);
+                console.log(`[benchmark] delivered signed scorecard ${o.orderId} (+${pending.priceUSDC} USDC revenue)`);
+                broadcast();
+              } catch (err) {
+                console.warn('[benchmark] delivery failed: ' + (err as Error).message);
+              } finally { inFlight.delete(o.orderId); }
+            })();
+          }
+        }
       }
     } catch { /* transient */ }
   };
@@ -970,7 +1079,22 @@ async function runOneRound(
               console.warn('[scorecard] signing failed: ' + (err as Error).message);
             }
           })();
+          // Grade any pending PAID benchmark whose forecast was committed BEFORE this round opened (so the
+          // outcome provably postdates it). Sign a scorecard; the provider loop delivers it + books revenue.
+          if (pendingBenchmarks.size) {
+            const roundOpenMs = Number(round.id.split('-')[1]) || 0;
+            const fieldErrors = graded.map((f) => o.errors[f.competitor]);
+            for (const b of pendingBenchmarks.values()) {
+              if (b.scorecard || b.submitMs >= roundOpenMs) continue; // already graded, or not yet a fresh round
+              const g = benchmarkRank(b.prediction, o.actual, fieldErrors);
+              void signScorecard(
+                { agent: b.agentLabel, roundId: round.id, reasonHash: b.reasonHash, prediction: b.prediction, actual: o.actual, errorUsd: g.errorUsd, rank: g.rank, field: g.field, settledAtSec },
+                scoreKey,
+              ).then((card) => { b.scorecard = card; }).catch((e) => console.warn('[benchmark] sign failed: ' + (e as Error).message));
+            }
+          }
         }
+        refreshEconomics();
         // Resolve free guest predictions: a guess is correct if it backed a winning agent (ties = co-winners).
         const winSet = new Set(winners);
         const guesses = predictPending.get(round.id);
@@ -1032,6 +1156,7 @@ async function main(): Promise<void> {
   const lastEdges = (state.history[0]?.edges ?? []).filter((e) => !e.raceEntry).map((e) => ({ competitor: e.competitor, capability: e.capability, label: e.label, serviceId: e.serviceId ?? '', ours: e.ours }));
   void refreshDataMarket(lastEdges.length ? lastEdges : undefined);
   setInterval(() => void refreshDataMarket(), 10 * 60_000);
+  refreshEconomics(); // publish spend-vs-revenue at boot (revenue 0 until a real external payer)
   refreshUsdcBet();
   refreshBudget();
   console.log(`[arena-server] bounded subsidy: ${DAILY_RACES} free races/day`);

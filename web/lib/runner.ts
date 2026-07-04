@@ -117,6 +117,7 @@ export interface ArenaState {
     providerStats?: { label: string; serviceId: string; hires: number; avgMs: number | null; paidUSDC: number }[];
     events?: { ts: number; kind: 'joined' | 'adopted'; text: string }[];
   };
+  economics?: { spendUSDC: number; revenueUSDC: number; benchmarkOrders: number; rounds: number };
 }
 
 /** Stable per-browser id so the runner can count UNIQUE guest visitors (no signup, no wallet). */
