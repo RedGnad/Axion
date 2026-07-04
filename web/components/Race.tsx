@@ -110,25 +110,28 @@ export default function Race({ round }: { round: RoundView | null }) {
   const laneH = round.competitors.length > 10 ? "h-8 sm:h-9" : round.competitors.length > 6 ? "h-9 sm:h-10" : "h-9 sm:h-11";
   return (
     <div ref={wrap} className="relative pr-1 sm:flex sm:h-full sm:flex-1 sm:flex-col sm:pr-2">
-      {round.competitors.map((c) => {
+      {round.competitors.map((c, idx) => {
         const col = livery(c.id);
+        // Open the reasoning tooltip DOWN for top lanes and UP for bottom lanes so it stays inside the
+        // grid (never clipped by the header above or the bet cards below).
+        const tipUp = idx >= Math.ceil(round.competitors.length / 2);
         return (
           <div key={c.id} className={`group relative ${laneH} border-b border-dashed border-white/5 sm:min-h-[2.75rem] sm:flex-1`}>
             <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[12px] sm:text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
               {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
             </span>
-            {/* Instant reasoning tooltip — hover anywhere on the lane, appears with no browser delay. */}
-            {c.dq || c.rationale ? (
-              <span className="pointer-events-none absolute left-0 top-[1.35rem] z-40 hidden w-64 max-w-[80%] rounded-md border border-line bg-panel/95 p-2 text-left font-mono text-[10px] normal-case leading-snug tracking-normal text-ink/90 shadow-lg group-hover:block">
-                {c.dq ? 'Too slow this round, cut.' : c.rationale}
-              </span>
-            ) : null}
             <div
               data-kart={c.id}
               className="absolute top-2.5 z-20 flex -translate-x-1/2 flex-col items-center gap-0.5 sm:top-4 sm:gap-1"
               style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
             >
+              {/* Instant reasoning tooltip — hover the lane, appears at the agent's kart with no delay. */}
+              {c.dq || c.rationale ? (
+                <span className={`pointer-events-none absolute left-1/2 z-40 hidden w-52 max-w-[46vw] -translate-x-1/2 rounded-md border border-line bg-panel/95 p-2 text-left font-mono text-[10px] normal-case leading-snug tracking-normal text-ink/90 shadow-lg group-hover:block ${tipUp ? 'bottom-full mb-2' : 'top-full mt-2'}`}>
+                  {c.dq ? 'Too slow this round, cut.' : c.rationale}
+                </span>
+              ) : null}
               {c.isWinner ? (
                 <span
                   className="absolute -top-5 left-1/2 -translate-x-1/2 rounded-full border border-gold/45 bg-gold/10 px-1.5 py-0.5 text-[12px] leading-none"

@@ -980,9 +980,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       ) : (
                         "forecasting…"
                       )
-                    ) : c.estimate != null ? (
-                      <>last {usd(c.estimate)}</>
-                    ) : raced.has(c.id) ? null : (
+                    ) : raced.has(c.id) || c.estimate != null ? null : (
                       <span className="text-volt">new</span>
                     )}
                   </div>
@@ -1555,10 +1553,6 @@ function Ledger({ state }: { state: ArenaState | null }) {
           </span>
         }
       />
-      <p className="mt-2 text-[12px] leading-relaxed text-dim">
-        Only rounds with real CROO orders are shown. Forecast-only fallback
-        rounds stay out of this journal.
-      </p>
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {verifiedHistory.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">
@@ -1718,12 +1712,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
                             <>
                               <b className="text-ink">Arena</b>→
                               {cap(e.competitor)}
-                              <span
-                                className="ml-1 cursor-help text-dim"
-                                title="The arena hires this external agent to enter the race. Independent agents compose their own data privately, so only this order is on our books; a persona hire instead shows the exact data agent it bought."
-                              >
-                                (race entry)
-                              </span>
+                              <span className="ml-1 text-dim">(race entry)</span>
                             </>
                           ) : (
                             <>
