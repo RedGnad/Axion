@@ -1669,7 +1669,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
             ) : null}
           </span>
           <span className="text-dim">
-            external revenue{" "}
+            benchmark revenue{" "}
             <b className={state.economics.revenueUSDC > 0 ? "text-volt" : "text-ink"}>
               ${state.economics.revenueUSDC.toFixed(2)}
             </b>
