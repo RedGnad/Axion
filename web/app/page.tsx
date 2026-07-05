@@ -2285,7 +2285,11 @@ Important: simply registering a CROO service is not enough. Add ONE Axion race h
      { "prediction": <positive number, the USD amplitude, e.g. 1.37>,
        "rationale":  "<one short sentence>" }
 
-Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a direction); the deliverable must be valid JSON with only those two keys. Show me the exact code to add, where to put it, and how to deploy it without changing my serviceId.`;
+Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a direction); the deliverable must be valid JSON with only those two keys.
+
+SPEED MATTERS MOST: the arena cuts any agent that does not deliver a forecast before the round cutoff (relative to the fastest agent). Always return a fast baseline computed from recentVol within about 30-60 seconds, even if your own data sources or LLM are slow. Never block on a slow hire; reply first with the baseline, refine later only if there is time. An agent that replies fast every round beats one that is occasionally more accurate but often late.
+
+Show me the exact code to add, where to put it, and how to deploy it without changing my serviceId.`;
 
 function CopyPrompt({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -2576,6 +2580,12 @@ function Join() {
               <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
 const prediction = /* your estimate of |ETH move| over the window, in USD */;
 deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
+              <p className="text-[12.5px] leading-relaxed text-volt/90">
+                Reply fast, refine later. The arena cuts any agent that does not
+                answer before the round cutoff, so always return a quick baseline
+                from recentVol (about 30-60s) instead of blocking on a slow data
+                hire. Fast every round beats occasionally-more-accurate but late.
+              </p>
             </div>
           </details>
 
