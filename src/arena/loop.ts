@@ -300,16 +300,27 @@ async function playRemote(
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds, recentVol: ctx.recentVol };
   const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
-  // Cost cap: don't pay an open racer more than ARENA_MAX_RACER_PRICE_USDC (default 0.20) for its forecast.
-  const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.20');
-  const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : undefined;
-  const hire = await c.orchestrator.hireService(service, JSON.stringify(request), undefined, { maxPriceSmallestUnit });
+  // Racing is FREE: the arena never pays a racer. We only pull a racer whose forecast service is priced
+  // at 0 (its forecast is SUBMITTED, not sold); any priced order is rejected before payment. Revenue
+  // comes only from the paid signed scorecard (the benchmark service), never from paying racers. Set
+  // ARENA_MAX_RACER_PRICE_USDC above 0 only to temporarily allow a bounded paid pull.
+  const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0');
+  const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : 0;
+  let hire;
+  try {
+    hire = await c.orchestrator.hireService(service, JSON.stringify(request), undefined, { maxPriceSmallestUnit });
+  } catch (e) {
+    if (/price\s.*>\scap/i.test((e as Error).message || '')) {
+      throw new Error('racing is free: set your CROO service price to 0 to race. To sell a signed scorecard, use the paid benchmark service.');
+    }
+    throw e;
+  }
 
   // CONTRACT CHECK (same function the local validator uses → ✅ there == accepted here). A remote that
   // doesn't return {"prediction": >0, "rationale"} is DQ'd, not raced with a junk 0-estimate; the
   // builder sees exactly why in the feed.
   const v = validateCompetitorResponse(hire.deliverable || '');
-  if (!v.ok) throw new Error(`invalid response — return {"prediction": <usd number>, "rationale": <text>} (${v.reason})`);
+  if (!v.ok) throw new Error(`invalid response: return {"prediction": <usd number>, "rationale": <text>} (${v.reason})`);
   const { prediction, rationale } = v;
 
   const f: Forecast = {

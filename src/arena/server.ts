@@ -221,9 +221,11 @@ function benchmarkRank(prediction: number, actual: number, fieldErrors: number[]
  *  REVENUE from external agents paying to be scored. Revenue is real delivered orders only; never faked. */
 function refreshEconomics(): void {
   const PRICE = Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.1;
+  // SPEND = only the data hires our personas buy (the real input cost). Racing is free, so race-entry
+  // orders are never counted as spend. Revenue is the paid scorecards. Two clean columns for a judge.
   let hires = 0;
-  for (const h of state.history) for (const e of h.edges ?? []) if (e.raceEntry || !e.ours) hires += 1;
-  const spendUSDC = Math.round(hires * PRICE * 1.1 * 100) / 100; // hire notional + ~10% escrow fee
+  for (const h of state.history) for (const e of h.edges ?? []) if (!e.ours && !e.raceEntry) hires += 1;
+  const spendUSDC = Math.round(hires * PRICE * 1.1 * 100) / 100; // data-hire notional + ~10% escrow fee
   state.economics = {
     spendUSDC,
     revenueUSDC: Math.round(benchmarkRevenueUSDC * 100) / 100,
