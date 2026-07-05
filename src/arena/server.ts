@@ -155,6 +155,9 @@ interface ArenaState {
   /** Honest unit-economics: what the arena SPENDS on hires vs REVENUE from external agents paying to be
    *  scored. Kept separate so spend is never presented as traction; revenue is real external orders only. */
   economics?: { spendUSDC: number; revenueUSDC: number; benchmarkOrders: number; rounds: number };
+  /** External agents' accumulated (free-submitted, Pyth-graded) track records: the field a paid
+   *  credential is minted from. Free intake in, paid mint out. */
+  externalBoard?: { agent: string; rounds: number; avgError: number; bestRank: number; wins: number }[];
 }
 
 // Long-running server: a stray WebSocket/async error must never take down the HTTP server.
@@ -248,6 +251,26 @@ const predictPending = new Map<string, { agentId: string; visitorId: string }[]>
 // Deduped by visitorId so one visitor = one prediction per race (honest stats, no inflation).
 let nextPredictPending: { agentId: string; visitorId: string }[] = [];
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
+
+// FREE external intake (the product intake): an external agent PUSHES its prediction each round for
+// free (no payment, no CAP order), gets graded vs Pyth, and accumulates a track record. The paid MINT
+// (a real CAP order) later certifies that record. Racing is free; the certified credential is the sale.
+interface FreeSubmission { agent: string; prediction: number; reasonHash: string; submitMs: number; }
+let freeSubmissions: FreeSubmission[] = [];
+interface RecordEntry { roundId: string; prediction: number; actual: number; errorUsd: number; rank: number; field: number; settledAtSec: number; }
+const externalRecords = new Map<string, RecordEntry[]>();
+
+/** Publish the accumulated external track records (the field a credential is minted from). */
+function refreshExternalBoard(): void {
+  state.externalBoard = [...externalRecords.entries()]
+    .map(([agent, recs]) => {
+      const n = recs.length;
+      const avgError = n ? recs.reduce((s, r) => s + r.errorUsd, 0) / n : 0;
+      const wins = recs.filter((r) => r.rank === 1).length;
+      return { agent, rounds: n, avgError: Math.round(avgError * 100) / 100, bestRank: n ? Math.min(...recs.map((r) => r.rank)) : 0, wins };
+    })
+    .sort((a, b) => a.avgError - b.avgError);
+}
 
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
 // catalog as "new". knownProviderIds = serviceIds seen in past censuses; seenPairs = (agent|provider)
@@ -418,10 +441,13 @@ async function loadHistory(): Promise<void> {
     knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
     joinedRoster?: { serviceId: string; label: string; payout?: string }[];
     racesToday?: number; racesDayKey?: string; nextRoundAtMs?: number;
+    externalRecords?: [string, RecordEntry[]][];
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
     for (const p of d.seenPairs ?? []) seenPairs.add(p);
+    for (const [agent, recs] of d.externalRecords ?? []) externalRecords.set(agent, recs); // durable track records
+    refreshExternalBoard();
     if (d.storeEvents?.length) storeEvents = d.storeEvents.slice(0, 14);
     if (d.joinedRoster?.length) joinedRoster = d.joinedRoster.slice(0, 50);
     // Restore the daily subsidy counter so the cap HOLDS across restarts (else a redeploy/spin-down
@@ -493,6 +519,7 @@ function saveHistory(): void {
     history: state.history, leaderboard: state.leaderboard, predictStats: state.predictStats,
     knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
     joinedRoster, racesToday, racesDayKey, nextRoundAtMs: state.nextRoundAtMs,
+    externalRecords: [...externalRecords.entries()], // durable track records (the credential base)
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
@@ -1096,6 +1123,26 @@ async function runOneRound(
             }
           }
         }
+        // Grade FREE external submissions committed before this round opened, into each agent's track
+        // record (the field a paid credential is minted from). No key needed, these are just the facts.
+        if (freeSubmissions.length) {
+          const openMs = Number(round.id.split('-')[1]) || 0;
+          const gradedForecasts = round.forecasts.filter((f) => Number.isFinite(o.errors[f.competitor]));
+          const fieldErrors = gradedForecasts.map((f) => o.errors[f.competitor]);
+          const settledAtSec = Math.round((Date.parse(o.settledAt) || Date.now()) / 1000);
+          const kept: FreeSubmission[] = [];
+          for (const s of freeSubmissions) {
+            if (s.submitMs >= openMs) { kept.push(s); continue; } // not a fresh round yet, keep for the next
+            const g = benchmarkRank(s.prediction, o.actual, fieldErrors);
+            const rec = externalRecords.get(s.agent) ?? [];
+            rec.push({ roundId: round.id, prediction: s.prediction, actual: o.actual, errorUsd: g.errorUsd, rank: g.rank, field: g.field, settledAtSec });
+            externalRecords.set(s.agent, rec.slice(-100));
+            pushFeed(`${s.agent} graded: $${g.errorUsd.toFixed(2)} error, rank #${g.rank}/${g.field} (${rec.length} rounds on record)`);
+          }
+          freeSubmissions = kept;
+          refreshExternalBoard();
+          saveHistory();
+        }
         refreshEconomics();
         // Resolve free guest predictions: a guess is correct if it backed a winning agent (ties = co-winners).
         const winSet = new Set(winners);
@@ -1349,6 +1396,31 @@ async function main(): Promise<void> {
             reply(400, { error: (e as Error).message });
           }
         })();
+      });
+      return;
+    }
+    if (req.method === 'POST' && url === '/api/submit') {
+      // FREE external intake: an agent PUSHES its forecast (no payment). Committed now, graded at the
+      // next round, accumulated into its track record. The paid mint later certifies that record.
+      const reply = (code: number, obj: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(obj)); };
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 4000) req.destroy(); });
+      req.on('end', () => {
+        try {
+          const { agent, prediction } = JSON.parse(body || '{}') as { agent?: string; prediction?: number };
+          const label = String(agent || '').replace(/[^\w -]/g, '').slice(0, 24);
+          const p = Number(prediction);
+          if (!label) return reply(400, { error: 'agent label required' });
+          if (!Number.isFinite(p) || p <= 0) return reply(400, { error: 'prediction must be a number > 0 (USD amplitude of the next ~60s ETH move)' });
+          const sub: FreeSubmission = { agent: label, prediction: p, reasonHash: reasonHash({ competitor: label, prediction: p, rationale: 'submit', inputs: `submit:${label}:${Date.now()}` }), submitMs: Date.now() };
+          const i = freeSubmissions.findIndex((s) => s.agent === label);
+          if (i >= 0) freeSubmissions[i] = sub; else freeSubmissions.push(sub); // one pending per agent
+          pushFeed(`${label} submitted a forecast ($${p.toFixed(2)}), grading next round`);
+          broadcast();
+          reply(202, { ok: true, note: 'committed before the outcome; graded at the next round, free. Mint your credential to certify your record.' });
+        } catch (e) {
+          reply(400, { error: (e as Error).message });
+        }
       });
       return;
     }
