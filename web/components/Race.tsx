@@ -115,11 +115,14 @@ export default function Race({ round }: { round: RoundView | null }) {
         // Open the reasoning tooltip DOWN for top lanes and UP for bottom lanes so it stays inside the
         // grid (never clipped by the header above or the bet cards below).
         const tipUp = idx >= Math.ceil(round.competitors.length / 2);
+        // Horizontal anchor so the bubble never overflows the container: a cut kart is parked far left
+        // (open right), a winner lands far right (open left), everyone else centers on their kart.
+        const tipAlignCls = c.dq ? 'left-0' : c.isWinner ? 'right-0' : 'left-1/2 -translate-x-1/2';
         return (
           <div key={c.id} className={`group relative ${laneH} border-b border-dashed border-white/5 sm:min-h-[2.75rem] sm:flex-1`}>
             <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[12px] sm:text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
-              {c.dq ? <span className="ml-1 text-[10px] text-over">DQ</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
+              {c.dq ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-dim" title="no forecast returned before this round's cutoff; still active, races again next round">late</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
             </span>
             <div
               data-kart={c.id}
@@ -128,8 +131,8 @@ export default function Race({ round }: { round: RoundView | null }) {
             >
               {/* Instant reasoning tooltip — hover the lane, appears at the agent's kart with no delay. */}
               {c.dq || c.rationale ? (
-                <span className={`pointer-events-none absolute left-1/2 z-40 hidden w-52 max-w-[46vw] -translate-x-1/2 rounded-md border border-line bg-panel/95 p-2 text-left font-mono text-[10px] normal-case leading-snug tracking-normal text-ink/90 shadow-lg group-hover:block ${tipUp ? 'bottom-full mb-2' : 'top-full mt-2'}`}>
-                  {c.dq ? 'Too slow this round, cut.' : c.rationale}
+                <span className={`pointer-events-none absolute z-40 hidden w-52 max-w-[46vw] rounded-md border border-line bg-panel/95 p-2 text-left font-mono text-[10px] normal-case leading-snug tracking-normal text-ink/90 shadow-lg group-hover:block ${tipAlignCls} ${tipUp ? 'bottom-full mb-2' : 'top-full mt-2'}`}>
+                  {c.dq ? 'No forecast arrived before this round cutoff. Your agent is still active and races again next round.' : c.rationale}
                 </span>
               ) : null}
               {c.isWinner ? (
@@ -146,7 +149,7 @@ export default function Race({ round }: { round: RoundView | null }) {
                 style={{ background: col, boxShadow: c.dq ? 'none' : `0 0 14px ${col}99`, opacity: c.isWinner ? 1 : 0.92, outline: c.isWinner ? `2px solid var(--color-gold)` : 'none', filter: c.dq ? 'grayscale(1)' : 'none' }}
               />
               <span className="font-mono text-[9px] tnum sm:text-[10px]" style={{ color: c.isWinner ? 'var(--color-gold)' : c.dq ? 'var(--color-over)' : c.estimate != null ? '#cfcfd4' : 'var(--color-dim)' }}>
-                {c.dq ? 'too slow' : c.estimate != null ? usd(c.estimate) : 'scouting…'}
+                {c.dq ? 'late' : c.estimate != null ? usd(c.estimate) : 'scouting…'}
               </span>
             </div>
           </div>
