@@ -788,6 +788,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
     estimate?: number;
     isWinner?: boolean;
     dq?: boolean;
+    failReason?: string;
   }[] = live
     ? comps
     : roster.map((a) => {
@@ -796,6 +797,8 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
           id: a.id,
           label: a.label,
           estimate: last?.estimate,
+          dq: last?.dq,
+          failReason: last?.failReason,
         };
       });
 
@@ -987,7 +990,7 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
                       ) : c.dq ? (
-                        "cut this race"
+                        c.failReason ? "failed this race" : "cut this race"
                       ) : (
                         "forecasting…"
                       )
@@ -1453,7 +1456,9 @@ function EstimatingRotator({ state }: { state: ArenaState | null }) {
   };
   const items = comps.map((c) =>
     c.dq
-      ? `${c.label} was cut this race`
+      ? c.failReason
+        ? `${c.label} failed: ${c.failReason}`
+        : `${c.label} was cut this race`
       : c.estimate != null
         ? c.hires && c.hires.length
           ? `${c.label} bought ${c.hires.join(" + ")}, called ${usd(c.estimate)}`

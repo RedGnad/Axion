@@ -36,6 +36,8 @@ interface CompetitorView {
   dataMs?: number;
   /** Disqualified this round (didn't deliver before the cutoff) — doesn't race or win. */
   dq?: boolean;
+  /** Terminal failure reason when the agent failed before the cutoff (distinct from being slow). */
+  failReason?: string;
   /** Provider labels this agent hired THIS round (from its edges) — surfaced live so spectators see
    *  which data each persona bought. Empty for remote agents (they source internally). */
   hires?: string[];
@@ -1050,7 +1052,7 @@ async function runOneRound(
         pushFeed(`${personaMeta(forecast.competitor).label} estimates $${forecast.prediction.toFixed(2)}`);
         broadcast();
       },
-      onEstimates: ({ line, betCloseAtMs, dqIds }) => {
+      onEstimates: ({ line, betCloseAtMs, dqIds, failures = [] }) => {
         if (!state.round) return;
         // Auto-calibrate the hiring ETA from this round's real open→race duration (EMA) so the
         // next round's countdown is honest and doesn't sit on "any moment…".
@@ -1065,10 +1067,23 @@ async function runOneRound(
         state.round.betCloseAtMs = betCloseAtMs;
         state.round.raceStartMs = Date.now();
         state.round.liveAmplitude = 0;
-        // Mark disqualified (too-slow) competitors so the UI shows them out (they don't race/win).
-        for (const c of state.round.competitors) if (dqIds.includes(c.id)) c.dq = true;
+        // Mark cut competitors. A terminal service/contract/funding failure is different from a
+        // still-pending late agent, so preserve the reason for the UI and post-race diagnosis.
+        const failureById = new Map(failures.map((f) => [f.id, humanizeHireFail(f.reason)]));
+        for (const c of state.round.competitors) {
+          if (!dqIds.includes(c.id)) continue;
+          c.dq = true;
+          const reason = failureById.get(c.id);
+          if (reason) c.failReason = reason;
+        }
         refreshUsdcBet(); // new round → fresh (empty) USDC pool
-        const dqNote = dqIds.length ? ` · ${dqIds.length} agent(s) cut (too slow)` : '';
+        const failedCount = failures.length;
+        const lateCount = Math.max(0, dqIds.length - failedCount);
+        const dqParts = [
+          failedCount ? `${failedCount} failed` : '',
+          lateCount ? `${lateCount} late` : '',
+        ].filter(Boolean);
+        const dqNote = dqParts.length ? ` · ${dqParts.join(', ')}` : '';
         pushFeed(`They're off! Line $${line.toFixed(2)}. Real bets close early as the move reveals${dqNote}`);
         broadcast();
       },

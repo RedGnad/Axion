@@ -16,6 +16,7 @@ export interface CompetitorView {
   launchAtMs?: number; // when its data landed → staggered launch
   dataMs?: number;     // data latency (ms) → ⚡ fastest-grid badge
   dq?: boolean;        // disqualified this round (too slow) → doesn't race/win
+  failReason?: string; // terminal failure reason, when known
   hires?: string[];    // provider labels this agent bought this round (live); empty for remotes
   targets?: string[];  // capability/provider labels it is sourcing while estimating
   sourcePhase?: 'choosing' | 'hiring';

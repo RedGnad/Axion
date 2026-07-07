@@ -83,7 +83,14 @@ export interface RoundHooks {
   onFirstEstimate?: (info: { dqFromMs: number; dqAtMs: number }) => void;
   /** Betting OPENS (commit window) — the outcome is NOT being measured yet, so a late bet can't cheat.
    *  `dqIds` = competitors disqualified this round for not delivering before the cutoff. */
-  onEstimates?: (info: { forecasts: Forecast[]; line: number; edges: ArenaEdge[]; betCloseAtMs: number; dqIds: string[] }) => void;
+  onEstimates?: (info: {
+    forecasts: Forecast[];
+    line: number;
+    edges: ArenaEdge[];
+    betCloseAtMs: number;
+    dqIds: string[];
+    failures?: { id: string; label: string; reason: string }[];
+  }) => void;
   /** Fires every ~2s during the race window with the live realized amplitude from Pyth. */
   onTick?: (info: { liveAmplitude: number; settleAtMs: number }) => void;
   onSettled?: (result: RoundResult) => void;
@@ -411,16 +418,15 @@ export async function runRound(
     const iv = setInterval(() => {
       if (done.size === competitors.length) return end();       // everyone in
       if (Date.now() >= dqAtMs && done.size >= 1) return end();  // cutoff reached + ≥1 racer
-      if (settled.size === competitors.length && done.size === 0) return end(); // total failure: fail fast
+      if (settled.size === competitors.length) return end();     // all remaining racers failed terminally
       if (Date.now() >= hiringStart + hardCap) return end();     // hard ceiling
     }, 500);
-    void Promise.allSettled(playP).then(() => {
-      // If at least one racer is in and another failed fast, keep the visual grace window honest:
-      // only cut stragglers at dqAtMs, not the moment their promise rejects.
-      if (done.size === competitors.length || done.size === 0) end();
-    });
+    void Promise.allSettled(playP).then(end);
   });
   const dqIds = competitors.filter((c) => !done.has(c.id)).map((c) => c.id);
+  const failures = competitors
+    .filter((c) => failed.has(c.id))
+    .map((c) => ({ id: c.id, label: c.label, reason: failed.get(c.id)! }));
   if (dqIds.length) {
     const detail = dqIds.map((id) => failed.has(id) ? `${id} (${failed.get(id)})` : id).join(', ');
     console.log(`[arena] DQ this round (cutoff): ${detail}`);
@@ -439,7 +445,7 @@ export async function runRound(
   // not a cheat because the payout multiplier DECAYS over the window (applied at settle) → no extra
   // "closing" timer = fast + compulsive. Amplitude is measured from the round-open price.
   const settleAtMs = Date.now() + windowSeconds * 1000;
-  hooks.onEstimates?.({ forecasts, line, edges, betCloseAtMs: settleAtMs, dqIds });
+  hooks.onEstimates?.({ forecasts, line, edges, betCloseAtMs: settleAtMs, dqIds, failures });
 
   while (Date.now() < settleAtMs) {
     await new Promise((r) => setTimeout(r, 2000));
