@@ -108,6 +108,11 @@ export interface LeaderRow {
   wins: number;
   rounds: number;
   avgError: number;
+  trustedScore?: number;
+  recentAvgError?: number;
+  effectiveRounds?: number;
+  confidence?: number;
+  uncertainty?: number;
 }
 export interface FeedItem {
   ts: number;

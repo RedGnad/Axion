@@ -1546,10 +1546,6 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 }
 
 const BASESCAN = "https://basescan.org/tx/";
-// Minimum graded rounds before an agent is ranked (below this it shows as provisional, unranked).
-// A credential can exist with fewer rounds, but the public standings should not crown a tiny sample.
-const MIN_RANKED_ROUNDS = 10;
-
 // EIP-712 schema for accuracy scorecards — MUST match src/arena/scorecard.ts exactly so a judge can
 // recover the signer independently in their own browser (the verifiability moat).
 const SCORECARD_DOMAIN = { name: "Axion Clash", version: "1", chainId: 8453 } as const;
@@ -2057,15 +2053,15 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   const lb = (state?.leaderboard ?? []).filter(
     (r) => activeIds.size > 0 && activeIds.has(r.id),
   );
-  // Fairness: an agent must have MIN_RANKED_ROUNDS graded rounds before it is ranked, so a newcomer
-  // can't top the board on one lucky round. Ranked agents keep the server's accuracy order; provisional
-  // ones stay visible (adoption proof) but sort to the bottom by how close they are to being ranked.
-  const lbRanked = lb.filter((r) => r.rounds >= MIN_RANKED_ROUNDS);
-  const lbProvisional = lb
-    .filter((r) => r.rounds < MIN_RANKED_ROUNDS)
-    .sort((a, b) => b.rounds - a.rounds);
-  const lbOrdered = [...lbRanked, ...lbProvisional];
-  const lbRankedCount = lbRanked.length;
+  // Server order is confidence-adjusted: raw error + uncertainty penalty from sample size/freshness.
+  // No hard threshold: small samples can rank, but only if they beat the uncertainty penalty.
+  const lbOrdered = lb;
+  const confidenceLabel = (v?: number) => {
+    const pct = Math.round((v ?? 0) * 100);
+    if (pct >= 80) return `proven ${pct}%`;
+    if (pct >= 55) return `solid ${pct}%`;
+    return `early ${pct}%`;
+  };
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
@@ -2076,9 +2072,9 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
         right={
           <span
             className="font-mono text-[11px] uppercase tracking-wider text-dim"
-            title={`ranked by accuracy once an agent has ${MIN_RANKED_ROUNDS} graded rounds — new agents stay unranked so one lucky round can't top the board`}
+            title="ranked by confidence-adjusted accuracy: raw error plus an uncertainty penalty that shrinks with repeated, recent rounds"
           >
-            sample-aware ranking
+            trusted ranking
           </span>
         }
       />
@@ -2088,15 +2084,21 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
         <span className="flex-1">agent</span>
         <span
           className="w-14 text-right"
+          title="confidence-adjusted score: lower is better"
+        >
+          trusted
+        </span>
+        <span
+          className="w-14 text-right"
           title="average error vs the realized move (lower is better)"
         >
-          accuracy
+          avg
         </span>
         <span className="w-10 text-right" title="graded rounds">
           runs
         </span>
-        <span className="w-12 text-right" title="win-rate = wins / rounds">
-          win
+        <span className="w-14 text-right" title="evidence confidence">
+          conf
         </span>
       </div>
       <div
@@ -2111,66 +2113,68 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
           </div>
         ) : (
           lbOrdered.map((r, i) => {
-            const winRate = r.rounds
-              ? Math.round((100 * r.wins) / r.rounds)
-              : 0;
-            const provisional = r.rounds < MIN_RANKED_ROUNDS;
+            const confidence = r.confidence ?? (r.rounds / (r.rounds + 12));
+            const lowConfidence = confidence < 0.55;
             return (
               <div
                 key={r.id}
                 className={cn(
                   "flex items-center gap-3 rounded-md border px-3 py-2",
-                  provisional ? "border-line/50 bg-panel/20" : "border-line",
+                  lowConfidence ? "border-line/50 bg-panel/20" : "border-line",
                 )}
               >
                 <span className="w-5 font-display text-lg tnum text-dim">
-                  {provisional ? "·" : lbRankedCount >= i + 1 ? i + 1 : ""}
+                  {i + 1}
                 </span>
                 <span
                   className="h-3 w-3 rounded-sm"
                   style={{
                     background: livery(r.id),
-                    opacity: provisional ? 0.5 : 1,
+                    opacity: lowConfidence ? 0.55 : 1,
                   }}
                 />
                 <span className="flex flex-1 items-center gap-2 truncate font-display text-sm uppercase tracking-wide">
                   <span className="truncate">{r.label}</span>
-                  {provisional ? (
+                  {lowConfidence ? (
                     <span
                       className="shrink-0 rounded bg-line/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-dim"
-                      title={`unranked until ${MIN_RANKED_ROUNDS} graded rounds`}
+                      title="low confidence: the uncertainty penalty is still large"
                     >
-                      prov · {r.rounds}/{MIN_RANKED_ROUNDS}
+                      early
                     </span>
                   ) : null}
                 </span>
                 <span
                   className={cn(
                     "w-14 text-right font-mono text-[11px] tnum",
-                    provisional ? "text-dim" : "text-volt",
+                    lowConfidence ? "text-dim" : "text-volt",
                   )}
                   title={
-                    provisional
-                      ? "provisional — not yet ranked"
-                      : "avg error (lower is better)"
+                    `trusted score = avg/recent error plus uncertainty penalty ${r.uncertainty != null ? `($${r.uncertainty.toFixed(2)})` : ''}`
                   }
+                >
+                  {usd(r.trustedScore ?? r.avgError)}
+                </span>
+                <span
+                  className="w-14 text-right font-mono text-[11px] tnum text-dim"
+                  title={r.recentAvgError != null ? `recent avg ${usd(r.recentAvgError)}` : "raw avg error"}
                 >
                   {usd(r.avgError)}
                 </span>
                 <span
                   className={cn(
                     "w-10 text-right font-mono text-[11px] tnum",
-                    provisional ? "text-dim" : "text-ink",
+                    lowConfidence ? "text-dim" : "text-ink",
                   )}
-                  title={`${r.rounds} graded rounds`}
+                  title={`${r.rounds} total graded rounds${r.effectiveRounds != null ? ` · ${r.effectiveRounds.toFixed(1)} recency-weighted` : ""}`}
                 >
                   {r.rounds}
                 </span>
                 <span
-                  className="w-12 text-right font-mono text-[11px] tnum text-dim"
+                  className="w-14 text-right font-mono text-[10px] uppercase tracking-wider text-dim"
                   title={`${r.wins} wins / ${r.rounds} rounds`}
                 >
-                  {winRate}%
+                  {confidenceLabel(confidence)}
                 </span>
               </div>
             );

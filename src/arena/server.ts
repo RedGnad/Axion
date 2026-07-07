@@ -113,6 +113,24 @@ interface WiredProvider {
   serviceId: string;
   ours: boolean;
 }
+interface LeaderRow {
+  id: string;
+  label: string;
+  wins: number;
+  rounds: number;
+  sumError: number;
+  avgError: number;
+  /** Confidence-adjusted score used for ranking. Lower is better. */
+  trustedScore?: number;
+  /** Recent, recency-weighted average error from retained history. */
+  recentAvgError?: number;
+  /** Recency-weighted retained rounds. Total rounds remains the canonical sample size. */
+  effectiveRounds?: number;
+  /** 0..1 evidence confidence from total graded rounds. */
+  confidence?: number;
+  /** The explicit uncertainty add-on inside trustedScore. */
+  uncertainty?: number;
+}
 interface ArenaState {
   status: 'idle' | 'running' | 'view-only';
   asset: string;
@@ -123,7 +141,7 @@ interface ArenaState {
   nextRoundAtMs?: number;
   round?: RoundView;
   history: HistoryItem[];
-  leaderboard: { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }[];
+  leaderboard: LeaderRow[];
   feed: FeedItem[];
   /** The agents that will race next — so visitors can free-predict the NEXT race during the idle gap
    *  (at a low cadence the arena is idle most of the time; this is the main engagement lever). */
@@ -451,9 +469,66 @@ function refreshPredictStats(): ArenaState['predictStats'] {
 }
 
 function broadcast(): void {
+  refreshTrustedLeaderboard();
   refreshPredictStats();
   const payload = `data: ${JSON.stringify(state)}\n\n`;
   for (const res of clients) res.write(payload);
+}
+
+function refreshTrustedLeaderboard(): void {
+  if (!state.leaderboard.length) return;
+  const now = Date.now();
+  const halfLifeMs = 14 * 24 * 60 * 60 * 1000;
+  const priorRounds = 12;
+
+  const observedErrors: number[] = [];
+  const recent = new Map<string, { weightedError: number; weight: number }>();
+  for (const h of state.history) {
+    const ageMs = Math.max(0, now - (Date.parse(h.settledAt) || now));
+    const w = Math.pow(0.5, ageMs / halfLifeMs);
+    for (const c of h.competitors ?? []) {
+      if (!c.id || !Number.isFinite(c.error)) continue;
+      const err = Number(c.error);
+      observedErrors.push(err);
+      const row = recent.get(c.id) ?? { weightedError: 0, weight: 0 };
+      row.weightedError += err * w;
+      row.weight += w;
+      recent.set(c.id, row);
+    }
+  }
+
+  const globalMean = observedErrors.length
+    ? observedErrors.reduce((s, x) => s + x, 0) / observedErrors.length
+    : state.leaderboard.reduce((s, r) => s + (Number(r.avgError) || 0), 0) / Math.max(1, state.leaderboard.length);
+  const variance = observedErrors.length > 1
+    ? observedErrors.reduce((s, x) => s + Math.pow(x - globalMean, 2), 0) / (observedErrors.length - 1)
+    : Math.max(0.25, globalMean * 0.5);
+  const globalStd = Math.max(0.25, Math.sqrt(variance));
+
+  for (const row of state.leaderboard) {
+    const r = recent.get(row.id);
+    const effectiveRounds = r?.weight ?? 0;
+    const recentAvgError = r && r.weight > 0 ? r.weightedError / r.weight : row.avgError;
+    const evidence = Math.max(0, Number(row.rounds) || 0);
+    const confidence = evidence / (evidence + priorRounds);
+    const blendedAvg = effectiveRounds > 0
+      ? row.avgError * 0.65 + recentAvgError * 0.35
+      : row.avgError;
+    const uncertainty = 1.28 * globalStd / Math.sqrt(evidence + 1);
+    row.recentAvgError = Math.round(recentAvgError * 1000) / 1000;
+    row.effectiveRounds = Math.round(effectiveRounds * 10) / 10;
+    row.confidence = Math.round(confidence * 1000) / 1000;
+    row.uncertainty = Math.round(uncertainty * 1000) / 1000;
+    row.trustedScore = Math.round((blendedAvg + uncertainty) * 1000) / 1000;
+  }
+
+  // Rank by confidence-adjusted accuracy, not raw avgError. This prevents tiny samples from looking
+  // stronger than long records unless their edge is large enough to overcome uncertainty.
+  state.leaderboard.sort((a, b) =>
+    (a.trustedScore ?? a.avgError) - (b.trustedScore ?? b.avgError) ||
+    b.rounds - a.rounds ||
+    b.wins - a.wins,
+  );
 }
 
 function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Record<string, number>): void {
@@ -468,8 +543,7 @@ function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Rec
     row.sumError = (row.sumError || 0) + Number(errors[id] ?? 0);
     row.avgError = row.sumError / row.rounds;
   }
-  // Rank by ACCURACY (lowest average error) — rewards genuine calibration, not a constant bias.
-  state.leaderboard.sort((a, b) => a.avgError - b.avgError || b.wins - a.wins);
+  refreshTrustedLeaderboard();
 }
 
 const SEED_FILE = process.env.ARENA_SEED_FILE ?? 'arena-seed.json';
