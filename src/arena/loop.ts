@@ -382,9 +382,12 @@ export async function runRound(
   // Each competitor estimates in parallel (local + remote); every hire is a real CAP order.
   const ctx: PlayCtx = { roundId: id, asset: 'ETH', spot: open.price, horizonSeconds: windowSeconds, recentVol };
   const done = new Map<string, { forecast: Forecast; edges: ArenaEdge[] }>();
+  const settled = new Set<string>();
+  const failed = new Map<string, string>();
   const playP = competitors.map((c) =>
     play(c, ctx, hooks)
       .then((r) => {
+        settled.add(c.id);
         if (!firstAt) {
           firstAt = Date.now();
           dqAtMs = Math.min(hiringStart + hardCap, firstAt + grace); // grace relative to the fastest
@@ -395,7 +398,9 @@ export async function runRound(
         hooks.onEstimate?.({ forecast: r.forecast, edges: r.edges });
       })
       .catch((e) => {
-        const reason = (e as Error).message;
+        settled.add(c.id);
+        const reason = (e as Error).message || 'unknown error';
+        failed.set(c.id, reason);
         console.warn(`[arena] ${c.id} estimate failed: ${reason}`);
         hooks.onHireFail?.({ competitor: c.id, label: c.label, reason });
       }),
@@ -406,12 +411,20 @@ export async function runRound(
     const iv = setInterval(() => {
       if (done.size === competitors.length) return end();       // everyone in
       if (Date.now() >= dqAtMs && done.size >= 1) return end();  // cutoff reached + ≥1 racer
+      if (settled.size === competitors.length && done.size === 0) return end(); // total failure: fail fast
       if (Date.now() >= hiringStart + hardCap) return end();     // hard ceiling
     }, 500);
-    void Promise.allSettled(playP).then(end);
+    void Promise.allSettled(playP).then(() => {
+      // If at least one racer is in and another failed fast, keep the visual grace window honest:
+      // only cut stragglers at dqAtMs, not the moment their promise rejects.
+      if (done.size === competitors.length || done.size === 0) end();
+    });
   });
   const dqIds = competitors.filter((c) => !done.has(c.id)).map((c) => c.id);
-  if (dqIds.length) console.log(`[arena] DQ this round (too slow): ${dqIds.join(', ')}`);
+  if (dqIds.length) {
+    const detail = dqIds.map((id) => failed.has(id) ? `${id} (${failed.get(id)})` : id).join(', ');
+    console.log(`[arena] DQ this round (cutoff): ${detail}`);
+  }
   const played = competitors.filter((c) => done.has(c.id)).map((c) => done.get(c.id)!);
   const forecasts = played.map((p) => p.forecast);
   const edges = played.flatMap((p) => p.edges);

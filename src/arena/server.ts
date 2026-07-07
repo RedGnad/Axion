@@ -177,7 +177,7 @@ const AUTO_MS = Number(process.env.ARENA_AUTO_ROUND_MS ?? '0'); // scheduled hea
 const MIN_ROUND_MS = Number(process.env.ARENA_MIN_ROUND_MS ?? (AUTO_MS ? Math.min(AUTO_MS, 600_000) : 600_000));
 // Real-money bets keep their edge only early in reveal; after this fraction the USDC endpoint closes.
 // Free picks stay open as a low-stakes spectator action.
-const BET_DECAY_FRACTION = Math.min(1, Math.max(0.1, Number(process.env.BET_DECAY_FRACTION ?? '0.62')));
+const BET_DECAY_FRACTION = Math.min(1, Math.max(0.1, Number(process.env.BET_DECAY_FRACTION ?? '0.78')));
 const BET_MIN_MULTIPLIER = Math.min(1.9, Math.max(1.05, Number(process.env.BET_MIN_MULTIPLIER ?? '1.25')));
 // Cold-start subsidy is BOUNDED: at most N free races/day from our treasury (each ~0.6 USDC of data
 // hires). Beyond it, "start" is paused till tomorrow (UTC) — a bot/spam can never drain us.
