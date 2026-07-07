@@ -35,6 +35,9 @@ services:
       # Bounded field: max agents per round (personas always race; community slots rotate least-recently-raced). 0 = no cap.
       - key: ARENA_MAX_RACERS_PER_ROUND
         value: "8"
+      # Temporarily disabled external racers. Re-register after fixing the race handler contract/price.
+      - key: ARENA_DISABLED_RACER_SERVICE_IDS
+        value: "b52551e2-1ea9-416f-b8c7-7311b8129a8a"
       - key: ARENA_MIN_ROUND_MS
         value: "900000"
       - key: ARENA_PROVIDER_EXPLORATION_RATE

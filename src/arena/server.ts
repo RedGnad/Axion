@@ -206,6 +206,12 @@ const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '2'));
 // remaining slots rotate through community agents by "least-recently-raced" so the treasury cost is
 // fixed regardless of how many agents join, and every agent still races within a bounded window.
 const MAX_RACERS = Math.max(0, Number(process.env.ARENA_MAX_RACERS_PER_ROUND ?? '8'));
+const DISABLED_RACER_SERVICE_IDS = new Set(
+  (process.env.ARENA_DISABLED_RACER_SERVICE_IDS ?? '')
+    .split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean),
+);
 const BASESCAN = 'https://basescan.org/tx/';
 
 const state: ArenaState = { status: 'idle', asset: 'ETH', priceSeries: [], history: [], leaderboard: [], feed: [], predictStats: { total: 0, correct: 0, visitors: 0 } };
@@ -259,6 +265,51 @@ const predictPending = new Map<string, { agentId: string; visitorId: string }[]>
 // Free predictions placed during the IDLE gap, for the NEXT race. Migrated into the round at open.
 // Deduped by visitorId so one visitor = one prediction per race (honest stats, no inflation).
 let nextPredictPending: { agentId: string; visitorId: string }[] = [];
+
+function isDisabledRacerService(serviceId: string): boolean {
+  return DISABLED_RACER_SERVICE_IDS.has(serviceId.trim().toLowerCase());
+}
+
+function removeCommunityCompetitor(idOrServiceId: string, reason: string, opts: { persist?: boolean } = {}): boolean {
+  const remote = competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
+    c.kind === 'remote' && (c.id === idOrServiceId || c.serviceId.toLowerCase() === idOrServiceId.toLowerCase())
+  );
+  const serviceId = remote?.serviceId ?? idOrServiceId;
+  const removedLabels = new Set<string>();
+  for (const j of joinedRoster) {
+    if (j.label === idOrServiceId || j.serviceId.toLowerCase() === serviceId.toLowerCase()) removedLabels.add(j.label);
+  }
+  if (remote) removedLabels.add(remote.id);
+
+  const beforeRoster = joinedRoster.length;
+  const beforeCompetitors = competitors.length;
+  joinedRoster = joinedRoster.filter((j) => j.label !== idOrServiceId && j.serviceId.toLowerCase() !== serviceId.toLowerCase());
+  competitors = competitors.filter((c) =>
+    !(c.kind === 'remote' && (c.id === idOrServiceId || c.serviceId.toLowerCase() === serviceId.toLowerCase()))
+  );
+  rotationQueue = rotationQueue.filter((id) => id !== idOrServiceId && !removedLabels.has(id));
+  for (const label of removedLabels) {
+    metaById.delete(label);
+    clearAgentPayout(label);
+  }
+  state.leaderboard = state.leaderboard.filter((row) => row.id !== idOrServiceId && !removedLabels.has(row.id));
+  const removed = beforeRoster !== joinedRoster.length || beforeCompetitors !== competitors.length || removedLabels.size > 0;
+  if (removed) {
+    refreshRoster();
+    pushFeed(`${[...removedLabels][0] ?? idOrServiceId} removed from the grid. ${reason}`);
+    if (opts.persist !== false) saveHistory();
+  }
+  return removed;
+}
+
+function pruneDisabledCommunityRacers(opts: { persist?: boolean } = {}): number {
+  let removed = 0;
+  for (const j of [...joinedRoster]) {
+    if (!isDisabledRacerService(j.serviceId)) continue;
+    if (removeCommunityCompetitor(j.serviceId, 'Race service is disabled until it is compatible again.', opts)) removed++;
+  }
+  return removed;
+}
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 // FREE external intake (the product intake): an external agent PUSHES its prediction each round for
@@ -592,6 +643,11 @@ async function loadHistory(): Promise<void> {
         /* ignore corrupt history */
       }
     }
+  }
+  const disabled = pruneDisabledCommunityRacers({ persist: false });
+  if (disabled) {
+    console.log(`[arena-server] pruned ${disabled} disabled community racer(s) from durable roster`);
+    saveHistory();
   }
   // First ever run (no persisted timeline): backfill the evolution view from REAL history — the
   // chronological first hire of each third-party provider by each agent. Oldest→newest so the
@@ -1085,17 +1141,16 @@ async function runOneRound(
           pushFeed(`${personaMeta(competitor).label} couldn't get ${label}: ${why}`);
         } else {
           pushFeed(`${personaMeta(competitor).label}: ${why}`); // e.g. "PulseBNB: invalid response (must return {prediction, rationale})"
-          // AUTO-PURGE a COMMUNITY agent that returns an invalid response (deterministic = wrong contract):
-          // remove it from the grid instead of paying to DQ it every round; tell them to fix + re-register.
-          if (/invalid response/i.test(reason) && competitors.some((x) => x.id === competitor && x.kind === 'remote')) {
-            competitors = competitors.filter((x) => x.id !== competitor);
-            joinedRoster = joinedRoster.filter((j) => j.label !== competitor);
-            metaById.delete(competitor);
-            clearAgentPayout(competitor);
-            state.leaderboard = state.leaderboard.filter((row) => row.id !== competitor); // drop its standings row too
-            refreshRoster();
-            saveHistory();
-            pushFeed(`${competitor} removed from the grid. It must return {prediction, rationale}. Fix the contract and re-register in the Garage.`);
+          // AUTO-PURGE deterministic community-agent contract failures. A racer can be paid elsewhere,
+          // but the Axion race handler itself must be price 0 and return {prediction,rationale}.
+          const isRemote = competitors.some((x) => x.id === competitor && x.kind === 'remote');
+          const badContract = /invalid response/i.test(reason);
+          const paidRacer = /racing is free|service price to 0|price\s.*>\scap/i.test(reason);
+          if (isRemote && (badContract || paidRacer)) {
+            const fix = paidRacer
+              ? 'Set the CROO race service price to 0, then re-register from the Garage.'
+              : 'Return valid {prediction, rationale}, then re-register from the Garage.';
+            removeCommunityCompetitor(competitor, fix);
           }
         }
         broadcast();
@@ -1500,6 +1555,7 @@ async function main(): Promise<void> {
           try {
             const { serviceId, label, payoutAddress } = JSON.parse(body || '{}') as { serviceId?: string; label?: string; payoutAddress?: string };
             if (!serviceId || !/^[0-9a-f-]{36}$/i.test(serviceId)) return reply(400, { error: 'valid serviceId (uuid) required' });
+            if (isDisabledRacerService(serviceId)) return reply(409, { error: 'this serviceId is disabled in Axion until the race service is fixed and re-registered' });
             if (competitors.some((c) => c.kind === 'remote' && c.serviceId === serviceId)) return reply(409, { error: 'agent already in the arena' });
             const payout = (payoutAddress || '').trim();
             if (payout && !isPayoutAddress(payout)) return reply(400, { error: 'payout address must be a 0x… Base address (40 hex chars)' });
