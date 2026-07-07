@@ -1546,8 +1546,9 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 }
 
 const BASESCAN = "https://basescan.org/tx/";
-// Minimum graded rounds before an agent is ranked (below this it shows as "new", unranked).
-const MIN_RANKED_ROUNDS = 3;
+// Minimum graded rounds before an agent is ranked (below this it shows as provisional, unranked).
+// A credential can exist with fewer rounds, but the public standings should not crown a tiny sample.
+const MIN_RANKED_ROUNDS = 10;
 
 // EIP-712 schema for accuracy scorecards — MUST match src/arena/scorecard.ts exactly so a judge can
 // recover the signer independently in their own browser (the verifiability moat).
@@ -2077,7 +2078,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
             className="font-mono text-[11px] uppercase tracking-wider text-dim"
             title={`ranked by accuracy once an agent has ${MIN_RANKED_ROUNDS} graded rounds — new agents stay unranked so one lucky round can't top the board`}
           >
-            ranked by accuracy
+            sample-aware ranking
           </span>
         }
       />
@@ -2091,8 +2092,11 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
         >
           accuracy
         </span>
-        <span className="w-16 text-right" title="win-rate = wins / rounds">
-          win-rate
+        <span className="w-10 text-right" title="graded rounds">
+          runs
+        </span>
+        <span className="w-12 text-right" title="win-rate = wins / rounds">
+          win
         </span>
       </div>
       <div
@@ -2136,7 +2140,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
                       className="shrink-0 rounded bg-line/40 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-dim"
                       title={`unranked until ${MIN_RANKED_ROUNDS} graded rounds`}
                     >
-                      new · {r.rounds}/{MIN_RANKED_ROUNDS}
+                      prov · {r.rounds}/{MIN_RANKED_ROUNDS}
                     </span>
                   ) : null}
                 </span>
@@ -2154,7 +2158,16 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
                   {usd(r.avgError)}
                 </span>
                 <span
-                  className="w-16 text-right font-mono text-[11px] tnum text-dim"
+                  className={cn(
+                    "w-10 text-right font-mono text-[11px] tnum",
+                    provisional ? "text-dim" : "text-ink",
+                  )}
+                  title={`${r.rounds} graded rounds`}
+                >
+                  {r.rounds}
+                </span>
+                <span
+                  className="w-12 text-right font-mono text-[11px] tnum text-dim"
                   title={`${r.wins} wins / ${r.rounds} rounds`}
                 >
                   {winRate}%
