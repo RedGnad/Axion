@@ -72,6 +72,62 @@ export async function signScorecard(card: Scorecard, privateKey: string): Promis
   return { ...card, signer: wallet.address, signature };
 }
 
+/**
+ * ACCUMULATED credential: the actual product. Certifies an authenticated agent's accuracy over N graded
+ * rounds (repeated fulfillment, per the CROO manifesto), signed EIP-712 so anyone can verify it. Minted
+ * (a real CAP order) from a record the agent built by free, wallet-signed submissions.
+ */
+export interface Credential {
+  agent: string; // the authenticated wallet address the record was built under
+  rounds: number; // graded rounds on record
+  avgErrorUsd: number; // mean absolute error vs Pyth over those rounds
+  bestRank: number; // best rank achieved
+  wins: number; // rounds ranked #1
+  fromRound: string; // first graded round id
+  toRound: string; // last graded round id
+  issuedAtSec: number; // unix seconds at mint
+}
+export interface SignedCredential extends Credential { signer: string; signature: string }
+
+const CRED_TYPES = {
+  Credential: [
+    { name: 'agent', type: 'string' },
+    { name: 'rounds', type: 'uint256' },
+    { name: 'avgErrorMicro', type: 'uint256' },
+    { name: 'bestRank', type: 'uint256' },
+    { name: 'wins', type: 'uint256' },
+    { name: 'fromRound', type: 'string' },
+    { name: 'toRound', type: 'string' },
+    { name: 'issuedAtSec', type: 'uint256' },
+  ],
+} as const;
+function credValue(c: Credential): Record<string, string | bigint> {
+  return {
+    agent: c.agent,
+    rounds: BigInt(Math.max(0, Math.trunc(c.rounds))),
+    avgErrorMicro: micro(c.avgErrorUsd),
+    bestRank: BigInt(Math.max(0, Math.trunc(c.bestRank))),
+    wins: BigInt(Math.max(0, Math.trunc(c.wins))),
+    fromRound: c.fromRound,
+    toRound: c.toRound,
+    issuedAtSec: BigInt(Math.max(0, Math.trunc(c.issuedAtSec))),
+  };
+}
+export async function signCredential(c: Credential, privateKey: string): Promise<SignedCredential> {
+  const wallet = new ethers.Wallet(privateKey);
+  const signature = await wallet.signTypedData(DOMAIN, CRED_TYPES as unknown as Record<string, ethers.TypedDataField[]>, credValue(c));
+  return { ...c, signer: wallet.address, signature };
+}
+export function verifyCredential(signed: SignedCredential): { valid: boolean; recovered: string } {
+  let recovered = '';
+  try {
+    recovered = ethers.verifyTypedData(DOMAIN, CRED_TYPES as unknown as Record<string, ethers.TypedDataField[]>, credValue(signed), signed.signature);
+  } catch {
+    return { valid: false, recovered: '' };
+  }
+  return { valid: recovered.toLowerCase() === signed.signer.toLowerCase(), recovered };
+}
+
 /** Recover the signer and check it matches the claimed `signer`. Pure, no network. */
 export function verifyScorecard(signed: SignedScorecard): { valid: boolean; recovered: string } {
   let recovered = '';

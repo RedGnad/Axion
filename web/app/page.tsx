@@ -7,6 +7,7 @@ import {
   validateAgentOutput,
   RUNNER_URL,
   type ArenaState,
+  type SignedCredential,
   type SignedScorecard,
 } from "@/lib/runner";
 import { postUsdcBet, USDC_ADDRESS, ERC20_TRANSFER_ABI } from "@/lib/bet";
@@ -1559,6 +1560,18 @@ const SCORECARD_TYPES = {
     { name: "settledAtSec", type: "uint256" },
   ],
 } as const;
+const CREDENTIAL_TYPES = {
+  Credential: [
+    { name: "agent", type: "string" },
+    { name: "rounds", type: "uint256" },
+    { name: "avgErrorMicro", type: "uint256" },
+    { name: "bestRank", type: "uint256" },
+    { name: "wins", type: "uint256" },
+    { name: "fromRound", type: "string" },
+    { name: "toRound", type: "string" },
+    { name: "issuedAtSec", type: "uint256" },
+  ],
+} as const;
 const usdMicro = (usd: number) => BigInt(Math.round(Math.max(0, usd) * 1_000_000));
 
 /** Recover the signer of a scorecard in-browser and confirm it matches the claimed signer. */
@@ -1579,6 +1592,30 @@ async function verifyScorecard(c: SignedScorecard): Promise<boolean> {
         rank: BigInt(Math.trunc(c.rank)),
         field: BigInt(Math.trunc(c.field)),
         settledAtSec: BigInt(Math.trunc(c.settledAtSec)),
+      },
+      signature: c.signature as `0x${string}`,
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function verifyCredential(c: SignedCredential): Promise<boolean> {
+  try {
+    return await verifyTypedData({
+      address: c.signer as `0x${string}`,
+      domain: SCORECARD_DOMAIN,
+      types: CREDENTIAL_TYPES,
+      primaryType: "Credential",
+      message: {
+        agent: c.agent,
+        rounds: BigInt(Math.trunc(c.rounds)),
+        avgErrorMicro: usdMicro(c.avgErrorUsd),
+        bestRank: BigInt(Math.trunc(c.bestRank)),
+        wins: BigInt(Math.trunc(c.wins)),
+        fromRound: c.fromRound,
+        toRound: c.toRound,
+        issuedAtSec: BigInt(Math.trunc(c.issuedAtSec)),
       },
       signature: c.signature as `0x${string}`,
     });
@@ -1631,6 +1668,120 @@ function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
   );
 }
 
+function ExternalBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
+  const board = rows ?? [];
+  return (
+    <div className="mt-3 rounded-lg border border-line/70 bg-panel2/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-display text-base uppercase tracking-wide text-ink">
+            External accuracy records
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+            free signed submit → Pyth graded → paid credential mint
+          </div>
+        </div>
+        <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+          {board.length} wallet{board.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      {board.length ? (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[620px] text-left font-mono text-[11px]">
+            <thead className="border-b border-white/5 text-dim">
+              <tr>
+                <th className="pb-2 font-normal uppercase tracking-wider">agent</th>
+                <th className="pb-2 font-normal uppercase tracking-wider">wallet</th>
+                <th className="pb-2 text-right font-normal uppercase tracking-wider">rounds</th>
+                <th className="pb-2 text-right font-normal uppercase tracking-wider">avg error</th>
+                <th className="pb-2 text-right font-normal uppercase tracking-wider">best</th>
+                <th className="pb-2 text-right font-normal uppercase tracking-wider">wins</th>
+              </tr>
+            </thead>
+            <tbody>
+              {board.slice(0, 8).map((r) => (
+                <tr key={r.wallet} className="border-b border-white/5 last:border-0">
+                  <td className="py-2 pr-3 text-ink">{r.label}</td>
+                  <td className="py-2 pr-3 text-dim">
+                    {r.wallet.slice(0, 6)}…{r.wallet.slice(-4)}
+                  </td>
+                  <td className="py-2 text-right text-ink">{r.rounds}</td>
+                  <td className="py-2 text-right text-volt">${r.avgError.toFixed(2)}</td>
+                  <td className="py-2 text-right text-dim">#{r.bestRank || "—"}</td>
+                  <td className="py-2 text-right text-dim">{r.wins}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border border-line/60 bg-panel/50 px-3 py-3 font-mono text-[11px] text-dim">
+          no external records yet. A builder can post a wallet-signed forecast to /api/submit for free.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CredentialVerifier() {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<{ ok: boolean; signer?: string; agent?: string; error?: string } | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setRes(null);
+    try {
+      const parsed = JSON.parse(text || "{}") as SignedCredential | { credential?: SignedCredential };
+      const credential = "credential" in parsed && parsed.credential ? parsed.credential : parsed as SignedCredential;
+      const ok = await verifyCredential(credential);
+      setRes({ ok, signer: credential.signer, agent: credential.agent });
+    } catch (e) {
+      setRes({ ok: false, error: (e as Error).message || "invalid JSON" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3 rounded-lg border border-line/70 bg-panel2/35 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-display text-base uppercase tracking-wide text-ink">
+            Verify a credential
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+            paste the CAP delivery JSON · recover signer in-browser
+          </div>
+        </div>
+        <button
+          onClick={run}
+          disabled={busy || !text.trim()}
+          className="rounded-md border border-volt/50 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
+        >
+          {busy ? "verifying..." : "verify"}
+        </button>
+      </div>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder='{"type":"axion.accuracyCredential.v1","credential":{...}}'
+        className="mt-3 min-h-[74px] w-full rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-ink outline-none placeholder:text-dim/60 focus:border-volt/45"
+      />
+      {res ? (
+        <div
+          className={cn(
+            "mt-2 font-mono text-[11px]",
+            res.ok ? "text-volt" : "text-over",
+          )}
+        >
+          {res.ok
+            ? `✓ valid · signer ${res.signer?.slice(0, 6)}…${res.signer?.slice(-4)} · agent ${res.agent?.slice(0, 6)}…${res.agent?.slice(-4)}`
+            : `✗ ${res.error || "signature mismatch"}`}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
   const verifiedHistory = history.filter((h) => (h.edges?.length ?? 0) > 0);
@@ -1656,7 +1807,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
       {state?.economics ? (
         <div
           className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-line/70 bg-panel2/40 px-3 py-2 font-mono text-[11px]"
-          title="Honest unit economics. Spend is our own data cost (never presented as traction). Revenue is real external agents paying to be scored. On-demand grading is positive-sum: a paid benchmark is graded against a round we run anyway, so the fee is margin."
+          title="Honest unit economics. Spend is our own data cost (never presented as traction). Revenue is real external agents paying to mint a signed credential over their accumulated record."
         >
           <span className="uppercase tracking-wider text-dim">unit economics</span>
           <span className="text-dim">
@@ -1669,17 +1820,19 @@ function Ledger({ state }: { state: ArenaState | null }) {
             ) : null}
           </span>
           <span className="text-dim">
-            benchmark revenue{" "}
+            credential revenue{" "}
             <b className={state.economics.revenueUSDC > 0 ? "text-volt" : "text-ink"}>
               ${state.economics.revenueUSDC.toFixed(2)}
             </b>
           </span>
           <span className="text-dim">
-            {state.economics.benchmarkOrders} paid benchmark
+            {state.economics.benchmarkOrders} paid mint
             {state.economics.benchmarkOrders === 1 ? "" : "s"}
           </span>
         </div>
       ) : null}
+      <ExternalBoard rows={state?.externalBoard} />
+      <CredentialVerifier />
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {verifiedHistory.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">
@@ -2289,7 +2442,7 @@ Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a dire
 
 SPEED MATTERS MOST: the arena cuts any agent that does not deliver a forecast before the round cutoff (relative to the fastest agent). Always return a fast baseline computed from recentVol within about 30-60 seconds, even if your own data sources or LLM are slow. Never block on a slow hire; reply first with the baseline, refine later only if there is time. An agent that replies fast every round beats one that is occasionally more accurate but often late.
 
-Pricing: set this race service to price 0 on CROO. Racing is free, the arena never pays you and you never pay to race. Selling a signed, verifiable scorecard of your rank is a separate paid service (the accuracy benchmark) that you can buy if you want to prove your standing.
+Pricing: set this race service to price 0 on CROO. Racing is free, the arena never pays you and you never pay to race. Your wallet-signed free submissions build an accumulated Axion record; when you want to prove it, buy the paid credential mint and receive an EIP-712 signed scorecard over that full record.
 
 Show me the exact code to add, where to put it, and how to deploy it without changing my serviceId.`;
 
@@ -2589,9 +2742,9 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                 hire. Fast every round beats occasionally-more-accurate but late.
               </p>
               <p className="text-[12.5px] leading-relaxed text-dim">
-                Racing is free. Set your CROO service price to 0. Want a signed,
-                verifiable scorecard of your rank to show others? That is the paid
-                benchmark, 0.10 USDC.
+                Racing is free. Set your CROO service price to 0. Your signed
+                free submits build a record; the paid 0.10 USDC mint certifies
+                that accumulated record.
               </p>
             </div>
           </details>

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { AgentClient, EventType, DeliverableType, type Event } from '@croo-network/sdk';
+import { ethers } from 'ethers';
 import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, type Competitor } from './loop.js';
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
@@ -8,7 +9,7 @@ import { loadState, saveState, storeEnabled } from './store.js';
 import { candidatesForCapability, discoverProviders, markProviderSucceeded } from './discovery.js';
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
-import { signScorecard, type SignedScorecard } from './scorecard.js';
+import { signCredential, signScorecard, type Credential, type SignedScorecard } from './scorecard.js';
 import { reasonHash } from './settle.js';
 
 /**
@@ -157,7 +158,7 @@ interface ArenaState {
   economics?: { spendUSDC: number; revenueUSDC: number; benchmarkOrders: number; rounds: number };
   /** External agents' accumulated (free-submitted, Pyth-graded) track records: the field a paid
    *  credential is minted from. Free intake in, paid mint out. */
-  externalBoard?: { agent: string; rounds: number; avgError: number; bestRank: number; wins: number }[];
+  externalBoard?: { agent: string; wallet: string; label: string; rounds: number; avgError: number; bestRank: number; wins: number; fromRound?: string; toRound?: string }[];
 }
 
 // Long-running server: a stray WebSocket/async error must never take down the HTTP server.
@@ -196,20 +197,8 @@ let metaById = new Map<string, { label: string; blurb: string }>();
 // at the front → strict round-robin, so over a cycle every agent races the same number of times.
 let rotationQueue: string[] = [];
 
-// Benchmark service: external agents PAY an eval fee to have their forecast graded + signed. Positive-
-// sum by construction (the fee is revenue; we grade against a round we run anyway, so no extra cost).
-// Delivery waits for the next round that OPENS after submission, so the outcome provably postdates the
-// pre-committed forecast. Coordinated in-process: the provider loop captures + delivers, onSettled grades.
-interface PendingBenchmark {
-  orderId: string;
-  prediction: number;
-  agentLabel: string;
-  reasonHash: string; // pre-commit at submission, before any outcome exists
-  submitMs: number;
-  priceUSDC: number; // the eval fee → counted as revenue only once delivered
-  scorecard?: SignedScorecard; // set by onSettled; the provider loop then delivers it + books revenue
-}
-const pendingBenchmarks = new Map<string, PendingBenchmark>();
+// Benchmark service: external agents PAY to MINT a signed credential over the ACCUMULATED record they
+// built via the free /api/submit intake. This is the only paid credential path; no more one-round mint.
 let benchmarkRevenueUSDC = 0;
 let benchmarkOrders = 0;
 
@@ -253,23 +242,73 @@ let nextPredictPending: { agentId: string; visitorId: string }[] = [];
 let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 
 // FREE external intake (the product intake): an external agent PUSHES its prediction each round for
-// free (no payment, no CAP order), gets graded vs Pyth, and accumulates a track record. The paid MINT
-// (a real CAP order) later certifies that record. Racing is free; the certified credential is the sale.
-interface FreeSubmission { agent: string; prediction: number; reasonHash: string; submitMs: number; }
+// free (no payment, no CAP order), gets graded vs Pyth, and accumulates a track record under an
+// authenticated wallet. The paid MINT (a real CAP order) later certifies that wallet-bound record.
+interface FreeSubmission { wallet: string; label: string; prediction: number; reasonHash: string; submitMs: number; nonce: string; }
 let freeSubmissions: FreeSubmission[] = [];
-interface RecordEntry { roundId: string; prediction: number; actual: number; errorUsd: number; rank: number; field: number; settledAtSec: number; }
+interface RecordEntry { roundId: string; label?: string; prediction: number; actual: number; errorUsd: number; rank: number; field: number; settledAtSec: number; }
 const externalRecords = new Map<string, RecordEntry[]>();
 
 /** Publish the accumulated external track records (the field a credential is minted from). */
 function refreshExternalBoard(): void {
   state.externalBoard = [...externalRecords.entries()]
-    .map(([agent, recs]) => {
+    .map(([wallet, recs]) => {
       const n = recs.length;
       const avgError = n ? recs.reduce((s, r) => s + r.errorUsd, 0) / n : 0;
       const wins = recs.filter((r) => r.rank === 1).length;
-      return { agent, rounds: n, avgError: Math.round(avgError * 100) / 100, bestRank: n ? Math.min(...recs.map((r) => r.rank)) : 0, wins };
+      const label = [...recs].reverse().find((r) => r.label)?.label || `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+      return {
+        agent: wallet,
+        wallet,
+        label,
+        rounds: n,
+        avgError: Math.round(avgError * 100) / 100,
+        bestRank: n ? Math.min(...recs.map((r) => r.rank)) : 0,
+        wins,
+        fromRound: recs[0]?.roundId,
+        toRound: recs[n - 1]?.roundId,
+      };
     })
     .sort((a, b) => a.avgError - b.avgError);
+}
+
+function normalizeWallet(raw: string): string {
+  return ethers.getAddress(String(raw || '').trim());
+}
+
+function submitMessage(input: { wallet: string; label: string; prediction: number; nonce: string }): string {
+  return [
+    'Axion Clash free forecast',
+    `wallet:${normalizeWallet(input.wallet)}`,
+    `label:${input.label}`,
+    `prediction:${input.prediction.toFixed(6)}`,
+    `nonce:${input.nonce}`,
+  ].join('\n');
+}
+
+function mintMessage(input: { wallet: string; nonce: string }): string {
+  return [
+    'Axion Clash credential mint',
+    `wallet:${normalizeWallet(input.wallet)}`,
+    `nonce:${input.nonce}`,
+  ].join('\n');
+}
+
+function buildCredential(wallet: string): Credential | null {
+  const addr = normalizeWallet(wallet);
+  const recs = externalRecords.get(addr.toLowerCase()) ?? [];
+  if (!recs.length) return null;
+  const avgErrorUsd = recs.reduce((s, r) => s + r.errorUsd, 0) / recs.length;
+  return {
+    agent: addr,
+    rounds: recs.length,
+    avgErrorUsd: Math.round(avgErrorUsd * 1_000_000) / 1_000_000,
+    bestRank: Math.min(...recs.map((r) => r.rank)),
+    wins: recs.filter((r) => r.rank === 1).length,
+    fromRound: recs[0].roundId,
+    toRound: recs[recs.length - 1].roundId,
+    issuedAtSec: Math.round(Date.now() / 1000),
+  };
 }
 
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
@@ -692,62 +731,78 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
           })();
           continue;
         }
-        // ---- Benchmark service: capture the caller's forecast now, deliver the SIGNED scorecard after
-        // the next round settles (revenue is booked only on successful delivery) ----
+        // ---- Benchmark service: MINT the accumulated, wallet-bound signed credential now.
+        // The track record is built for free via /api/submit; this paid CAP order certifies it.
         if (o.serviceId === benchmarkId) {
-          const pending = pendingBenchmarks.get(o.orderId);
-          // (1) newly paid, not captured yet → parse + pre-commit (do NOT deliver until graded)
-          if (!pending && !done.has(o.orderId) && !inFlight.has(o.orderId)) {
-            inFlight.add(o.orderId);
-            void (async () => {
-              try {
-                const neg = await client.getNegotiation(o.negotiationId);
-                let req: { prediction?: number; agent?: string } = {};
-                try { req = JSON.parse(neg.requirements || '{}'); } catch { /* invalid below */ }
-                const prediction = Number(req.prediction);
-                const priceUSDC = Number(o.price) / 1_000_000 || 0;
-                if (!Number.isFinite(prediction) || prediction <= 0) {
-                  await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include a numeric "prediction" (USD amplitude of the next ~60s ETH move)' }) });
-                  done.add(o.orderId);
-                  console.warn(`[benchmark] rejected ${o.orderId}: no numeric prediction`);
-                  return;
-                }
-                const agentLabel = (String(req.agent || `caller-${o.orderId.slice(0, 4)}`)).replace(/[^\w -]/g, '').slice(0, 24);
-                pendingBenchmarks.set(o.orderId, {
-                  orderId: o.orderId,
-                  prediction,
-                  agentLabel,
-                  reasonHash: reasonHash({ competitor: agentLabel, prediction, rationale: 'benchmark', inputs: `benchmark:${o.orderId}` }),
-                  submitMs: Date.now(),
-                  priceUSDC,
+          if (done.has(o.orderId) || inFlight.has(o.orderId)) continue;
+          inFlight.add(o.orderId);
+          void (async () => {
+            try {
+              const neg = await client.getNegotiation(o.negotiationId);
+              let req: { wallet?: string; address?: string; agent?: string; prediction?: number; nonce?: string; signature?: string } = {};
+              try { req = JSON.parse(neg.requirements || '{}'); } catch { /* invalid below */ }
+              const walletRaw = req.wallet || req.address || (/^0x[0-9a-fA-F]{40}$/.test(String(req.agent || '')) ? req.agent : '');
+              if (req.prediction != null) {
+                await client.deliverOrder(o.orderId, {
+                  deliverableType: DeliverableType.Text,
+                  deliverableText: JSON.stringify({
+                    error: 'one-round benchmark is deprecated. First POST /api/submit for free with a wallet signature, then mint with requirements {"wallet":"0x...","nonce":"...","signature":"..."}',
+                  }),
                 });
-                pushFeed(`Benchmark request: ${agentLabel} submitted $${prediction.toFixed(2)}, grading next round`);
-                console.log(`[benchmark] captured ${o.orderId} (${agentLabel} @ $${prediction})`);
-              } catch (err) {
-                console.warn('[benchmark] capture failed: ' + (err as Error).message);
-              } finally { inFlight.delete(o.orderId); }
-            })();
-            continue;
-          }
-          // (2) graded (scorecard ready) → deliver it and book the revenue
-          if (pending?.scorecard && !done.has(o.orderId) && !inFlight.has(o.orderId)) {
-            inFlight.add(o.orderId);
-            void (async () => {
-              try {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify(pending.scorecard) });
                 done.add(o.orderId);
-                benchmarkRevenueUSDC += pending.priceUSDC;
-                benchmarkOrders += 1;
-                pendingBenchmarks.delete(o.orderId);
-                refreshEconomics();
-                pushFeed(`Benchmark scored: ${pending.agentLabel} ranked #${pending.scorecard!.rank}/${pending.scorecard!.field}, signed scorecard delivered`);
-                console.log(`[benchmark] delivered signed scorecard ${o.orderId} (+${pending.priceUSDC} USDC revenue)`);
-                broadcast();
-              } catch (err) {
-                console.warn('[benchmark] delivery failed: ' + (err as Error).message);
-              } finally { inFlight.delete(o.orderId); }
-            })();
-          }
+                console.warn(`[credential] rejected legacy one-round benchmark ${o.orderId}`);
+                return;
+              }
+              let wallet = '';
+              try { wallet = normalizeWallet(String(walletRaw || '')); } catch { /* invalid below */ }
+              if (!wallet) {
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include {"wallet":"0x..."} for the record owner' }) });
+                done.add(o.orderId);
+                console.warn(`[credential] rejected ${o.orderId}: no wallet`);
+                return;
+              }
+              const nonce = String(req.nonce || '').slice(0, 96);
+              if (!nonce) {
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include nonce + wallet signature for the mint owner' }) });
+                done.add(o.orderId);
+                console.warn(`[credential] rejected ${o.orderId}: no mint nonce`);
+                return;
+              }
+              const msg = mintMessage({ wallet, nonce });
+              let recovered = '';
+              try { recovered = ethers.verifyMessage(msg, String(req.signature || '')); } catch { /* invalid below */ }
+              if (recovered.toLowerCase() !== wallet.toLowerCase()) {
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'invalid wallet signature for credential mint', messageToSign: msg }) });
+                done.add(o.orderId);
+                console.warn(`[credential] rejected ${o.orderId}: bad mint signature`);
+                return;
+              }
+              const credential = buildCredential(wallet);
+              if (!credential) {
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'no graded Axion record for this wallet yet. Submit forecasts free via POST /api/submit first.' }) });
+                done.add(o.orderId);
+                console.warn(`[credential] rejected ${o.orderId}: no record for ${wallet}`);
+                return;
+              }
+              const scoreKey = process.env.HOUSE_EOA_PRIVATE_KEY;
+              if (!scoreKey) throw new Error('HOUSE_EOA_PRIVATE_KEY required to sign credentials');
+              const signed = await signCredential(credential, scoreKey);
+              await client.deliverOrder(o.orderId, {
+                deliverableType: DeliverableType.Text,
+                deliverableText: JSON.stringify({ type: 'axion.accuracyCredential.v1', credential: signed }),
+              });
+              done.add(o.orderId);
+              const priceUSDC = Number(o.price) / 1_000_000 || 0;
+              benchmarkRevenueUSDC += priceUSDC;
+              benchmarkOrders += 1;
+              refreshEconomics();
+              pushFeed(`Credential minted: ${wallet.slice(0, 6)}…${wallet.slice(-4)} · ${signed.rounds} rounds · avg error $${signed.avgErrorUsd.toFixed(2)}`);
+              console.log(`[credential] delivered accumulated credential ${o.orderId} (+${priceUSDC} USDC revenue)`);
+              broadcast();
+            } catch (err) {
+              console.warn('[credential] delivery failed: ' + (err as Error).message);
+            } finally { inFlight.delete(o.orderId); }
+          })();
         }
       }
     } catch { /* transient */ }
@@ -1108,20 +1163,6 @@ async function runOneRound(
               console.warn('[scorecard] signing failed: ' + (err as Error).message);
             }
           })();
-          // Grade any pending PAID benchmark whose forecast was committed BEFORE this round opened (so the
-          // outcome provably postdates it). Sign a scorecard; the provider loop delivers it + books revenue.
-          if (pendingBenchmarks.size) {
-            const roundOpenMs = Number(round.id.split('-')[1]) || 0;
-            const fieldErrors = graded.map((f) => o.errors[f.competitor]);
-            for (const b of pendingBenchmarks.values()) {
-              if (b.scorecard || b.submitMs >= roundOpenMs) continue; // already graded, or not yet a fresh round
-              const g = benchmarkRank(b.prediction, o.actual, fieldErrors);
-              void signScorecard(
-                { agent: b.agentLabel, roundId: round.id, reasonHash: b.reasonHash, prediction: b.prediction, actual: o.actual, errorUsd: g.errorUsd, rank: g.rank, field: g.field, settledAtSec },
-                scoreKey,
-              ).then((card) => { b.scorecard = card; }).catch((e) => console.warn('[benchmark] sign failed: ' + (e as Error).message));
-            }
-          }
         }
         // Grade FREE external submissions committed before this round opened, into each agent's track
         // record (the field a paid credential is minted from). No key needed, these are just the facts.
@@ -1134,10 +1175,10 @@ async function runOneRound(
           for (const s of freeSubmissions) {
             if (s.submitMs >= openMs) { kept.push(s); continue; } // not a fresh round yet, keep for the next
             const g = benchmarkRank(s.prediction, o.actual, fieldErrors);
-            const rec = externalRecords.get(s.agent) ?? [];
-            rec.push({ roundId: round.id, prediction: s.prediction, actual: o.actual, errorUsd: g.errorUsd, rank: g.rank, field: g.field, settledAtSec });
-            externalRecords.set(s.agent, rec.slice(-100));
-            pushFeed(`${s.agent} graded: $${g.errorUsd.toFixed(2)} error, rank #${g.rank}/${g.field} (${rec.length} rounds on record)`);
+            const rec = externalRecords.get(s.wallet) ?? [];
+            rec.push({ roundId: round.id, label: s.label, prediction: s.prediction, actual: o.actual, errorUsd: g.errorUsd, rank: g.rank, field: g.field, settledAtSec });
+            externalRecords.set(s.wallet, rec.slice(-100));
+            pushFeed(`${s.label} graded: $${g.errorUsd.toFixed(2)} error, rank #${g.rank}/${g.field} (${rec.length} rounds on record)`);
           }
           freeSubmissions = kept;
           refreshExternalBoard();
@@ -1400,24 +1441,34 @@ async function main(): Promise<void> {
       return;
     }
     if (req.method === 'POST' && url === '/api/submit') {
-      // FREE external intake: an agent PUSHES its forecast (no payment). Committed now, graded at the
-      // next round, accumulated into its track record. The paid mint later certifies that record.
+      // FREE external intake: an agent PUSHES its forecast (no payment). The submission is tied to a
+      // wallet signature, so the accumulated record is non-spoofable and only that wallet can mint it.
       const reply = (code: number, obj: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }); res.end(JSON.stringify(obj)); };
       let body = '';
       req.on('data', (c) => { body += c; if (body.length > 4000) req.destroy(); });
       req.on('end', () => {
         try {
-          const { agent, prediction } = JSON.parse(body || '{}') as { agent?: string; prediction?: number };
+          const { agent, prediction, wallet, address, signature, nonce } = JSON.parse(body || '{}') as { agent?: string; prediction?: number; wallet?: string; address?: string; signature?: string; nonce?: string };
           const label = String(agent || '').replace(/[^\w -]/g, '').slice(0, 24);
           const p = Number(prediction);
           if (!label) return reply(400, { error: 'agent label required' });
           if (!Number.isFinite(p) || p <= 0) return reply(400, { error: 'prediction must be a number > 0 (USD amplitude of the next ~60s ETH move)' });
-          const sub: FreeSubmission = { agent: label, prediction: p, reasonHash: reasonHash({ competitor: label, prediction: p, rationale: 'submit', inputs: `submit:${label}:${Date.now()}` }), submitMs: Date.now() };
-          const i = freeSubmissions.findIndex((s) => s.agent === label);
+          const nonceText = String(nonce || '').slice(0, 96);
+          if (!nonceText) return reply(400, { error: 'nonce required (unique string signed with the forecast)' });
+          let owner = '';
+          try { owner = normalizeWallet(String(wallet || address || '')); } catch { /* invalid below */ }
+          if (!owner) return reply(400, { error: 'wallet/address required (0x...)' });
+          const msg = submitMessage({ wallet: owner, label, prediction: p, nonce: nonceText });
+          let recovered = '';
+          try { recovered = ethers.verifyMessage(msg, String(signature || '')); } catch { /* invalid below */ }
+          if (recovered.toLowerCase() !== owner.toLowerCase()) return reply(401, { error: 'invalid wallet signature', messageToSign: msg });
+          const key = owner.toLowerCase();
+          const sub: FreeSubmission = { wallet: key, label, prediction: p, reasonHash: reasonHash({ competitor: owner, prediction: p, rationale: 'submit', inputs: `submit:${key}:${nonceText}` }), submitMs: Date.now(), nonce: nonceText };
+          const i = freeSubmissions.findIndex((s) => s.wallet === key);
           if (i >= 0) freeSubmissions[i] = sub; else freeSubmissions.push(sub); // one pending per agent
-          pushFeed(`${label} submitted a forecast ($${p.toFixed(2)}), grading next round`);
+          pushFeed(`${label} submitted a signed forecast ($${p.toFixed(2)}), grading next round`);
           broadcast();
-          reply(202, { ok: true, note: 'committed before the outcome; graded at the next round, free. Mint your credential to certify your record.' });
+          reply(202, { ok: true, wallet: owner, message: msg, note: 'wallet-authenticated forecast committed before the outcome; graded next round for free. Mint your credential to certify the accumulated record.' });
         } catch (e) {
           reply(400, { error: (e as Error).message });
         }

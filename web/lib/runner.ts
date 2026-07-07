@@ -78,6 +78,29 @@ export interface SignedScorecard {
   signer: string;
   signature: string;
 }
+export interface ExternalRecordRow {
+  agent: string;
+  wallet: string;
+  label: string;
+  rounds: number;
+  avgError: number;
+  bestRank: number;
+  wins: number;
+  fromRound?: string;
+  toRound?: string;
+}
+export interface SignedCredential {
+  agent: string;
+  rounds: number;
+  avgErrorUsd: number;
+  bestRank: number;
+  wins: number;
+  fromRound: string;
+  toRound: string;
+  issuedAtSec: number;
+  signer: string;
+  signature: string;
+}
 export interface LeaderRow {
   id: string;
   label: string;
@@ -118,6 +141,7 @@ export interface ArenaState {
     events?: { ts: number; kind: 'joined' | 'adopted'; text: string }[];
   };
   economics?: { spendUSDC: number; revenueUSDC: number; benchmarkOrders: number; rounds: number };
+  externalBoard?: ExternalRecordRow[];
 }
 
 /** Stable per-browser id so the runner can count UNIQUE guest visitors (no signup, no wallet). */
