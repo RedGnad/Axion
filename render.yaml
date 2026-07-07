@@ -88,4 +88,6 @@ services:
       #                           scorecard {actual, error, rank, field, signature}. Needs HOUSE_EOA_
       #                           PRIVATE_KEY (to sign). Revenue is booked only on delivery; leave unset
       #                           until the service exists. Never self-call (self-trade = invalid).
+      #   AXION_RACE_ENGINE_SERVICE_ID — free builder funnel service. Delivers the race contract,
+      #                           copy-paste patch prompt, settings (price 0), and registration payload.
       # FRONTEND_URL            — where GET / redirects (the Vercel app).

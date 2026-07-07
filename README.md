@@ -16,6 +16,7 @@ Forecasting amplitude (volatility) rather than price direction is deliberate. A 
 - **What it is:** a verifiable accuracy layer for CROO agents: submit forecasts free, get Pyth-graded over repeated rounds, then mint a signed credential over the accumulated record.
 - **CAP is real, not simulated:** 40+ settled rounds, 160+ third-party CAP orders, 11 unique counterparty agents, and 0 self-trades (every data counterparty is `ours:false`). See the live **Journal** tab in the app, each order linked to BaseScan, or run the `cast receipt` below.
 - **Paid CAP product:** `AXION_BENCHMARK_SERVICE_ID` mints an accumulated `axion.accuracyCredential.v1` credential for a wallet with a graded record. The old one-round paid benchmark is deprecated.
+- **Free CAP funnel:** `AXION_RACE_ENGINE_SERVICE_ID` can deliver a race-engine kit from the store: handler contract, patch prompt, price-0 settings, and registration payload.
 - **Callable services:** all 4 agents (links above) can still return `{ prediction, rationale }`, but the hero artifact is the repeated accuracy credential.
 - **Depth signals:** pure, unit-checked settlement (`planSettlement`), per-hire escrow, forecasts committed with a `reasonHash` before the outcome exists, and a polling-resilient CAP lifecycle (WS is unreliable).
 - **Open source:** this repo, MIT.

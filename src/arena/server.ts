@@ -831,19 +831,25 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   const key = process.env.CROO_SDK_KEY;
   const serviceId = process.env.AXION_SERVICE_ID;
   const benchmarkId = process.env.AXION_BENCHMARK_SERVICE_ID; // pay-to-be-scored service (optional)
-  if (!key || (!serviceId && !benchmarkId)) return;
+  const raceEngineId = process.env.AXION_RACE_ENGINE_SERVICE_ID; // free builder onboarding kit (optional)
+  if (!key || (!serviceId && !benchmarkId && !raceEngineId)) return;
   const client = new AgentClient({ baseURL: cfg.baseURL, wsURL: cfg.wsURL }, key);
   try { await client.connectWebSocket(); } catch { /* WS just keeps "online" status */ }
   if (serviceId) console.log(`[axion] forecast provider online on service ${serviceId}`);
   if (benchmarkId) console.log(`[axion] benchmark provider online on service ${benchmarkId}`);
+  if (raceEngineId) console.log(`[axion] race-engine kit provider online on service ${raceEngineId}`);
   const done = new Set<string>();
   const inFlight = new Set<string>();
   const tick = async (): Promise<void> => {
     try {
       const negs = await client.listNegotiations({ role: 'provider', status: 'pending', page: 1, pageSize: 20 });
       for (const n of negs) {
-        if (n.serviceId !== serviceId && n.serviceId !== benchmarkId) continue;
-        try { await client.acceptNegotiation(n.negotiationId); console.log(`[axion] accepted ${n.serviceId === benchmarkId ? 'benchmark' : 'hire'} ${n.negotiationId}`); } catch { /* retry next tick */ }
+        if (n.serviceId !== serviceId && n.serviceId !== benchmarkId && n.serviceId !== raceEngineId) continue;
+        try {
+          await client.acceptNegotiation(n.negotiationId);
+          const kind = n.serviceId === benchmarkId ? 'benchmark' : n.serviceId === raceEngineId ? 'race-engine' : 'hire';
+          console.log(`[axion] accepted ${kind} ${n.negotiationId}`);
+        } catch { /* retry next tick */ }
       }
       const orders = await client.listOrders({ role: 'provider', status: 'paid', page: 1, pageSize: 20 });
       for (const o of orders) {
@@ -859,6 +865,26 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
               console.log(`[axion] delivered consensus forecast ${o.orderId}`);
             } catch (err) {
               console.warn('[axion] forecast delivery failed: ' + (err as Error).message);
+            } finally { inFlight.delete(o.orderId); }
+          })();
+          continue;
+        }
+        // ---- Free Race Engine Kit: store-native onboarding funnel. It does not mutate the builder's
+        // backend; it delivers the exact handler contract, prompt, and registration payload.
+        if (o.serviceId === raceEngineId) {
+          if (done.has(o.orderId) || inFlight.has(o.orderId)) continue;
+          inFlight.add(o.orderId);
+          void (async () => {
+            try {
+              const neg = await client.getNegotiation(o.negotiationId);
+              await client.deliverOrder(o.orderId, {
+                deliverableType: DeliverableType.Text,
+                deliverableText: raceEngineKit(neg.requirements ?? '{}'),
+              });
+              done.add(o.orderId);
+              console.log(`[axion] delivered race-engine kit ${o.orderId}`);
+            } catch (err) {
+              console.warn('[axion] race-engine kit delivery failed: ' + (err as Error).message);
             } finally { inFlight.delete(o.orderId); }
           })();
           continue;
@@ -940,6 +966,64 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
     } catch { /* transient */ }
   };
   setInterval(() => void tick(), 4000);
+}
+
+function raceEngineKit(requirements: string): string {
+  let req: { serviceId?: string; label?: string; stack?: string; ownerWallet?: string; payoutAddress?: string } = {};
+  try { req = JSON.parse(requirements || '{}') as typeof req; } catch { /* optional input */ }
+  const serviceId = String(req.serviceId || '').trim();
+  const label = String(req.label || (serviceId ? `agent-${serviceId.slice(0, 4)}` : 'my-agent')).replace(/[^\w -]/g, '').slice(0, 32);
+  const stack = String(req.stack || 'typescript').slice(0, 48);
+  const payout = String(req.payoutAddress || '').trim();
+  const ownerWallet = String(req.ownerWallet || '').trim();
+  const runnerUrl = process.env.RUNNER_URL || process.env.NEXT_PUBLIC_RUNNER_URL || 'https://axion-arena.onrender.com';
+  const appUrl = process.env.FRONTEND_URL || 'https://axion-fawn.vercel.app';
+  const contract = [
+    'When Axion hires your CROO race service, read requirements JSON:',
+    '{ roundId, asset, spot, deadlineSeconds, recentVol }',
+    'Deliver a JSON string with exactly:',
+    '{ "prediction": <positive USD move amplitude>, "rationale": "<one short sentence>" }',
+    'Set this race service price to 0. Reply fast with a recentVol baseline; paid/internal data is optional.',
+  ].join('\n');
+  const patchPrompt = [
+    'Patch my existing CROO agent so it can race in Axion Clash.',
+    `Stack: ${stack}. Keep my current serviceId unchanged.`,
+    'Add one handler for Axion race orders. On paid order, parse requirements JSON:',
+    '{ roundId, asset, spot, deadlineSeconds, recentVol }.',
+    'Return immediately with a baseline prediction from recentVol if slower data/LLM calls are not ready.',
+    'Deliver exactly JSON.stringify({ prediction, rationale }) where prediction is a positive USD amplitude, not a price and not a direction.',
+    'Set the CROO race service price to 0. The paid product is the Axion credential mint, not race entry.',
+  ].join('\n');
+  const registration = serviceId
+    ? {
+        method: 'POST',
+        url: `${runnerUrl}/api/competitor`,
+        body: { serviceId, label, ...(payout ? { payoutAddress: payout } : {}) },
+      }
+    : {
+        note: 'Create or provide a CROO serviceId, deploy the race handler at price 0, then POST it to /api/competitor.',
+      };
+  return JSON.stringify({
+    type: 'axion.raceEngineKit.v1',
+    appUrl,
+    contract,
+    patchPrompt,
+    serviceSettings: {
+      priceUSDC: 0,
+      requireFundTransfer: false,
+      sla: '5 min',
+      deliverable: '{ prediction, rationale } JSON string',
+    },
+    registration,
+    ownerWallet: ownerWallet || undefined,
+    nextSteps: [
+      'Add the handler to your existing CROO provider.',
+      'Set the race service price to 0.',
+      'Deploy/keep the provider online.',
+      serviceId ? 'POST the registration payload above, or paste the serviceId in the Axion Garage.' : 'Register the serviceId from the Axion Garage.',
+      'Race results build reputation; mint the paid credential after you have a record.',
+    ],
+  });
 }
 
 /** Axion's flagship buyable service: the ARENA CONSENSUS ETH move forecast. Averages the three theses
