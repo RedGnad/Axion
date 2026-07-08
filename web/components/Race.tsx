@@ -104,6 +104,20 @@ export default function Race({ round }: { round: RoundView | null }) {
   // Fastest data this round → ⚡ badge (legitimate edge for picking responsive providers).
   const withData = round.competitors.filter((c) => c.dataMs != null);
   const fastestId = withData.length ? withData.reduce((a, b) => (a.dataMs! <= b.dataMs! ? a : b)).id : null;
+  const dqLabel = (reason?: string) => {
+    const r = (reason || '').toLowerCase();
+    if (/price|cap|minimum/.test(r)) return 'price';
+    if (/invalid response|prediction|rationale|contract/.test(r)) return 'format';
+    if (/fund|balance|usdc/.test(r)) return 'funds';
+    return 'late';
+  };
+  const dqHelp = (reason?: string) => {
+    const tag = dqLabel(reason);
+    if (tag === 'price') return 'Race service price is above Axion cap. Set it to the CROO minimum and re-register.';
+    if (tag === 'format') return 'The service did not return the Axion race JSON contract: {prediction, rationale}.';
+    if (tag === 'funds') return 'The service could not complete because a wallet needed USDC.';
+    return 'No forecast arrived before this round cutoff. The agent can race again if it stays in the roster.';
+  };
 
   // Compact the lanes as the field grows so a big roster doesn't flood the track (keeps the start/
   // finish lines correctly anchored — unlike a scroll container, which would mis-place absolute lines).
@@ -122,7 +136,7 @@ export default function Race({ round }: { round: RoundView | null }) {
           <div key={c.id} className={`group relative ${laneH} border-b border-dashed border-white/5 sm:min-h-[2.75rem] sm:flex-1`}>
             <span className="absolute left-0 top-1 z-10 font-display uppercase tracking-wide text-[12px] sm:text-[13px]" style={{ color: c.dq ? 'var(--color-dim)' : col }}>
               {c.label}
-              {c.dq ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-dim" title="no forecast returned before this round's cutoff; still active, races again next round">late</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
+              {c.dq ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-dim" title={dqHelp(c.failReason)}>{dqLabel(c.failReason)}</span> : c.id === fastestId ? <span className="ml-1 align-middle font-mono text-[8px] uppercase tracking-wider text-volt" title="fastest data this round">fast</span> : null}
             </span>
             <div
               data-kart={c.id}
@@ -132,7 +146,7 @@ export default function Race({ round }: { round: RoundView | null }) {
               {/* Instant reasoning tooltip — hover the lane, appears at the agent's kart with no delay. */}
               {c.dq || c.rationale ? (
                 <span className={`pointer-events-none absolute z-40 hidden w-52 max-w-[46vw] rounded-md border border-line bg-panel/95 p-2 text-left font-mono text-[10px] normal-case leading-snug tracking-normal text-ink/90 shadow-lg group-hover:block ${tipAlignCls} ${tipUp ? 'bottom-full mb-2' : 'top-full mt-2'}`}>
-                  {c.dq ? 'No forecast arrived before this round cutoff. Your agent is still active and races again next round.' : c.rationale}
+                  {c.dq ? dqHelp(c.failReason) : c.rationale}
                 </span>
               ) : null}
               {c.isWinner ? (
@@ -149,7 +163,7 @@ export default function Race({ round }: { round: RoundView | null }) {
                 style={{ background: col, boxShadow: c.dq ? 'none' : `0 0 14px ${col}99`, opacity: c.isWinner ? 1 : 0.92, outline: c.isWinner ? `2px solid var(--color-gold)` : 'none', filter: c.dq ? 'grayscale(1)' : 'none' }}
               />
               <span className="font-mono text-[9px] tnum sm:text-[10px]" style={{ color: c.isWinner ? 'var(--color-gold)' : c.dq ? 'var(--color-over)' : c.estimate != null ? '#cfcfd4' : 'var(--color-dim)' }}>
-                {c.dq ? 'late' : c.estimate != null ? usd(c.estimate) : 'scouting…'}
+                {c.dq ? dqLabel(c.failReason) : c.estimate != null ? usd(c.estimate) : 'scouting…'}
               </span>
             </div>
           </div>

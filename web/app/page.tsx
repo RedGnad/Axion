@@ -16,11 +16,12 @@ import Race from "@/components/Race";
 import {
   useAccount,
   useConnect,
+  useSignMessage,
   useSwitchChain,
   useWriteContract,
 } from "wagmi";
 import { base } from "wagmi/chains";
-import { parseUnits, verifyTypedData } from "viem";
+import { getAddress, parseUnits, verifyTypedData } from "viem";
 
 type Tab = "play" | "builders" | "scorecards" | "proof";
 
@@ -1634,6 +1635,27 @@ async function verifyCredential(c: SignedCredential): Promise<boolean> {
   }
 }
 
+function shortAddr(addr?: string): string {
+  return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : "—";
+}
+
+function credentialMintMessage(wallet: string, nonce: string): string {
+  return [
+    "Axion Clash credential mint",
+    `wallet:${getAddress(wallet as `0x${string}`)}`,
+    `nonce:${nonce}`,
+  ].join("\n");
+}
+
+function racerJoinMessage(wallet: string, serviceId: string, nonce: string): string {
+  return [
+    "Axion Clash racer wallet",
+    `wallet:${getAddress(wallet as `0x${string}`)}`,
+    `serviceId:${serviceId}`,
+    `nonce:${nonce}`,
+  ].join("\n");
+}
+
 /** Compact "verify in 30s" affordance: recovers every scorecard's signer client-side on click. */
 function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
   const [busy, setBusy] = useState(false);
@@ -1678,67 +1700,303 @@ function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
   );
 }
 
-function ExternalBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
-  const board = rows ?? [];
+function scoreStage(rounds: number): { label: string; pct: number; tone: string } {
+  if (rounds >= 25) return { label: "proven", pct: 100, tone: "text-volt" };
+  if (rounds >= 10) return { label: "mint-ready", pct: 78, tone: "text-volt" };
+  if (rounds >= 3) return { label: "warming", pct: 46, tone: "text-gold" };
+  return { label: "seed", pct: Math.max(12, rounds * 12), tone: "text-dim" };
+}
+
+function CredentialCard({
+  row,
+  empty = false,
+}: {
+  row?: NonNullable<ArenaState["externalBoard"]>[number];
+  empty?: boolean;
+}) {
+  const stage = scoreStage(row?.rounds ?? 0);
   return (
-    <div className="mt-3 rounded-lg border border-line/70 bg-panel2/40 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="font-display text-base uppercase tracking-wide text-ink">
-            Builder scorecards
+    <div className="relative min-h-[260px] overflow-hidden rounded-lg border border-volt/25 bg-panel2/60 p-4 shadow-[0_18px_60px_rgba(0,0,0,.25)]">
+      <div
+        className="absolute inset-x-8 top-8 h-28 rounded-full bg-volt/10 blur-3xl"
+        aria-hidden
+      />
+      <div
+        className="relative mx-auto max-w-[320px] rounded-lg border border-white/12 bg-[linear-gradient(135deg,rgba(182,255,58,.16),rgba(42,214,201,.08)_42%,rgba(255,59,107,.10))] p-4 shadow-[0_24px_50px_rgba(0,0,0,.35)]"
+        style={{
+          transform: "perspective(900px) rotateX(8deg) rotateY(-10deg)",
+          transformStyle: "preserve-3d",
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
+              Axion scorecard
+            </div>
+            <div className="mt-2 font-display text-2xl uppercase leading-none tracking-wide text-ink">
+              {empty ? "Unclaimed" : row?.label}
+            </div>
           </div>
-          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-            signed forecasts build the record · CROO mint certifies it
+          <div className="rounded-md border border-volt/35 bg-black/20 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-volt">
+            Pyth
           </div>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="mt-8 grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div className="font-display text-3xl leading-none text-volt tnum">
+              {row?.rounds ?? 0}
+            </div>
+            <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
+              runs
+            </div>
+          </div>
+          <div>
+            <div className="font-display text-3xl leading-none text-ink tnum">
+              {row ? `$${row.avgError.toFixed(2)}` : "—"}
+            </div>
+            <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
+              avg miss
+            </div>
+          </div>
+          <div>
+            <div className="font-display text-3xl leading-none text-gold tnum">
+              {row?.wins ?? 0}
+            </div>
+            <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
+              wins
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider">
+            <span className={stage.tone}>{stage.label}</span>
+            <span className="text-dim">{row ? shortAddr(row.wallet) : "link wallet"}</span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/40">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-under via-volt to-gold"
+              style={{ width: `${stage.pct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      <p className="relative mt-5 text-center text-[13px] leading-relaxed text-dim">
+        {empty
+          ? "Link a racer wallet, race, then mint the card from Axion's CROO service."
+          : "This record is built from Pyth-graded forecasts and can be minted as a signed CROO delivery."}
+      </p>
+    </div>
+  );
+}
+
+function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
+  const board = rows ?? [];
+  if (!board.length) {
+    return (
+      <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <CredentialCard empty />
+        <div className="rounded-lg border border-line/70 bg-panel2/35 p-5">
+          <div className="font-display text-xl uppercase tracking-wide text-ink">
+            No cards minted yet
+          </div>
+          <p className="mt-2 text-[14px] leading-relaxed text-dim">
+            The first linked racer wallet will appear here as a live card. Until
+            then, the race leaderboard stays in Play and the raw proof stays in
+            Journal.
+          </p>
+          <div className="mt-5 grid gap-2 sm:grid-cols-3">
+            {["link wallet", "race", "mint on CROO"].map((x, i) => (
+              <div
+                key={x}
+                className="rounded-md border border-line/70 bg-panel/60 px-3 py-3"
+              >
+                <div className="font-display text-lg text-volt">{i + 1}</div>
+                <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                  {x}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
+      <CredentialCard row={board[0]} />
+      <div className="rounded-lg border border-line/70 bg-panel2/35 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-display text-lg uppercase tracking-wide text-ink">
+              Live card rack
+            </div>
+            <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+              accumulated records · best accuracy first
+            </div>
+          </div>
           <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
             {board.length} wallet{board.length === 1 ? "" : "s"}
           </span>
-          <a
-            href={AXION_AGENT_URL}
-            target="_blank"
-            rel="noopener"
-            className="font-mono text-[10px] uppercase tracking-wider text-under hover:underline"
-          >
-            CROO ↗
-          </a>
+        </div>
+        <div className="mt-3 space-y-2">
+          {board.slice(0, 8).map((r, i) => {
+            const stage = scoreStage(r.rounds);
+            return (
+              <div
+                key={r.wallet}
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-line/70 bg-panel/60 px-3 py-2.5"
+              >
+                <span className="font-display text-xl text-dim tnum">{i + 1}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-display text-[14px] uppercase tracking-wide text-ink">
+                      {r.label}
+                    </span>
+                    <span className={cn("font-mono text-[9px] uppercase tracking-wider", stage.tone)}>
+                      {stage.label}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] text-dim">
+                    {shortAddr(r.wallet)} · best #{r.bestRank || "—"} · {r.wins} wins
+                  </div>
+                </div>
+                <div className="text-right font-mono text-[11px] text-dim">
+                  <b className="text-volt">${r.avgError.toFixed(2)}</b>
+                  <br />
+                  {r.rounds} runs
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
-      {board.length ? (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left font-mono text-[11px]">
-            <thead className="border-b border-white/5 text-dim">
-              <tr>
-                <th className="pb-2 font-normal uppercase tracking-wider">agent</th>
-                <th className="pb-2 font-normal uppercase tracking-wider">wallet</th>
-                <th className="pb-2 text-right font-normal uppercase tracking-wider">rounds</th>
-                <th className="pb-2 text-right font-normal uppercase tracking-wider">avg error</th>
-                <th className="pb-2 text-right font-normal uppercase tracking-wider">best</th>
-                <th className="pb-2 text-right font-normal uppercase tracking-wider">wins</th>
-              </tr>
-            </thead>
-            <tbody>
-              {board.slice(0, 8).map((r) => (
-                <tr key={r.wallet} className="border-b border-white/5 last:border-0">
-                  <td className="py-2 pr-3 text-ink">{r.label}</td>
-                  <td className="py-2 pr-3 text-dim">
-                    {r.wallet.slice(0, 6)}…{r.wallet.slice(-4)}
-                  </td>
-                  <td className="py-2 text-right text-ink">{r.rounds}</td>
-                  <td className="py-2 text-right text-volt">${r.avgError.toFixed(2)}</td>
-                  <td className="py-2 text-right text-dim">#{r.bestRank || "—"}</td>
-                  <td className="py-2 text-right text-dim">{r.wins}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    </div>
+  );
+}
+
+function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
+  const board = rows ?? [];
+  const { address, isConnected } = useAccount();
+  const { connectors, connect, isPending: connecting } = useConnect();
+  const { signMessageAsync, isPending: signing } = useSignMessage();
+  const [payload, setPayload] = useState("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const seen = new Set<string>();
+  const wallets = connectors.filter((c) =>
+    seen.has(c.name) ? false : (seen.add(c.name), true),
+  );
+  const row = address
+    ? board.find((r) => r.wallet.toLowerCase() === address.toLowerCase())
+    : undefined;
+  const copy = () => {
+    navigator.clipboard?.writeText(payload).then(() => {
+      setMsg({ ok: true, text: "mint pass copied" });
+      setTimeout(() => setMsg(null), 1400);
+    });
+  };
+  const prepare = async () => {
+    if (!address) return;
+    setMsg(null);
+    try {
+      const wallet = getAddress(address);
+      const nonce = `mint:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+      const signature = await signMessageAsync({
+        message: credentialMintMessage(wallet, nonce),
+      });
+      setPayload(JSON.stringify({ wallet, nonce, signature }, null, 2));
+      setMsg({ ok: true, text: "pass ready for the CROO mint" });
+    } catch (e) {
+      setMsg({ ok: false, text: ((e as Error).message || "signature rejected").slice(0, 90) });
+    }
+  };
+  return (
+    <div className="rounded-lg border border-volt/25 bg-volt/[0.035] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-display text-lg uppercase tracking-wide text-volt">
+            Mint pass
+          </div>
+          <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-dim">
+            The card is certified by buying Axion&apos;s credential service on
+            CROO. This button prepares the wallet proof for that order.
+          </p>
+        </div>
+        <a
+          href={AXION_AGENT_URL}
+          target="_blank"
+          rel="noopener"
+          className="rounded-md border border-under/35 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-under transition hover:bg-under/10"
+        >
+          CROO service ↗
+        </a>
+      </div>
+
+      {!isConnected ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {wallets.length ? (
+            wallets.map((c) => (
+              <button
+                key={c.uid}
+                onClick={() => connect({ connector: c })}
+                className="rounded-md border border-volt/45 px-3 py-2 font-display text-[12px] uppercase tracking-wide text-volt hover:bg-volt/10"
+              >
+                {connecting ? "connecting..." : `connect ${c.name}`}
+              </button>
+            ))
+          ) : (
+            <span className="font-mono text-[11px] text-dim">
+              no wallet detected
+            </span>
+          )}
         </div>
       ) : (
-        <div className="mt-3 rounded-md border border-line/60 bg-panel/50 px-3 py-3 font-mono text-[11px] text-dim">
-          No builder record yet. Once an external agent submits signed forecasts, its Pyth-graded history appears here.
-        </div>
+        <>
+          <div className="mt-4 rounded-md border border-line/70 bg-panel/60 px-3 py-2 font-mono text-[11px] text-dim">
+            {shortAddr(address)}
+            {row ? (
+              <span className="ml-2 text-volt">
+                {row.rounds} runs · avg ${row.avgError.toFixed(2)}
+              </span>
+            ) : (
+              <span className="ml-2 text-gold">
+                no card for this wallet yet
+              </span>
+            )}
+          </div>
+          <button
+            onClick={prepare}
+            disabled={signing || !row}
+            className="mt-3 w-full rounded-lg bg-volt py-3 font-display text-[14px] uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
+          >
+            {signing ? "signing..." : row ? "prepare mint pass" : "race once with this wallet"}
+          </button>
+          {payload ? (
+            <div className="mt-3 rounded-md border border-line bg-panel/75 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                  paste into CROO requirements
+                </span>
+                <button
+                  onClick={copy}
+                  className="font-mono text-[10px] uppercase tracking-wider text-volt"
+                >
+                  copy
+                </button>
+              </div>
+              <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] text-ink/80">
+                {payload}
+              </pre>
+            </div>
+          ) : null}
+        </>
       )}
+      {msg ? (
+        <div className={cn("mt-2 font-mono text-[11px]", msg.ok ? "text-volt" : "text-over")}>
+          {msg.text}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1746,7 +2004,7 @@ function ExternalBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
 function CredentialVerifier() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState<{ ok: boolean; signer?: string; agent?: string; error?: string } | null>(null);
+  const [res, setRes] = useState<{ ok: boolean; signer?: string; agent?: string; rounds?: number; error?: string } | null>(null);
   const run = async () => {
     setBusy(true);
     setRes(null);
@@ -1754,7 +2012,7 @@ function CredentialVerifier() {
       const parsed = JSON.parse(text || "{}") as SignedCredential | { credential?: SignedCredential };
       const credential = "credential" in parsed && parsed.credential ? parsed.credential : parsed as SignedCredential;
       const ok = await verifyCredential(credential);
-      setRes({ ok, signer: credential.signer, agent: credential.agent });
+      setRes({ ok, signer: credential.signer, agent: credential.agent, rounds: credential.rounds });
     } catch (e) {
       setRes({ ok: false, error: (e as Error).message || "invalid JSON" });
     } finally {
@@ -1762,14 +2020,14 @@ function CredentialVerifier() {
     }
   };
   return (
-    <details className="group mt-3 rounded-lg border border-line/70 bg-panel2/35 p-3">
+    <details className="group mt-4 rounded-lg border border-line/70 bg-panel2/30 p-3">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-display text-base uppercase tracking-wide text-ink">
-            Verify credential JSON
+            Card scanner
           </div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-            advanced · recover signer in-browser
+            advanced seal check
           </div>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-wider text-volt">
@@ -1777,31 +2035,31 @@ function CredentialVerifier() {
         </span>
       </summary>
       <div className="mt-3 border-t border-white/5 pt-3">
-        <div className="flex justify-end">
-          <button
-            onClick={run}
-            disabled={busy || !text.trim()}
-            className="rounded-md border border-volt/50 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
-          >
-            {busy ? "verifying..." : "verify"}
-          </button>
-        </div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder='{"type":"axion.accuracyCredential.v1","credential":{...}}'
-          className="mt-3 min-h-[74px] w-full rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-ink outline-none placeholder:text-dim/60 focus:border-volt/45"
+          className="min-h-[82px] w-full rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-ink outline-none placeholder:text-dim/60 focus:border-volt/45"
         />
+        <button
+          onClick={run}
+          disabled={busy || !text.trim()}
+          className="mt-3 w-full rounded-md border border-volt/50 px-3 py-2 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
+        >
+          {busy ? "scanning..." : "scan credential"}
+        </button>
         {res ? (
           <div
             className={cn(
-              "mt-2 font-mono text-[11px]",
-              res.ok ? "text-volt" : "text-over",
+              "mt-3 rounded-md border px-3 py-2 font-mono text-[11px]",
+              res.ok
+                ? "border-volt/35 bg-volt/[0.04] text-volt"
+                : "border-over/35 bg-over/[0.04] text-over",
             )}
           >
             {res.ok
-              ? `✓ valid · signer ${res.signer?.slice(0, 6)}…${res.signer?.slice(-4)} · agent ${res.agent?.slice(0, 6)}…${res.agent?.slice(-4)}`
-              : `✗ ${res.error || "signature mismatch"}`}
+              ? `authentic · ${res.rounds} runs · ${shortAddr(res.agent)} · sealed by ${shortAddr(res.signer)}`
+              : `not authentic · ${res.error || "signature mismatch"}`}
           </div>
         ) : null}
       </div>
@@ -1813,61 +2071,77 @@ function Scorecards({ state }: { state: ArenaState | null }) {
   const economics = state?.economics;
   return (
     <section
-      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
+      className="reveal rounded-lg border border-line bg-panel/70 p-5 sm:p-7"
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
-        title="Builder credentials"
+        title="Agent scorecards"
         right={
-          <a
-            href={AXION_AGENT_URL}
-            target="_blank"
-            rel="noopener"
-            className="font-mono text-[11px] uppercase tracking-wider text-under hover:underline"
-          >
-            mint on CROO ↗
-          </a>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
+            race record → CROO credential
+          </span>
         }
       />
-      <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-dim">
-        Agents build a record by submitting signed forecasts before settlement.
-        The paid CROO mint certifies the accumulated record as an EIP-712
-        credential.
-      </p>
-      <ExternalBoard rows={state?.externalBoard} />
-      {economics ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              data cost
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {[
+          ["race", "a linked agent calls ETH"],
+          ["grade", "Pyth scores the miss"],
+          ["mint", "CROO seals the card"],
+        ].map(([k, v], i) => (
+          <div key={k} className="rounded-md border border-line/70 bg-panel2/35 px-3 py-3">
+            <div className="flex items-center gap-2">
+              <span className="font-display text-xl text-volt">{i + 1}</span>
+              <span className="font-display text-[14px] uppercase tracking-wide text-ink">
+                {k}
+              </span>
             </div>
-            <div className="mt-1 font-mono text-[14px] text-ink">
-              ≈ ${economics.spendUSDC.toFixed(2)}
-            </div>
-          </div>
-          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              credential revenue
-            </div>
-            <div
-              className={cn(
-                "mt-1 font-mono text-[14px]",
-                economics.revenueUSDC > 0 ? "text-volt" : "text-ink",
-              )}
-            >
-              ${economics.revenueUSDC.toFixed(2)}
+            <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-dim">
+              {v}
             </div>
           </div>
-          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              paid mints
-            </div>
-            <div className="mt-1 font-mono text-[14px] text-ink">
-              {economics.benchmarkOrders}
-            </div>
+        ))}
+      </div>
+      <ScorecardBoard rows={state?.externalBoard} />
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+        <MintCredential rows={state?.externalBoard} />
+        <div className="rounded-lg border border-line/70 bg-panel2/35 p-4">
+          <div className="font-display text-lg uppercase tracking-wide text-ink">
+            House meter
           </div>
+          <p className="mt-1 text-[13px] leading-relaxed text-dim">
+            Race spend and credential revenue stay separate, so growth never
+            hides the cost of bootstrapping agents.
+          </p>
+          {economics ? (
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <div>
+                <div className="font-display text-2xl text-ink tnum">
+                  ${economics.spendUSDC.toFixed(2)}
+                </div>
+                <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                  data spend
+                </div>
+              </div>
+              <div>
+                <div className="font-display text-2xl text-volt tnum">
+                  ${economics.revenueUSDC.toFixed(2)}
+                </div>
+                <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                  credential rev
+                </div>
+              </div>
+              <div>
+                <div className="font-display text-2xl text-ink tnum">
+                  {economics.benchmarkOrders}
+                </div>
+                <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
+                  mints
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
       <CredentialVerifier />
     </section>
   );
@@ -2636,8 +2910,12 @@ function Join() {
   const [svc, setSvc] = useState("");
   const [name, setName] = useState("");
   const [pay, setPay] = useState("");
+  const [linkScorecard, setLinkScorecard] = useState(true);
   const [open, setOpen] = useState(false); // collapse the join tunnel by default → compact pitch first
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { address, isConnected } = useAccount();
+  const { connectors, connect, isPending: connecting } = useConnect();
+  const { signMessageAsync, isPending: signing } = useSignMessage();
   // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
   const [sample, setSample] = useState("");
   const [vres, setVres] = useState<{
@@ -2648,6 +2926,10 @@ function Join() {
   } | null>(null);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const seenWallets = new Set<string>();
+  const wallets = connectors.filter((c) =>
+    seenWallets.has(c.name) ? false : (seenWallets.add(c.name), true),
+  );
   const check = async () => {
     if (!sample.trim()) return;
     setChecking(true);
@@ -2659,6 +2941,20 @@ function Join() {
     setBusy(true);
     setMsg({ ok: true, text: "adding your agent to the next grid…" });
     try {
+      let ownerPayload: { ownerWallet?: string; nonce?: string; signature?: string } = {};
+      if (linkScorecard) {
+        if (!isConnected || !address) {
+          setMsg({ ok: false, text: "connect a scorecard wallet, or turn the card link off" });
+          setBusy(false);
+          return;
+        }
+        const wallet = getAddress(address);
+        const nonce = `join:${svc.trim()}:${Date.now()}`;
+        const signature = await signMessageAsync({
+          message: racerJoinMessage(wallet, svc.trim(), nonce),
+        });
+        ownerPayload = { ownerWallet: wallet, nonce, signature };
+      }
       const r = await fetch(`${RUNNER_URL}/api/competitor`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2666,6 +2962,7 @@ function Join() {
           serviceId: svc.trim(),
           label: name.trim(),
           payoutAddress: pay.trim(),
+          ...ownerPayload,
         }),
       });
       const j = await r.json();
@@ -2673,7 +2970,7 @@ function Join() {
         r.ok
           ? {
               ok: true,
-              text: `✓ ${j.name} joined. Racing next round${j.payout ? " · winnings sent to your address" : ""}`,
+              text: `✓ ${j.name} joined. Racing next round${j.recordWallet ? " · scorecard linked" : ""}${j.payout ? " · winnings sent to your address" : ""}`,
             }
           : { ok: false, text: `✗ ${j.error || r.status}` },
       );
@@ -2967,11 +3264,62 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                 />
                 <button
                   onClick={submit}
-                  disabled={busy || !svc.trim()}
+                  disabled={busy || signing || !svc.trim()}
                   className="rounded-lg bg-volt px-6 py-3 font-display text-[15px] uppercase tracking-wider text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
                 >
-                  {busy ? "adding…" : "Join"}
+                  {busy || signing ? "adding…" : "Join"}
                 </button>
+              </div>
+              <div className="mt-2.5 rounded-lg border border-line/70 bg-panel2/45 px-3 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setLinkScorecard((v) => !v)}
+                    className="flex items-center gap-2 text-left"
+                  >
+                    <span
+                      className={cn(
+                        "h-3.5 w-3.5 rounded-sm border",
+                        linkScorecard
+                          ? "border-volt bg-volt shadow-[0_0_10px_rgba(182,255,58,.35)]"
+                          : "border-line bg-panel",
+                      )}
+                    />
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                      scorecard wallet
+                    </span>
+                  </button>
+                  {linkScorecard && isConnected && address ? (
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-volt">
+                      {shortAddr(address)} linked on join
+                    </span>
+                  ) : linkScorecard ? (
+                    <div className="flex flex-wrap gap-2">
+                      {wallets.length ? (
+                        wallets.slice(0, 3).map((c) => (
+                          <button
+                            key={c.uid}
+                            onClick={() => connect({ connector: c })}
+                            className="rounded-md border border-volt/45 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
+                          >
+                            {connecting ? "connecting..." : c.name}
+                          </button>
+                        ))
+                      ) : (
+                        <span className="font-mono text-[10px] uppercase tracking-wider text-gold">
+                          no wallet detected
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                      racing only
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 text-[12.5px] leading-relaxed text-dim">
+                  Linked racers turn grid results into a mintable Axion card.
+                </div>
               </div>
               <details className="mt-2 group">
                 <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">

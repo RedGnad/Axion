@@ -131,6 +131,14 @@ interface LeaderRow {
   /** The explicit uncertainty add-on inside trustedScore. */
   uncertainty?: number;
 }
+interface JoinedRacer {
+  serviceId: string;
+  label: string;
+  payout?: string;
+  /** Optional authenticated owner. When present, grid results build the same wallet-bound record
+   *  that the paid CROO credential service certifies. */
+  ownerWallet?: string;
+}
 interface ArenaState {
   status: 'idle' | 'running' | 'view-only';
   asset: string;
@@ -259,7 +267,7 @@ function refreshEconomics(): void {
 }
 // Community agents that joined via /api/competitor — PERSISTED (Upstash) so the open roster survives
 // restarts/redeploys; re-instantiated as remote competitors at boot.
-let joinedRoster: { serviceId: string; label: string; payout?: string }[] = [];
+let joinedRoster: JoinedRacer[] = [];
 let running = false;
 let lastRoundStartMs = 0;
 let roundOpenMs = 0; // when the current round opened (for per-agent data latency + ETA calibration)
@@ -370,6 +378,15 @@ function mintMessage(input: { wallet: string; nonce: string }): string {
   ].join('\n');
 }
 
+function racerJoinMessage(input: { wallet: string; serviceId: string; nonce: string }): string {
+  return [
+    'Axion Clash racer wallet',
+    `wallet:${normalizeWallet(input.wallet)}`,
+    `serviceId:${input.serviceId}`,
+    `nonce:${input.nonce}`,
+  ].join('\n');
+}
+
 function buildCredential(wallet: string): Credential | null {
   const addr = normalizeWallet(wallet);
   const recs = externalRecords.get(addr.toLowerCase()) ?? [];
@@ -385,6 +402,19 @@ function buildCredential(wallet: string): Credential | null {
     toRound: recs[recs.length - 1].roundId,
     issuedAtSec: Math.round(Date.now() / 1000),
   };
+}
+
+function ownerWalletForRacer(competitorId: string): string | undefined {
+  return joinedRoster.find((j) => j.label === competitorId)?.ownerWallet;
+}
+
+function appendExternalRecord(wallet: string, entry: RecordEntry): boolean {
+  const key = normalizeWallet(wallet).toLowerCase();
+  const rec = externalRecords.get(key) ?? [];
+  if (rec.some((r) => r.roundId === entry.roundId)) return false;
+  rec.push(entry);
+  externalRecords.set(key, rec.slice(-100));
+  return true;
 }
 
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
@@ -635,7 +665,7 @@ async function loadHistory(): Promise<void> {
   type Persisted = {
     history?: HistoryItem[]; leaderboard?: ArenaState['leaderboard']; predictStats?: ArenaState['predictStats'];
     knownProviderIds?: string[]; seenPairs?: string[]; storeEvents?: typeof storeEvents;
-    joinedRoster?: { serviceId: string; label: string; payout?: string }[];
+    joinedRoster?: JoinedRacer[];
     racesToday?: number; racesDayKey?: string; nextRoundAtMs?: number;
     externalRecords?: [string, RecordEntry[]][];
   };
@@ -1032,6 +1062,13 @@ function raceEngineKit(requirements: string): string {
         method: 'POST',
         url: `${runnerUrl}/api/competitor`,
         body: { serviceId, label, ...(payout ? { payoutAddress: payout } : {}) },
+        scorecardWallet: ownerWallet
+          ? {
+              wallet: ownerWallet,
+              message: 'Sign: Axion Clash racer wallet\\nwallet:<wallet>\\nserviceId:<serviceId>\\nnonce:<unique>',
+              addToBody: { ownerWallet, nonce: '<unique>', signature: '<wallet-signature>' },
+            }
+          : 'Optional: connect/sign in the Axion Garage so grid results feed your mintable scorecard.',
       }
     : {
         note: 'Create or provide a CROO serviceId, deploy the race handler at the CROO minimum price, then POST it to /api/competitor.',
@@ -1389,15 +1426,15 @@ async function runOneRound(
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
         rebuildLeaderboardFromHistory();
+        const graded = round.forecasts.filter((f) => Number.isFinite(o.errors[f.competitor]));
+        const ranked = [...graded].sort((a, b) => o.errors[a.competitor] - o.errors[b.competitor]);
+        const rankOf = new Map(ranked.map((f, i) => [f.competitor, i + 1]));
+        const settledAtSec = Math.round((Date.parse(o.settledAt) || Date.now()) / 1000);
         // Sign each graded forecast into a tamper-proof accuracy scorecard (the verifiable track record).
         // Pre-committed (reasonHash) + graded vs Pyth + signed by our published EOA → an agent's record
         // cannot be silently rewritten. Async + best-effort: absent key or failure just skips it, no break.
         const scoreKey = process.env.HOUSE_EOA_PRIVATE_KEY;
         if (scoreKey) {
-          const graded = round.forecasts.filter((f) => Number.isFinite(o.errors[f.competitor]));
-          const ranked = [...graded].sort((a, b) => o.errors[a.competitor] - o.errors[b.competitor]);
-          const rankOf = new Map(ranked.map((f, i) => [f.competitor, i + 1]));
-          const settledAtSec = Math.round((Date.parse(o.settledAt) || Date.now()) / 1000);
           void (async () => {
             try {
               const cards = await Promise.all(
@@ -1426,6 +1463,30 @@ async function runOneRound(
               console.warn('[scorecard] signing failed: ' + (err as Error).message);
             }
           })();
+        }
+        // If a community racer linked an owner wallet at join, its actual grid performance feeds the
+        // same accumulated record that the paid CROO credential service certifies. This unifies the
+        // consumer grid and the store product without inventing a second reputation system.
+        let linkedGridRecords = 0;
+        for (const f of graded) {
+          const wallet = ownerWalletForRacer(f.competitor);
+          if (!wallet) continue;
+          const added = appendExternalRecord(wallet, {
+            roundId: round.id,
+            label: personaMeta(f.competitor).label,
+            prediction: f.prediction,
+            actual: o.actual,
+            errorUsd: o.errors[f.competitor],
+            rank: rankOf.get(f.competitor) ?? 0,
+            field: graded.length,
+            settledAtSec,
+          });
+          if (added) linkedGridRecords++;
+        }
+        if (linkedGridRecords) {
+          refreshExternalBoard();
+          pushFeed(`${linkedGridRecords} racer scorecard record${linkedGridRecords > 1 ? 's' : ''} updated from the grid`);
+          saveHistory();
         }
         // Grade FREE external submissions committed before this round opened, into each agent's track
         // record (the field a paid credential is minted from). No key needed, these are just the facts.
@@ -1661,12 +1722,52 @@ async function main(): Promise<void> {
       req.on('end', () => {
         void (async () => {
           try {
-            const { serviceId, label, payoutAddress } = JSON.parse(body || '{}') as { serviceId?: string; label?: string; payoutAddress?: string };
+            const { serviceId, label, payoutAddress, ownerWallet, wallet, address, signature, nonce } = JSON.parse(body || '{}') as {
+              serviceId?: string;
+              label?: string;
+              payoutAddress?: string;
+              ownerWallet?: string;
+              wallet?: string;
+              address?: string;
+              signature?: string;
+              nonce?: string;
+            };
             if (!serviceId || !/^[0-9a-f-]{36}$/i.test(serviceId)) return reply(400, { error: 'valid serviceId (uuid) required' });
             if (isDisabledRacerService(serviceId)) return reply(409, { error: 'this serviceId is disabled in Axion until the race service is fixed and re-registered' });
-            if (competitors.some((c) => c.kind === 'remote' && c.serviceId === serviceId)) return reply(409, { error: 'agent already in the arena' });
             const payout = (payoutAddress || '').trim();
             if (payout && !isPayoutAddress(payout)) return reply(400, { error: 'payout address must be a 0x… Base address (40 hex chars)' });
+            const ownerRaw = ownerWallet || wallet || address || '';
+            let verifiedOwner = '';
+            if (ownerRaw || signature || nonce) {
+              const nonceText = String(nonce || '').slice(0, 96);
+              if (!ownerRaw || !signature || !nonceText) return reply(400, { error: 'wallet binding requires ownerWallet, nonce and signature' });
+              try { verifiedOwner = normalizeWallet(String(ownerRaw)); } catch { return reply(400, { error: 'ownerWallet must be a 0x… address' }); }
+              const msg = racerJoinMessage({ wallet: verifiedOwner, serviceId, nonce: nonceText });
+              let recovered = '';
+              try { recovered = ethers.verifyMessage(msg, String(signature)); } catch { /* invalid below */ }
+              if (recovered.toLowerCase() !== verifiedOwner.toLowerCase()) {
+                return reply(401, { error: 'invalid owner signature for racer wallet', messageToSign: msg });
+              }
+            }
+            const existing = competitors.find((c) => c.kind === 'remote' && c.serviceId === serviceId);
+            if (existing) {
+              if (!verifiedOwner && !payout) return reply(409, { error: 'agent already in the arena' });
+              const name = existing.id;
+              const row = joinedRoster.find((j) => j.serviceId === serviceId);
+              if (row) {
+                if (verifiedOwner) row.ownerWallet = verifiedOwner;
+                if (payout) row.payout = payout;
+              } else {
+                joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined });
+                joinedRoster = joinedRoster.slice(-50);
+              }
+              if (payout) setAgentPayout(name, payout);
+              saveHistory();
+              refreshRoster();
+              pushFeed(`${name} updated${verifiedOwner ? ' · scorecard wallet linked' : ''}${payout ? ' · payout wallet linked' : ''}`);
+              broadcast();
+              return reply(200, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || row?.ownerWallet || null, note: verifiedOwner ? 'wallet linked — future grid results build this scorecard' : 'agent settings updated' });
+            }
             if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
             let name = (label || `agent-${serviceId.slice(0, 4)}`).replace(/[^\w -]/g, '').slice(0, 24) || `agent-${serviceId.slice(0, 4)}`;
             while (metaById.has(name)) name += '*';
@@ -1678,14 +1779,14 @@ async function main(): Promise<void> {
             competitors.push(comp);
             metaById.set(name, { label: name, blurb: 'community agent' });
             if (payout) setAgentPayout(name, payout); // route this agent's winning purse on-chain
-            joinedRoster.push({ serviceId, label: name, payout: payout || undefined });
+            joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined });
             joinedRoster = joinedRoster.slice(-50);
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
             refreshRoster(); // the new agent is now bettable for the next race (idle predictions)
-            pushFeed(`New competitor joined: ${name}`);
+            pushFeed(`New competitor joined: ${name}${verifiedOwner ? ' · scorecard wallet linked' : ''}`);
             broadcast();
-            reply(202, { ok: true, name, payout: !!payout, note: 'joined — first race validates the handler response' });
+            reply(202, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || null, note: verifiedOwner ? 'joined — grid results will build this wallet-bound scorecard' : 'joined — first race validates the handler response' });
           } catch (e) {
             reply(400, { error: (e as Error).message });
           }
