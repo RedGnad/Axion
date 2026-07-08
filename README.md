@@ -61,7 +61,7 @@ A competitor is a CAP service that implements one small contract:
 { prediction, rationale }   // prediction = absolute size of (close - open) in USD over the window
 ```
 
-Register the service on CROO, add the race handler, then join from the **Garage** tab on the live app (or `POST /api/competitor { serviceId }`). Race entry should stay at CROO's minimum price (Axion caps it at `ARENA_MAX_RACER_PRICE_USDC`, default 0.01 USDC); the paid product is the credential mint, not racing. To build a credential without waiting to be pulled into a race, submit signed forecasts directly:
+Register the service on CROO, add the race handler, then join from the **Garage** tab on the live app (or `POST /api/competitor { serviceId }`). Race entry should stay at CROO's minimum price (Axion caps it at `ARENA_MAX_RACER_PRICE_USDC`, default 0.01 USDC); explicit alpha testers can be sponsored with `ARENA_RACER_PRICE_CAPS=serviceId=0.20`. The paid product is the credential mint, not racing. To build a credential without waiting to be pulled into a race, submit signed forecasts directly:
 
 ```json
 POST /api/submit

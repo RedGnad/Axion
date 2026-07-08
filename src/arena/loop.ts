@@ -183,6 +183,27 @@ const LIVE_SOURCING = process.env.ARENA_LIVE_SOURCING === '1';
 const isCuratedSeed = (serviceId: string): boolean => DATA_AGENTS.some((e) => e.serviceId === serviceId);
 const PROVIDER_EXPLORATION_RATE = Math.max(0, Math.min(1, Number(process.env.ARENA_PROVIDER_EXPLORATION_RATE ?? '0.02')));
 
+function parseRacerPriceCaps(): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const raw of (process.env.ARENA_RACER_PRICE_CAPS ?? '').split(',')) {
+    const [rawKey, rawValue] = raw.split('=');
+    const key = (rawKey ?? '').trim().toLowerCase();
+    const value = Number((rawValue ?? '').trim());
+    if (!key || !Number.isFinite(value) || value < 0) continue;
+    out.set(key, value);
+  }
+  return out;
+}
+
+const RACER_PRICE_CAPS = parseRacerPriceCaps();
+
+function racerPriceCapUSDC(c: Extract<Competitor, { kind: 'remote' }>): number {
+  const globalCap = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.01');
+  return RACER_PRICE_CAPS.get(c.serviceId.toLowerCase())
+    ?? RACER_PRICE_CAPS.get(c.id.toLowerCase())
+    ?? (Number.isFinite(globalCap) && globalCap >= 0 ? globalCap : 0.01);
+}
+
 // NEVER hire our OWN agents as data providers. Axion + the personas are now listed as forecast
 // services on the store; a persona buying from Axion (or another persona) would be a SELF-TRADE, the
 // exact pattern the hackathon flags/DQs. Data counterparties must stay genuine third parties.
@@ -307,10 +328,10 @@ async function playRemote(
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds, recentVol: ctx.recentVol };
   const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
-  // Race entry is not the business model: the arena only pays the CROO minimum price for open racers.
-  // Revenue comes from paid signed credentials, not charging or richly paying racers. Keep the cap tiny
-  // so a community roster cannot drain the treasury.
-  const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.01');
+  // Race entry is not the business model: the default cap is the CROO minimum price. A specific
+  // alpha tester can be sponsored with ARENA_RACER_PRICE_CAPS=serviceId=0.20 without changing the
+  // open-grid policy for everyone else.
+  const capUSDC = racerPriceCapUSDC(c);
   const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : 0;
   let hire;
   try {

@@ -37,7 +37,12 @@ services:
         value: "8"
       # Temporarily disabled external racers. Re-register after fixing the race handler contract/price.
       - key: ARENA_DISABLED_RACER_SERVICE_IDS
-        value: "b52551e2-1ea9-416f-b8c7-7311b8129a8a"
+        value: ""
+      # Per-racer alpha/sponsor caps. Default open-grid cap stays at CROO minimum; b525 is our first external tester.
+      - key: ARENA_MAX_RACER_PRICE_USDC
+        value: "0.01"
+      - key: ARENA_RACER_PRICE_CAPS
+        value: "b52551e2-1ea9-416f-b8c7-7311b8129a8a=0.20"
       - key: ARENA_MIN_ROUND_MS
         value: "900000"
       - key: ARENA_PROVIDER_EXPLORATION_RATE
@@ -90,5 +95,6 @@ services:
       #                           until the service exists. Never self-call (self-trade = invalid).
       #   AXION_RACE_ENGINE_SERVICE_ID — builder funnel service. Delivers the race contract,
       #                           copy-paste patch prompt, minimum-price settings, and registration payload.
-      #   ARENA_MAX_RACER_PRICE_USDC — cap for external racer hires; keep at CROO minimum (0.01).
+      #   ARENA_MAX_RACER_PRICE_USDC — default cap for external racer hires; keep at CROO minimum (0.01).
+      #   ARENA_RACER_PRICE_CAPS — optional serviceId=USDC overrides for explicit alpha/sponsored racers.
       # FRONTEND_URL            — where GET / redirects (the Vercel app).

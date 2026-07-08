@@ -206,15 +206,17 @@ const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '2'));
 // remaining slots rotate through community agents by "least-recently-raced" so the treasury cost is
 // fixed regardless of how many agents join, and every agent still races within a bounded window.
 const MAX_RACERS = Math.max(0, Number(process.env.ARENA_MAX_RACERS_PER_ROUND ?? '8'));
-const LEGACY_DISABLED_RACER_SERVICE_IDS = [
-  // agent-b525 raced successfully, then became incompatible after the race-entry pricing rules changed.
-  // Keep its historical leaderboard row, but never restore it to the live grid.
-  'b52551e2-1ea9-416f-b8c7-7311b8129a8a',
-];
-const DISABLED_RACER_SERVICE_IDS = new Set(
-  [...LEGACY_DISABLED_RACER_SERVICE_IDS, ...(process.env.ARENA_DISABLED_RACER_SERVICE_IDS ?? '').split(',')]
-    .map((x) => x.trim().toLowerCase())
+const RACER_PRICE_CAP_SERVICE_IDS = new Set(
+  (process.env.ARENA_RACER_PRICE_CAPS ?? '')
+    .split(',')
+    .map((x) => x.split('=')[0]?.trim().toLowerCase() ?? '')
     .filter(Boolean),
+);
+const DISABLED_RACER_SERVICE_IDS = new Set(
+  (process.env.ARENA_DISABLED_RACER_SERVICE_IDS ?? '')
+    .split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter((x) => x && !RACER_PRICE_CAP_SERVICE_IDS.has(x)),
 );
 const BASESCAN = 'https://basescan.org/tx/';
 
