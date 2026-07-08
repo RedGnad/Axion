@@ -16,6 +16,7 @@ import Race from "@/components/Race";
 import {
   useAccount,
   useConnect,
+  useDisconnect,
   useSignMessage,
   useSwitchChain,
   useWriteContract,
@@ -1656,6 +1657,72 @@ function racerJoinMessage(wallet: string, serviceId: string, nonce: string): str
   ].join("\n");
 }
 
+function WalletOwnerPanel({
+  title = "Owner wallet",
+  compact = false,
+}: {
+  title?: string;
+  compact?: boolean;
+}) {
+  const { address, isConnected } = useAccount();
+  const { connectors, connect, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
+  const seen = new Set<string>();
+  const wallets = connectors.filter((c) =>
+    seen.has(c.name) ? false : (seen.add(c.name), true),
+  );
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-line/70 bg-panel/55",
+        compact ? "px-3 py-2.5" : "p-4",
+      )}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+            {title}
+          </div>
+          <div className="mt-1 text-[12.5px] leading-relaxed text-dim">
+            Personal EOA that owns the scorecard. Sign only; no spend here.
+          </div>
+        </div>
+        {isConnected && address ? (
+          <div className="flex items-center gap-2">
+            <span className="rounded-md border border-volt/35 bg-volt/[0.05] px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt">
+              {shortAddr(address)}
+            </span>
+            <button
+              onClick={() => disconnect()}
+              className="rounded-md border border-line px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-dim hover:text-ink"
+            >
+              switch
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {wallets.length ? (
+              wallets.slice(0, 3).map((c) => (
+                <button
+                  key={c.uid}
+                  onClick={() => connect({ connector: c })}
+                  className="rounded-md border border-volt/45 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
+                >
+                  {isPending ? "connecting..." : c.name}
+                </button>
+              ))
+            ) : (
+              <span className="font-mono text-[10px] uppercase tracking-wider text-gold">
+                no wallet detected
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Compact "verify in 30s" affordance: recovers every scorecard's signer client-side on click. */
 function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
   const [busy, setBusy] = useState(false);
@@ -1879,14 +1946,9 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
 function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
   const board = rows ?? [];
   const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending: connecting } = useConnect();
   const { signMessageAsync, isPending: signing } = useSignMessage();
   const [payload, setPayload] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const seen = new Set<string>();
-  const wallets = connectors.filter((c) =>
-    seen.has(c.name) ? false : (seen.add(c.name), true),
-  );
   const row = address
     ? board.find((r) => r.wallet.toLowerCase() === address.toLowerCase())
     : undefined;
@@ -1933,23 +1995,12 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
         </a>
       </div>
 
+      <div className="mt-4">
+        <WalletOwnerPanel title="Card owner" compact />
+      </div>
       {!isConnected ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {wallets.length ? (
-            wallets.map((c) => (
-              <button
-                key={c.uid}
-                onClick={() => connect({ connector: c })}
-                className="rounded-md border border-volt/45 px-3 py-2 font-display text-[12px] uppercase tracking-wide text-volt hover:bg-volt/10"
-              >
-                {connecting ? "connecting..." : `connect ${c.name}`}
-              </button>
-            ))
-          ) : (
-            <span className="font-mono text-[11px] text-dim">
-              no wallet detected
-            </span>
-          )}
+        <div className="mt-3 rounded-md border border-line/70 bg-panel/45 px-3 py-2 text-[12.5px] leading-relaxed text-dim">
+          Connect the wallet that should own the public scorecard.
         </div>
       ) : (
         <>
@@ -2914,7 +2965,6 @@ function Join() {
   const [open, setOpen] = useState(false); // collapse the join tunnel by default → compact pitch first
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending: connecting } = useConnect();
   const { signMessageAsync, isPending: signing } = useSignMessage();
   // In-product, instant, FREE contract check (no terminal): paste a sample of your agent's output.
   const [sample, setSample] = useState("");
@@ -2926,10 +2976,6 @@ function Join() {
   } | null>(null);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const seenWallets = new Set<string>();
-  const wallets = connectors.filter((c) =>
-    seenWallets.has(c.name) ? false : (seenWallets.add(c.name), true),
-  );
   const check = async () => {
     if (!sample.trim()) return;
     setChecking(true);
@@ -3289,36 +3335,20 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                       scorecard wallet
                     </span>
                   </button>
-                  {linkScorecard && isConnected && address ? (
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-volt">
-                      {shortAddr(address)} linked on join
-                    </span>
-                  ) : linkScorecard ? (
-                    <div className="flex flex-wrap gap-2">
-                      {wallets.length ? (
-                        wallets.slice(0, 3).map((c) => (
-                          <button
-                            key={c.uid}
-                            onClick={() => connect({ connector: c })}
-                            className="rounded-md border border-volt/45 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
-                          >
-                            {connecting ? "connecting..." : c.name}
-                          </button>
-                        ))
-                      ) : (
-                        <span className="font-mono text-[10px] uppercase tracking-wider text-gold">
-                          no wallet detected
-                        </span>
-                      )}
-                    </div>
-                  ) : (
+                  {!linkScorecard ? (
                     <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
                       racing only
                     </span>
-                  )}
+                  ) : null}
                 </div>
+                {linkScorecard ? (
+                  <div className="mt-3">
+                    <WalletOwnerPanel title="Scorecard owner" compact />
+                  </div>
+                ) : null}
                 <div className="mt-2 text-[12.5px] leading-relaxed text-dim">
-                  Linked racers turn grid results into a mintable Axion card.
+                  Linked racers turn grid results into a mintable Axion card. Skip
+                  this only for a quick test run.
                 </div>
               </div>
               <details className="mt-2 group">

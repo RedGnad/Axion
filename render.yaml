@@ -38,12 +38,12 @@ services:
       # Temporarily disabled external racers. Re-register after fixing the race handler contract/price.
       - key: ARENA_DISABLED_RACER_SERVICE_IDS
         value: ""
-      # Per-racer alpha/sponsor caps. Default open-grid cap stays at CROO minimum; b525 + Aphaprobe
-      # joined before the min-price policy was clarified, so they are explicit alpha exceptions.
+      # Per-racer alpha/sponsor caps. Default open-grid cap stays at CROO minimum. b525 + AlphaProbe
+      # joined before the min-price policy was clarified, so they are explicit legacy-alpha exceptions.
       - key: ARENA_MAX_RACER_PRICE_USDC
         value: "0.01"
       - key: ARENA_RACER_PRICE_CAPS
-        value: "b52551e2-1ea9-416f-b8c7-7311b8129a8a=0.20,aphaprobe=0.20"
+        value: "b52551e2-1ea9-416f-b8c7-7311b8129a8a=0.20,00d5cc8e-9ba3-4031-8c4a-72e44f34e4a5=1.00,alphaprobe=1.00,aphaprobe=1.00"
       # Seed external alpha racer. Also restorable from Garage joins, but this keeps the first tester live after past purges.
       - key: COMPETITOR_ROSTER
         value: "agent-b525=b52551e2-1ea9-416f-b8c7-7311b8129a8a"
