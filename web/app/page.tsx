@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent, useEffect, useRef, useState } from "react";
 import {
   useArena,
   postPredict,
@@ -1782,6 +1782,33 @@ function CredentialCard({
   empty?: boolean;
 }) {
   const stage = scoreStage(row?.rounds ?? 0);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [tilt, setTilt] = useState({
+    rx: 8,
+    ry: -10,
+    glareX: 58,
+    glareY: 22,
+  });
+  const move = (e: PointerEvent<HTMLDivElement>) => {
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    setTilt({
+      rx: (0.5 - py) * 15,
+      ry: (px - 0.5) * 18,
+      glareX: px * 100,
+      glareY: py * 100,
+    });
+  };
+  const reset = () => setTilt({ rx: 8, ry: -10, glareX: 58, glareY: 22 });
+  const cardStyle = {
+    "--rx": `${tilt.rx}deg`,
+    "--ry": `${tilt.ry}deg`,
+    "--gx": `${tilt.glareX}%`,
+    "--gy": `${tilt.glareY}%`,
+  } as CSSProperties;
   return (
     <div className="relative min-h-[260px] overflow-hidden rounded-lg border border-volt/25 bg-panel2/60 p-4 shadow-[0_18px_60px_rgba(0,0,0,.25)]">
       <div
@@ -1789,13 +1816,32 @@ function CredentialCard({
         aria-hidden
       />
       <div
-        className="relative mx-auto max-w-[320px] rounded-lg border border-white/12 bg-[linear-gradient(135deg,rgba(182,255,58,.16),rgba(42,214,201,.08)_42%,rgba(255,59,107,.10))] p-4 shadow-[0_24px_50px_rgba(0,0,0,.35)]"
+        ref={cardRef}
+        onPointerMove={move}
+        onPointerLeave={reset}
+        className="relative mx-auto max-w-[320px] overflow-hidden rounded-lg border border-white/12 bg-[linear-gradient(135deg,rgba(182,255,58,.16),rgba(42,214,201,.08)_42%,rgba(255,59,107,.10))] p-4 shadow-[0_24px_50px_rgba(0,0,0,.35)] transition-transform duration-150 ease-out will-change-transform"
         style={{
-          transform: "perspective(900px) rotateX(8deg) rotateY(-10deg)",
+          ...cardStyle,
+          transform:
+            "perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) translateZ(0)",
           transformStyle: "preserve-3d",
         }}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            background:
+              "radial-gradient(circle at var(--gx) var(--gy), rgba(255,255,255,.22), transparent 34%)",
+            transform: "translateZ(36px)",
+          }}
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.08)_42%,transparent_58%)] opacity-60"
+          style={{ transform: "translateZ(24px)" }}
+          aria-hidden
+        />
+        <div className="relative flex items-start justify-between gap-3" style={{ transform: "translateZ(34px)" }}>
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
               Axion scorecard
@@ -1809,7 +1855,7 @@ function CredentialCard({
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-3 gap-2 text-center">
+        <div className="relative mt-8 grid grid-cols-3 gap-2 text-center" style={{ transform: "translateZ(46px)" }}>
           <div>
             <div className="font-display text-3xl leading-none text-volt tnum">
               {row?.rounds ?? 0}
@@ -1836,7 +1882,7 @@ function CredentialCard({
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="relative mt-8" style={{ transform: "translateZ(38px)" }}>
           <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider">
             <span className={stage.tone}>{stage.label}</span>
             <span className="text-dim">{row ? shortAddr(row.wallet) : "link wallet"}</span>
