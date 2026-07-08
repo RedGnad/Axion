@@ -14,4 +14,21 @@ export const LIVERY: Record<string, string> = {
   tanker: '#2AD6C9',
   wizord: '#B583FF',
 };
-export const livery = (id: string) => LIVERY[id] ?? '#FF6A1A';
+
+function colorHash(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export const livery = (id: string) => {
+  const key = id.toLowerCase();
+  if (LIVERY[key]) return LIVERY[key];
+  // Community racers should not collapse into the same orange badge. A hash hue gives every serviceId/
+  // label a stable team color without needing manual curation.
+  const hue = colorHash(key) % 360;
+  return `hsl(${hue} 88% 62%)`;
+};

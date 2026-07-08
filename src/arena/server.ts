@@ -138,6 +138,8 @@ interface JoinedRacer {
   /** Optional authenticated owner. When present, grid results build the same wallet-bound record
    *  that the paid CROO credential service certifies. */
   ownerWallet?: string;
+  /** True when ownerWallet matched CROO's public wallet for this service at join/update time. */
+  ownerVerified?: boolean;
 }
 interface ArenaState {
   status: 'idle' | 'running' | 'view-only';
@@ -385,6 +387,63 @@ function racerJoinMessage(input: { wallet: string; serviceId: string; nonce: str
     `serviceId:${input.serviceId}`,
     `nonce:${input.nonce}`,
   ].join('\n');
+}
+
+interface PublicServiceItem {
+  serviceId?: string;
+  agentId?: string;
+}
+
+interface PublicAgentResponse {
+  agent?: {
+    walletAddress?: string;
+  };
+}
+
+const CROO_PUBLIC_API = 'https://api.croo.network/backend/v1';
+const CROO_PUBLIC_ORIGIN = 'https://agent.croo.network';
+const CROO_OWNER_CACHE_MS = 10 * 60_000;
+const publicOwnerCache = new Map<string, { at: number; wallet: string | null }>();
+
+async function crooPublicOwnerWalletForService(serviceId: string): Promise<string | null> {
+  const key = serviceId.toLowerCase();
+  const cached = publicOwnerCache.get(key);
+  if (cached && Date.now() - cached.at < CROO_OWNER_CACHE_MS) return cached.wallet;
+
+  let agentId = '';
+  for (let page = 1; page <= 50 && !agentId; page++) {
+    const r = await fetch(`${CROO_PUBLIC_API}/public/services?page=${page}`, {
+      headers: { Origin: CROO_PUBLIC_ORIGIN },
+    });
+    if (!r.ok) break;
+    const json = (await r.json()) as { items?: PublicServiceItem[]; total?: string | number };
+    const items = json.items ?? [];
+    const hit = items.find((i) => i.serviceId?.toLowerCase() === key);
+    if (hit?.agentId) {
+      agentId = hit.agentId;
+      break;
+    }
+    if (!items.length) break;
+    const total = Number(json.total);
+    if (Number.isFinite(total) && total > 0 && page >= Math.ceil(total / items.length)) break;
+  }
+
+  let wallet: string | null = null;
+  if (agentId) {
+    const r = await fetch(`${CROO_PUBLIC_API}/public/agents/${agentId}`, {
+      headers: { Origin: CROO_PUBLIC_ORIGIN },
+    });
+    if (r.ok) {
+      const json = (await r.json()) as PublicAgentResponse;
+      const raw = json.agent?.walletAddress;
+      if (raw) {
+        try { wallet = normalizeWallet(raw); } catch { wallet = null; }
+      }
+    }
+  }
+
+  publicOwnerCache.set(key, { at: Date.now(), wallet });
+  return wallet;
 }
 
 function buildCredential(wallet: string): Credential | null {
@@ -1065,10 +1124,11 @@ function raceEngineKit(requirements: string): string {
         scorecardWallet: ownerWallet
           ? {
               wallet: ownerWallet,
-              message: 'Sign: Axion Clash racer wallet\\nwallet:<wallet>\\nserviceId:<serviceId>\\nnonce:<unique>',
+              note: 'Use the CROO public wallet shown on this agent/service. Axion rejects arbitrary wallets for scorecard binding.',
+              message: 'Sign: Axion Clash racer wallet\\nwallet:<croo-public-wallet>\\nserviceId:<serviceId>\\nnonce:<unique>',
               addToBody: { ownerWallet, nonce: '<unique>', signature: '<wallet-signature>' },
             }
-          : 'Optional: connect/sign in the Axion Garage so grid results feed your mintable scorecard.',
+          : 'Optional: connect/sign the CROO public wallet in the Axion Garage so grid results feed your mintable scorecard.',
       }
     : {
         note: 'Create or provide a CROO serviceId, deploy the race handler at the CROO minimum price, then POST it to /api/competitor.',
@@ -1738,6 +1798,7 @@ async function main(): Promise<void> {
             if (payout && !isPayoutAddress(payout)) return reply(400, { error: 'payout address must be a 0x… Base address (40 hex chars)' });
             const ownerRaw = ownerWallet || wallet || address || '';
             let verifiedOwner = '';
+            let ownerVerified = false;
             if (ownerRaw || signature || nonce) {
               const nonceText = String(nonce || '').slice(0, 96);
               if (!ownerRaw || !signature || !nonceText) return reply(400, { error: 'wallet binding requires ownerWallet, nonce and signature' });
@@ -1748,6 +1809,20 @@ async function main(): Promise<void> {
               if (recovered.toLowerCase() !== verifiedOwner.toLowerCase()) {
                 return reply(401, { error: 'invalid owner signature for racer wallet', messageToSign: msg });
               }
+              const publicOwner = await crooPublicOwnerWalletForService(serviceId);
+              if (!publicOwner) return reply(409, { error: 'could not verify this service owner from the CROO public store. Join without scorecard wallet, or retry when the service is visible in the public catalog.' });
+              if (publicOwner.toLowerCase() !== verifiedOwner.toLowerCase()) {
+                return reply(401, {
+                  error: 'scorecard wallet must match the CROO public wallet for this service',
+                  expectedWallet: publicOwner,
+                  receivedWallet: verifiedOwner,
+                });
+              }
+              ownerVerified = true;
+            }
+            const durable = joinedRoster.find((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase());
+            if (verifiedOwner && durable?.ownerWallet && durable.ownerWallet.toLowerCase() !== verifiedOwner.toLowerCase()) {
+              return reply(409, { error: 'this service already has a different scorecard wallet linked. Re-register it as a new CROO service or ask Axion to rotate it manually.' });
             }
             const existing = competitors.find((c) => c.kind === 'remote' && c.serviceId === serviceId);
             if (existing) {
@@ -1756,9 +1831,10 @@ async function main(): Promise<void> {
               const row = joinedRoster.find((j) => j.serviceId === serviceId);
               if (row) {
                 if (verifiedOwner) row.ownerWallet = verifiedOwner;
+                if (verifiedOwner) row.ownerVerified = ownerVerified;
                 if (payout) row.payout = payout;
               } else {
-                joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined });
+                joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined, ownerVerified: ownerVerified || undefined });
                 joinedRoster = joinedRoster.slice(-50);
               }
               if (payout) setAgentPayout(name, payout);
@@ -1779,7 +1855,7 @@ async function main(): Promise<void> {
             competitors.push(comp);
             metaById.set(name, { label: name, blurb: 'community agent' });
             if (payout) setAgentPayout(name, payout); // route this agent's winning purse on-chain
-            joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined });
+            joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined, ownerVerified: ownerVerified || undefined });
             joinedRoster = joinedRoster.slice(-50);
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
