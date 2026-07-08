@@ -43,6 +43,9 @@ services:
         value: "0.01"
       - key: ARENA_RACER_PRICE_CAPS
         value: "b52551e2-1ea9-416f-b8c7-7311b8129a8a=0.20"
+      # Seed external alpha racer. Also restorable from Garage joins, but this keeps the first tester live after past purges.
+      - key: COMPETITOR_ROSTER
+        value: "agent-b525=b52551e2-1ea9-416f-b8c7-7311b8129a8a"
       - key: ARENA_MIN_ROUND_MS
         value: "900000"
       - key: ARENA_PROVIDER_EXPLORATION_RATE

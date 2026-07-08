@@ -22,7 +22,7 @@ import {
 import { base } from "wagmi/chains";
 import { parseUnits, verifyTypedData } from "viem";
 
-type Tab = "play" | "builders" | "proof";
+type Tab = "play" | "builders" | "scorecards" | "proof";
 
 export default function Page() {
   const { state, online } = useArena(2000);
@@ -112,9 +112,16 @@ export default function Page() {
         </>
       )}
 
+      {tab === "scorecards" && (
+        <>
+          <ZoneLabel title="Scorecards" blurb="builder records · credential mint" />
+          <Scorecards state={state} />
+        </>
+      )}
+
       {tab === "proof" && (
         <>
-          <ZoneLabel title="Journal" blurb="proofs, scorecards and payouts" />
+          <ZoneLabel title="Journal" blurb="rounds, hires and payouts" />
           <Ledger state={state} />
         </>
       )}
@@ -129,10 +136,11 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: "play", label: "Play" },
     { id: "builders", label: "Garage" },
+    { id: "scorecards", label: "Scores" },
     { id: "proof", label: "Journal" },
   ];
   return (
-    <div className="reveal mt-3 flex gap-1 sm:mt-5">
+    <div className="reveal mt-3 flex flex-wrap gap-1 sm:mt-5">
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -1801,6 +1809,70 @@ function CredentialVerifier() {
   );
 }
 
+function Scorecards({ state }: { state: ArenaState | null }) {
+  const economics = state?.economics;
+  return (
+    <section
+      className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
+      style={{ animationDelay: "180ms" }}
+    >
+      <SectionTitle
+        title="Builder credentials"
+        right={
+          <a
+            href={AXION_AGENT_URL}
+            target="_blank"
+            rel="noopener"
+            className="font-mono text-[11px] uppercase tracking-wider text-under hover:underline"
+          >
+            mint on CROO ↗
+          </a>
+        }
+      />
+      <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-dim">
+        Agents build a record by submitting signed forecasts before settlement.
+        The paid CROO mint certifies the accumulated record as an EIP-712
+        credential.
+      </p>
+      <ExternalBoard rows={state?.externalBoard} />
+      {economics ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              data cost
+            </div>
+            <div className="mt-1 font-mono text-[14px] text-ink">
+              ≈ ${economics.spendUSDC.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              credential revenue
+            </div>
+            <div
+              className={cn(
+                "mt-1 font-mono text-[14px]",
+                economics.revenueUSDC > 0 ? "text-volt" : "text-ink",
+              )}
+            >
+              ${economics.revenueUSDC.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              paid mints
+            </div>
+            <div className="mt-1 font-mono text-[14px] text-ink">
+              {economics.benchmarkOrders}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <CredentialVerifier />
+    </section>
+  );
+}
+
 function Ledger({ state }: { state: ArenaState | null }) {
   const history = state?.history ?? [];
   const verifiedHistory = history.filter((h) => (h.edges?.length ?? 0) > 0);
@@ -1816,7 +1888,7 @@ function Ledger({ state }: { state: ArenaState | null }) {
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
-        title="Proof center"
+        title="On-chain race journal"
         right={
           <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
             {totalTx.toLocaleString()} txs · Base
@@ -1824,44 +1896,9 @@ function Ledger({ state }: { state: ArenaState | null }) {
         }
       />
       <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-dim">
-        Race proofs, signed builder records, and settlement traces. Spectators can
-        ignore this; builders and judges can verify the trail.
+        Every visible row is backed by CAP orders and settlement traces. Use this
+        when you want the raw audit trail behind the race.
       </p>
-      <ExternalBoard rows={state?.externalBoard} />
-      {state?.economics ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              data cost
-            </div>
-            <div className="mt-1 font-mono text-[14px] text-ink">
-              ≈ ${state.economics.spendUSDC.toFixed(2)}
-            </div>
-          </div>
-          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              credential revenue
-            </div>
-            <div
-              className={cn(
-                "mt-1 font-mono text-[14px]",
-                state.economics.revenueUSDC > 0 ? "text-volt" : "text-ink",
-              )}
-            >
-              ${state.economics.revenueUSDC.toFixed(2)}
-            </div>
-          </div>
-          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
-            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              paid mints
-            </div>
-            <div className="mt-1 font-mono text-[14px] text-ink">
-              {state.economics.benchmarkOrders}
-            </div>
-          </div>
-        </div>
-      ) : null}
-      <CredentialVerifier />
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {verifiedHistory.length === 0 ? (
           <div className="py-8 text-center font-mono text-sm text-dim">

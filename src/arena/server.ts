@@ -602,6 +602,31 @@ function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Rec
   refreshTrustedLeaderboard();
 }
 
+function rebuildLeaderboardFromHistory(): void {
+  const rows = new Map<string, { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }>();
+  for (const h of state.history) {
+    for (const c of h.competitors ?? []) {
+      if (!c.id || !Number.isFinite(c.error)) continue;
+      const row = rows.get(c.id) ?? {
+        id: c.id,
+        label: c.label || personaMeta(c.id).label,
+        wins: 0,
+        rounds: 0,
+        sumError: 0,
+        avgError: 0,
+      };
+      row.rounds += 1;
+      row.wins += c.isWinner ? 1 : 0;
+      row.sumError += Number(c.error);
+      row.avgError = row.sumError / row.rounds;
+      rows.set(c.id, row);
+    }
+  }
+  if (!rows.size) return;
+  state.leaderboard = [...rows.values()];
+  refreshTrustedLeaderboard();
+}
+
 const SEED_FILE = process.env.ARENA_SEED_FILE ?? 'arena-seed.json';
 
 async function loadHistory(): Promise<void> {
@@ -649,6 +674,9 @@ async function loadHistory(): Promise<void> {
       }
     }
   }
+  // The leaderboard is a derived credential surface, not source state. Rebuild it from verified round
+  // history so past pruning bugs cannot erase an agent's earned record (e.g. agent-b525).
+  rebuildLeaderboardFromHistory();
   const disabled = pruneDisabledCommunityRacers({ persist: false });
   if (disabled) {
     console.log(`[arena-server] pruned ${disabled} disabled community racer(s) from durable roster`);
@@ -1360,7 +1388,7 @@ async function runOneRound(
         };
         state.history.unshift(item);
         state.history = state.history.slice(0, 50);
-        bumpLeaderboard(round.forecasts.map((f) => f.competitor), winners, o.errors);
+        rebuildLeaderboardFromHistory();
         // Sign each graded forecast into a tamper-proof accuracy scorecard (the verifiable track record).
         // Pre-committed (reasonHash) + graded vs Pyth + signed by our published EOA → an agent's record
         // cannot be silently rewritten. Async + best-effort: absent key or failure just skips it, no break.
