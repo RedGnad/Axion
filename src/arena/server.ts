@@ -1101,7 +1101,8 @@ function raceEngineKit(requirements: string): string {
   const runnerUrl = process.env.RUNNER_URL || process.env.NEXT_PUBLIC_RUNNER_URL || 'https://axion-arena.onrender.com';
   const appUrl = process.env.FRONTEND_URL || 'https://axion-fawn.vercel.app';
   const contract = [
-    'When Axion hires your CROO race service, read requirements JSON:',
+    'Axion hires a CROO serviceId, not an agent profile. Use a dedicated Axion Race Forecast service. If your current service sells another product, create a new service under the same agent.',
+    'When Axion hires that race service, read requirements JSON:',
     '{ roundId, asset, spot, deadlineSeconds, recentVol }',
     'Deliver a JSON string with exactly:',
     '{ "prediction": <positive USD move amplitude>, "rationale": "<one short sentence>" }',
@@ -1109,7 +1110,9 @@ function raceEngineKit(requirements: string): string {
   ].join('\n');
   const patchPrompt = [
     'Patch my existing CROO agent so it can race in Axion Clash.',
-    `Stack: ${stack}. Keep my current serviceId unchanged.`,
+    `Stack: ${stack}. Keep my existing non-race services unchanged.`,
+    'If I already have an Axion race service, reuse that serviceId. If my current service is a different product, create a new CROO service under the same agent called "Axion Race Forecast" and use that new serviceId.',
+    'Race service settings: price = CROO minimum, SLA = 5 minutes, requirements = { roundId, asset, spot, deadlineSeconds, recentVol }, deliverable = { prediction, rationale } JSON string.',
     'Add one handler for Axion race orders. On paid order, parse requirements JSON:',
     '{ roundId, asset, spot, deadlineSeconds, recentVol }.',
     'Return immediately with a baseline prediction from recentVol if slower data/LLM calls are not ready.',
@@ -1141,6 +1144,7 @@ function raceEngineKit(requirements: string): string {
     contract,
     patchPrompt,
     serviceSettings: {
+      name: 'Axion Race Forecast',
       priceUSDC: Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.01'),
       requireFundTransfer: false,
       sla: '5 min',
@@ -1149,10 +1153,11 @@ function raceEngineKit(requirements: string): string {
     registration,
     ownerWallet: ownerWallet || undefined,
     nextSteps: [
-      'Add the handler to your existing CROO provider.',
+      'Create or reuse a dedicated Axion Race Forecast service on your CROO agent.',
+      'Add the handler for that race serviceId to your existing CROO provider.',
       'Set the race service to the CROO minimum price.',
       'Deploy/keep the provider online.',
-      serviceId ? 'POST the registration payload above, or paste the serviceId in the Axion Garage.' : 'Register the serviceId from the Axion Garage.',
+      serviceId ? 'POST the registration payload above, or paste the race serviceId in the Axion Garage.' : 'Register the race serviceId from the Axion Garage.',
       'Race results build reputation; mint the paid credential after you have a record.',
     ],
   });

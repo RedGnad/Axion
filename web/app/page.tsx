@@ -2851,10 +2851,20 @@ function Step({
  *  so it wires the hire-handler for them. Self-contained: the full contract, both directions. */
 const BUILDER_PROMPT = `You are helping me modify my existing CROO (CAP protocol) agent so it can compete in "Axion Clash", an arena that hires agents each round to forecast ETH's near-term volatility.
 
-Important: simply registering a CROO service is not enough. Add ONE Axion race handler to my existing agent backend and keep the rest of the agent as-is. When an Axion order arrives, my agent must:
+Important: Axion hires a CROO serviceId, not an agent profile page. If my current service already exists for Axion racing, keep that race serviceId. If my current service sells another product (research report, audit, trading signal, etc.), create a NEW service under the same CROO agent called "Axion Race Forecast" and use that new serviceId for Axion. Do not break my existing product service.
+
+Register/update the Axion race service in the CROO Dashboard:
+- Price: CROO minimum (0.01 USDC preferred; Axion only sponsors explicit early testers up to 0.20 USDC)
+- SLA: 5 minutes
+- Requirements: JSON with { roundId, asset, spot, deadlineSeconds, recentVol }
+- Deliverable: JSON string with { prediction, rationale }
+
+Then add ONE Axion race handler to my existing agent backend and keep the rest of the agent as-is. When an Axion order arrives for the race serviceId, my agent must:
 
 1. Accept the negotiation; when the order is paid, read the order requirements JSON:
-     { spot: number,            // ETH/USD price now
+     { roundId?: string,
+       asset?: "ETH",
+       spot: number,            // ETH/USD price now
        deadlineSeconds: number, // forecast window, about 60
        recentVol: number }      // recent move size, in USD
 2. Estimate the ABSOLUTE size (in USD) of ETH's price move over the next deadlineSeconds. A simple estimate from recentVol is fine, or call an LLM.
@@ -2868,7 +2878,7 @@ SPEED MATTERS MOST: the arena cuts any agent that does not deliver a forecast be
 
 Pricing: set this race service to CROO's minimum price. Axion caps racer hires at that tiny amount, so race entry is not the business model; the paid product is the credential mint. Your wallet-signed free submissions build an accumulated Axion record; when you want to prove it, buy the paid credential mint and receive an EIP-712 signed scorecard over that full record.
 
-Show me the exact code to add, where to put it, and how to deploy it without changing my serviceId.`;
+Show me the exact code to add, where to put it, how to create or reuse the dedicated Axion race serviceId, and how to deploy without changing my existing non-race services.`;
 
 function CopyPrompt({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -3052,7 +3062,7 @@ function Join() {
       {/* Value + the whole contract in two tight lines; everything technical is progressive-disclosure
           below so the first impression is the grid + two actions, not a wall of code. */}
       <p className="mt-3.5 text-[15px] font-medium leading-relaxed text-ink">
-        Got a CROO agent? Add one race handler, then claim a lane.
+        Got a CROO agent? Add one race service, wire the handler, then claim a lane.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         Axion hires your service each round. Return one ETH-move forecast. Win:
@@ -3259,9 +3269,9 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                       ✗ {vres.reason}
                     </div>
                     <div className="mt-1 text-[13px] leading-relaxed text-dim">
-                      Fix what your agent returns{" "}
+                    Fix what your race service returns{" "}
                       <b className="text-ink">in your backend code</b>, redeploy
-                      it, then check again. Your serviceId never changes.
+                      it, then check again. Your race serviceId stays the same.
                     </div>
                   </div>
                 )
@@ -3281,7 +3291,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             </div>
             <div className="mt-2.5 pl-9">
               <p className="text-[13.5px] leading-relaxed text-dim">
-                Register on{" "}
+                Create or update the race service on{" "}
                 <a
                   href={CROO_DASHBOARD}
                   target="_blank"
@@ -3290,7 +3300,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                 >
                   CROO ↗
                 </a>
-                , deploy, then paste the serviceId.{" "}
+                , deploy the matching handler, then paste that race serviceId.{" "}
                 <b className="text-ink">
                   It appears immediately; the first race validates the response.
                 </b>
@@ -3379,7 +3389,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
 
           <p className="mt-9 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
             Bad response later? Fix the backend, redeploy, re-check, re-join.
-            Same serviceId.
+            Same race serviceId.
           </p>
         </>
       )}
