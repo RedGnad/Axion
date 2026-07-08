@@ -206,9 +206,13 @@ const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '2'));
 // remaining slots rotate through community agents by "least-recently-raced" so the treasury cost is
 // fixed regardless of how many agents join, and every agent still races within a bounded window.
 const MAX_RACERS = Math.max(0, Number(process.env.ARENA_MAX_RACERS_PER_ROUND ?? '8'));
+const LEGACY_DISABLED_RACER_SERVICE_IDS = [
+  // agent-b525 raced successfully, then became incompatible when we moved race entry to price 0.
+  // Keep its historical leaderboard row, but never restore it to the live grid.
+  'b52551e2-1ea9-416f-b8c7-7311b8129a8a',
+];
 const DISABLED_RACER_SERVICE_IDS = new Set(
-  (process.env.ARENA_DISABLED_RACER_SERVICE_IDS ?? '')
-    .split(',')
+  [...LEGACY_DISABLED_RACER_SERVICE_IDS, ...(process.env.ARENA_DISABLED_RACER_SERVICE_IDS ?? '').split(',')]
     .map((x) => x.trim().toLowerCase())
     .filter(Boolean),
 );
@@ -292,7 +296,6 @@ function removeCommunityCompetitor(idOrServiceId: string, reason: string, opts: 
     metaById.delete(label);
     clearAgentPayout(label);
   }
-  state.leaderboard = state.leaderboard.filter((row) => row.id !== idOrServiceId && !removedLabels.has(row.id));
   const removed = beforeRoster !== joinedRoster.length || beforeCompetitors !== competitors.length || removedLabels.size > 0;
   if (removed) {
     refreshRoster();
@@ -1538,19 +1541,8 @@ async function main(): Promise<void> {
   }
   refreshRoster(); // publish the upcoming racers (for idle free-prediction)
 
-  // Reconcile standings with reality: drop leaderboard rows for agents that are no longer racers
-  // (e.g. a community agent auto-purged for a bad contract). Personas + durable roster always survive,
-  // so this never wipes valid history even in view-only mode.
-  {
-    const validLbIds = new Set<string>([
-      ...PERSONALITIES.map((p) => p.id),
-      ...competitors.map((c) => c.id),
-      ...joinedRoster.map((j) => j.label),
-    ]);
-    const before = state.leaderboard.length;
-    state.leaderboard = state.leaderboard.filter((row) => validLbIds.has(row.id));
-    if (state.leaderboard.length !== before) saveHistory();
-  }
+  // Standings are historical credentials. A community racer can leave or be disabled from the live
+  // grid, but its successfully graded record stays visible and confidence-adjusted.
 
   // The runner is API-only now: ONE interface = the Vercel front. Redirect / there (no 2nd site).
   const FRONTEND_URL = process.env.FRONTEND_URL ?? 'https://axion-fawn.vercel.app';

@@ -114,7 +114,7 @@ export default function Page() {
 
       {tab === "proof" && (
         <>
-          <ZoneLabel title="Journal" blurb="verify hires, bets and payouts" />
+          <ZoneLabel title="Journal" blurb="proofs, scorecards and payouts" />
           <Ledger state={state} />
         </>
       )}
@@ -1677,15 +1677,25 @@ function ExternalBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-display text-base uppercase tracking-wide text-ink">
-            External accuracy records
+            Builder scorecards
           </div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-            free signed submit → Pyth graded → paid credential mint
+            signed forecasts build the record · CROO mint certifies it
           </div>
         </div>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
-          {board.length} wallet{board.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+            {board.length} wallet{board.length === 1 ? "" : "s"}
+          </span>
+          <a
+            href={AXION_AGENT_URL}
+            target="_blank"
+            rel="noopener"
+            className="font-mono text-[10px] uppercase tracking-wider text-under hover:underline"
+          >
+            CROO ↗
+          </a>
+        </div>
       </div>
       {board.length ? (
         <div className="mt-3 overflow-x-auto">
@@ -1718,7 +1728,7 @@ function ExternalBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
         </div>
       ) : (
         <div className="mt-3 rounded-md border border-line/60 bg-panel/50 px-3 py-3 font-mono text-[11px] text-dim">
-          no external records yet. A builder can post a wallet-signed forecast to /api/submit for free.
+          No builder record yet. Once an external agent submits signed forecasts, its Pyth-graded history appears here.
         </div>
       )}
     </div>
@@ -1744,43 +1754,50 @@ function CredentialVerifier() {
     }
   };
   return (
-    <div className="mt-3 rounded-lg border border-line/70 bg-panel2/35 p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <details className="group mt-3 rounded-lg border border-line/70 bg-panel2/35 p-3">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-display text-base uppercase tracking-wide text-ink">
-            Verify a credential
+            Verify credential JSON
           </div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-            paste the CAP delivery JSON · recover signer in-browser
+            advanced · recover signer in-browser
           </div>
         </div>
-        <button
-          onClick={run}
-          disabled={busy || !text.trim()}
-          className="rounded-md border border-volt/50 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
-        >
-          {busy ? "verifying..." : "verify"}
-        </button>
-      </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder='{"type":"axion.accuracyCredential.v1","credential":{...}}'
-        className="mt-3 min-h-[74px] w-full rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-ink outline-none placeholder:text-dim/60 focus:border-volt/45"
-      />
-      {res ? (
-        <div
-          className={cn(
-            "mt-2 font-mono text-[11px]",
-            res.ok ? "text-volt" : "text-over",
-          )}
-        >
-          {res.ok
-            ? `✓ valid · signer ${res.signer?.slice(0, 6)}…${res.signer?.slice(-4)} · agent ${res.agent?.slice(0, 6)}…${res.agent?.slice(-4)}`
-            : `✗ ${res.error || "signature mismatch"}`}
+        <span className="font-mono text-[10px] uppercase tracking-wider text-volt">
+          open ▾
+        </span>
+      </summary>
+      <div className="mt-3 border-t border-white/5 pt-3">
+        <div className="flex justify-end">
+          <button
+            onClick={run}
+            disabled={busy || !text.trim()}
+            className="rounded-md border border-volt/50 px-3 py-1.5 font-display text-[12px] uppercase tracking-wide text-volt transition hover:bg-volt/10 disabled:border-line disabled:text-dim disabled:opacity-60"
+          >
+            {busy ? "verifying..." : "verify"}
+          </button>
         </div>
-      ) : null}
-    </div>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder='{"type":"axion.accuracyCredential.v1","credential":{...}}'
+          className="mt-3 min-h-[74px] w-full rounded-md border border-line bg-panel px-3 py-2 font-mono text-[11px] text-ink outline-none placeholder:text-dim/60 focus:border-volt/45"
+        />
+        {res ? (
+          <div
+            className={cn(
+              "mt-2 font-mono text-[11px]",
+              res.ok ? "text-volt" : "text-over",
+            )}
+          >
+            {res.ok
+              ? `✓ valid · signer ${res.signer?.slice(0, 6)}…${res.signer?.slice(-4)} · agent ${res.agent?.slice(0, 6)}…${res.agent?.slice(-4)}`
+              : `✗ ${res.error || "signature mismatch"}`}
+          </div>
+        ) : null}
+      </div>
+    </details>
   );
 }
 
@@ -1799,41 +1816,51 @@ function Ledger({ state }: { state: ArenaState | null }) {
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
-        title="On-chain activity"
+        title="Proof center"
         right={
           <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
             {totalTx.toLocaleString()} txs · Base
           </span>
         }
       />
+      <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-dim">
+        Race proofs, signed builder records, and settlement traces. Spectators can
+        ignore this; builders and judges can verify the trail.
+      </p>
+      <ExternalBoard rows={state?.externalBoard} />
       {state?.economics ? (
-        <div
-          className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-line/70 bg-panel2/40 px-3 py-2 font-mono text-[11px]"
-          title="Honest unit economics. Spend is our own data cost (never presented as traction). Revenue is real external agents paying to mint a signed credential over their accumulated record."
-        >
-          <span className="uppercase tracking-wider text-dim">unit economics</span>
-          <span className="text-dim">
-            data spend{" "}
-            <b className="text-ink">≈ ${state.economics.spendUSDC.toFixed(2)}</b>
-            {state.economics.rounds > 0 ? (
-              <span className="text-dim">
-                {" "}(${(state.economics.spendUSDC / state.economics.rounds).toFixed(3)}/round)
-              </span>
-            ) : null}
-          </span>
-          <span className="text-dim">
-            credential revenue{" "}
-            <b className={state.economics.revenueUSDC > 0 ? "text-volt" : "text-ink"}>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              data cost
+            </div>
+            <div className="mt-1 font-mono text-[14px] text-ink">
+              ≈ ${state.economics.spendUSDC.toFixed(2)}
+            </div>
+          </div>
+          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              credential revenue
+            </div>
+            <div
+              className={cn(
+                "mt-1 font-mono text-[14px]",
+                state.economics.revenueUSDC > 0 ? "text-volt" : "text-ink",
+              )}
+            >
               ${state.economics.revenueUSDC.toFixed(2)}
-            </b>
-          </span>
-          <span className="text-dim">
-            {state.economics.benchmarkOrders} paid mint
-            {state.economics.benchmarkOrders === 1 ? "" : "s"}
-          </span>
+            </div>
+          </div>
+          <div className="rounded-md border border-line/70 bg-panel2/35 px-3 py-2">
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              paid mints
+            </div>
+            <div className="mt-1 font-mono text-[14px] text-ink">
+              {state.economics.benchmarkOrders}
+            </div>
+          </div>
         </div>
       ) : null}
-      <ExternalBoard rows={state?.externalBoard} />
       <CredentialVerifier />
       <div className="mt-3 max-h-[620px] space-y-3 overflow-auto pr-1">
         {verifiedHistory.length === 0 ? (
@@ -2038,8 +2065,6 @@ function Ledger({ state }: { state: ArenaState | null }) {
 }
 
 function Leaderboard({ state }: { state: ArenaState | null }) {
-  // Only rank agents that are actually on the visible grid. During view-only/redeploy states the
-  // live roster can be empty, so fall back to the replayed/last round instead of showing stale agents.
   const rosterIds = new Set((state?.roster ?? []).map((a) => a.id));
   const roundIds = new Set((state?.round?.competitors ?? []).map((a) => a.id));
   const lastRoundIds = new Set(
@@ -2050,9 +2075,9 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
     : roundIds.size
       ? roundIds
       : lastRoundIds;
-  const lb = (state?.leaderboard ?? []).filter(
-    (r) => activeIds.size > 0 && activeIds.has(r.id),
-  );
+  // Standings are historical: an agent can leave the live grid and still deserve credit for verified
+  // rounds it already completed. Inactive rows are labeled, not erased.
+  const lb = (state?.leaderboard ?? []).filter((r) => r.rounds > 0);
   // Server order is confidence-adjusted: raw error + uncertainty penalty from sample size/freshness.
   // No hard threshold: small samples can rank, but only if they beat the uncertainty penalty.
   const lbOrdered = lb;
@@ -2115,12 +2140,17 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
           lbOrdered.map((r, i) => {
             const confidence = r.confidence ?? (r.rounds / (r.rounds + 12));
             const lowConfidence = confidence < 0.55;
+            const inactive = activeIds.size > 0 && !activeIds.has(r.id);
             return (
               <div
                 key={r.id}
                 className={cn(
                   "flex items-center gap-3 rounded-md border px-3 py-2",
-                  lowConfidence ? "border-line/50 bg-panel/20" : "border-line",
+                  inactive
+                    ? "border-line/40 bg-panel/15 opacity-75"
+                    : lowConfidence
+                      ? "border-line/50 bg-panel/20"
+                      : "border-line",
                 )}
               >
                 <span className="w-5 font-display text-lg tnum text-dim">
@@ -2141,6 +2171,14 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
                       title="low confidence: the uncertainty penalty is still large"
                     >
                       early
+                    </span>
+                  ) : null}
+                  {inactive ? (
+                    <span
+                      className="shrink-0 rounded border border-line px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-dim"
+                      title="historical record kept, but this agent is not in the current grid"
+                    >
+                      inactive
                     </span>
                   ) : null}
                 </span>
@@ -2397,6 +2435,8 @@ function DataMarket({ state }: { state: ArenaState | null }) {
 
 const REPO_URL = "https://github.com/RedGnad/Axion";
 const CROO_DASHBOARD = "https://agent.croo.network";
+const AXION_AGENT_URL =
+  "https://agent.croo.network/agents/a98885cb-1b74-4b86-8d43-8cf403b5dd3f";
 
 /** A copy-on-click terminal command — newcomers shouldn't have to guess the context. */
 function CopyCmd({ cmd }: { cmd: string }) {
@@ -2766,7 +2806,16 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
               <p className="text-[12.5px] leading-relaxed text-dim">
                 Racing is free. Set your CROO service price to 0. Your signed
                 free submits build a record; the paid 0.10 USDC mint certifies
-                that accumulated record.
+                that accumulated record on{" "}
+                <a
+                  href={AXION_AGENT_URL}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-under hover:underline"
+                >
+                  Axion&apos;s CROO page
+                </a>
+                .
               </p>
             </div>
           </details>
