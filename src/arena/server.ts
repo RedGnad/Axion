@@ -207,7 +207,7 @@ const DAILY_RACES = Math.max(1, Number(process.env.ARENA_DAILY_RACES ?? '2'));
 // fixed regardless of how many agents join, and every agent still races within a bounded window.
 const MAX_RACERS = Math.max(0, Number(process.env.ARENA_MAX_RACERS_PER_ROUND ?? '8'));
 const LEGACY_DISABLED_RACER_SERVICE_IDS = [
-  // agent-b525 raced successfully, then became incompatible when we moved race entry to price 0.
+  // agent-b525 raced successfully, then became incompatible after the race-entry pricing rules changed.
   // Keep its historical leaderboard row, but never restore it to the live grid.
   'b52551e2-1ea9-416f-b8c7-7311b8129a8a',
 ];
@@ -243,8 +243,8 @@ function benchmarkRank(prediction: number, actual: number, fieldErrors: number[]
  *  REVENUE from external agents paying to be scored. Revenue is real delivered orders only; never faked. */
 function refreshEconomics(): void {
   const PRICE = Number(process.env.DISCOVERY_MAX_PRICE_USDC) || 0.1;
-  // SPEND = only the data hires our personas buy (the real input cost). Racing is free, so race-entry
-  // orders are never counted as spend. Revenue is the paid scorecards. Two clean columns for a judge.
+  // SPEND = only the data hires our personas buy (the real input cost). Minimum-price race-entry orders
+  // are onboarding friction, not the revenue model, so they stay out of data spend. Revenue is paid scorecards.
   let hires = 0;
   for (const h of state.history) for (const e of h.edges ?? []) if (!e.ours && !e.raceEntry) hires += 1;
   const spendUSDC = Math.round(hires * PRICE * 1.1 * 100) / 100; // data-hire notional + ~10% escrow fee
@@ -986,7 +986,7 @@ function raceEngineKit(requirements: string): string {
     '{ roundId, asset, spot, deadlineSeconds, recentVol }',
     'Deliver a JSON string with exactly:',
     '{ "prediction": <positive USD move amplitude>, "rationale": "<one short sentence>" }',
-    'Set this race service price to 0. Reply fast with a recentVol baseline; paid/internal data is optional.',
+    'Set this race service to the CROO minimum price. Reply fast with a recentVol baseline; paid/internal data is optional.',
   ].join('\n');
   const patchPrompt = [
     'Patch my existing CROO agent so it can race in Axion Clash.',
@@ -995,7 +995,7 @@ function raceEngineKit(requirements: string): string {
     '{ roundId, asset, spot, deadlineSeconds, recentVol }.',
     'Return immediately with a baseline prediction from recentVol if slower data/LLM calls are not ready.',
     'Deliver exactly JSON.stringify({ prediction, rationale }) where prediction is a positive USD amplitude, not a price and not a direction.',
-    'Set the CROO race service price to 0. The paid product is the Axion credential mint, not race entry.',
+    'Set the CROO race service to the minimum price. The paid product is the Axion credential mint, not race entry.',
   ].join('\n');
   const registration = serviceId
     ? {
@@ -1004,15 +1004,17 @@ function raceEngineKit(requirements: string): string {
         body: { serviceId, label, ...(payout ? { payoutAddress: payout } : {}) },
       }
     : {
-        note: 'Create or provide a CROO serviceId, deploy the race handler at price 0, then POST it to /api/competitor.',
+        note: 'Create or provide a CROO serviceId, deploy the race handler at the CROO minimum price, then POST it to /api/competitor.',
       };
   return JSON.stringify({
     type: 'axion.raceEngineKit.v1',
     appUrl,
+    autoRegisters: false,
+    note: 'This kit cannot modify a third-party backend by itself. Apply the patch, deploy the provider, then register the serviceId in Axion.',
     contract,
     patchPrompt,
     serviceSettings: {
-      priceUSDC: 0,
+      priceUSDC: Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.01'),
       requireFundTransfer: false,
       sla: '5 min',
       deliverable: '{ prediction, rationale } JSON string',
@@ -1021,7 +1023,7 @@ function raceEngineKit(requirements: string): string {
     ownerWallet: ownerWallet || undefined,
     nextSteps: [
       'Add the handler to your existing CROO provider.',
-      'Set the race service price to 0.',
+      'Set the race service to the CROO minimum price.',
       'Deploy/keep the provider online.',
       serviceId ? 'POST the registration payload above, or paste the serviceId in the Axion Garage.' : 'Register the serviceId from the Axion Garage.',
       'Race results build reputation; mint the paid credential after you have a record.',
@@ -1229,13 +1231,13 @@ async function runOneRound(
         } else {
           pushFeed(`${personaMeta(competitor).label}: ${why}`); // e.g. "PulseBNB: invalid response (must return {prediction, rationale})"
           // AUTO-PURGE deterministic community-agent contract failures. A racer can be paid elsewhere,
-          // but the Axion race handler itself must be price 0 and return {prediction,rationale}.
+          // but the Axion race handler itself must stay at the CROO minimum price and return {prediction,rationale}.
           const isRemote = competitors.some((x) => x.id === competitor && x.kind === 'remote');
           const badContract = /invalid response/i.test(reason);
-          const paidRacer = /racing is free|service price to 0|price\s.*>\scap/i.test(reason);
+          const paidRacer = /minimum price|price.*cap|price\s.*>\scap/i.test(reason);
           if (isRemote && (badContract || paidRacer)) {
             const fix = paidRacer
-              ? 'Set the CROO race service price to 0, then re-register from the Garage.'
+              ? 'Set the CROO race service to the minimum price, then re-register from the Garage.'
               : 'Return valid {prediction, rationale}, then re-register from the Garage.';
             removeCommunityCompetitor(competitor, fix);
           }

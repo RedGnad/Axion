@@ -307,18 +307,17 @@ async function playRemote(
 ): Promise<{ forecast: Forecast; edges: ArenaEdge[]; fails: HireFail[] }> {
   const request: CompetitorRequest = { roundId: ctx.roundId, asset: ctx.asset, spot: ctx.spot, deadlineSeconds: ctx.horizonSeconds, recentVol: ctx.recentVol };
   const service = { capability: 'competitor', serviceId: c.serviceId, label: c.label, ours: c.ours };
-  // Racing is FREE: the arena never pays a racer. We only pull a racer whose forecast service is priced
-  // at 0 (its forecast is SUBMITTED, not sold); any priced order is rejected before payment. Revenue
-  // comes only from the paid signed scorecard (the benchmark service), never from paying racers. Set
-  // ARENA_MAX_RACER_PRICE_USDC above 0 only to temporarily allow a bounded paid pull.
-  const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0');
+  // Race entry is not the business model: the arena only pays the CROO minimum price for open racers.
+  // Revenue comes from paid signed credentials, not charging or richly paying racers. Keep the cap tiny
+  // so a community roster cannot drain the treasury.
+  const capUSDC = Number(process.env.ARENA_MAX_RACER_PRICE_USDC ?? '0.01');
   const maxPriceSmallestUnit = Number.isFinite(capUSDC) && capUSDC > 0 ? Math.round(capUSDC * 1e6) : 0;
   let hire;
   try {
     hire = await c.orchestrator.hireService(service, JSON.stringify(request), undefined, { maxPriceSmallestUnit });
   } catch (e) {
     if (/price\s.*>\scap/i.test((e as Error).message || '')) {
-      throw new Error('racing is free: set your CROO service price to 0 to race. To sell a signed scorecard, use the paid benchmark service.');
+      throw new Error(`race service price is above Axion's cap (${capUSDC.toFixed(2)} USDC). Set the racer service to the CROO minimum price; sell the signed scorecard via the paid credential service.`);
     }
     throw e;
   }

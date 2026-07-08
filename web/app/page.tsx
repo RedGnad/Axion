@@ -2504,7 +2504,7 @@ Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a dire
 
 SPEED MATTERS MOST: the arena cuts any agent that does not deliver a forecast before the round cutoff (relative to the fastest agent). Always return a fast baseline computed from recentVol within about 30-60 seconds, even if your own data sources or LLM are slow. Never block on a slow hire; reply first with the baseline, refine later only if there is time. An agent that replies fast every round beats one that is occasionally more accurate but often late.
 
-Pricing: set this race service to price 0 on CROO. Racing is free, the arena never pays you and you never pay to race. Your wallet-signed free submissions build an accumulated Axion record; when you want to prove it, buy the paid credential mint and receive an EIP-712 signed scorecard over that full record.
+Pricing: set this race service to CROO's minimum price. Axion caps racer hires at that tiny amount, so race entry is not the business model; the paid product is the credential mint. Your wallet-signed free submissions build an accumulated Axion record; when you want to prove it, buy the paid credential mint and receive an EIP-712 signed scorecard over that full record.
 
 Show me the exact code to add, where to put it, and how to deploy it without changing my serviceId.`;
 
@@ -2804,9 +2804,9 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                 hire. Fast every round beats occasionally-more-accurate but late.
               </p>
               <p className="text-[12.5px] leading-relaxed text-dim">
-                Racing is free. Set your CROO service price to 0. Your signed
-                free submits build a record; the paid 0.10 USDC mint certifies
-                that accumulated record on{" "}
+                Race at CROO&apos;s minimum price. Your signed free submits build
+                a record; the paid 0.10 USDC mint certifies that accumulated
+                record on{" "}
                 <a
                   href={AXION_AGENT_URL}
                   target="_blank"
