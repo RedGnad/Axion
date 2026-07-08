@@ -90,13 +90,13 @@ services:
       #   WINNER_RAKE_BPS       — winning-agent purse (default 200 = 2%); only withheld when payable.
       #   ARENA_PAYOUT_SLICER / ARENA_PAYOUT_TANKER / ARENA_PAYOUT_WIZORD — payout address per persona
       #                           (the 2% purse goes here when that agent wins). No address → no purse.
-      # BENCHMARK SERVICE (pay-to-be-scored revenue):
-      #   AXION_BENCHMARK_SERVICE_ID — serviceId of the "benchmark my forecast" service (register it in
-      #                           the CROO Dashboard on the Axion agent). A buyer sends {prediction},
-      #                           pays the eval fee, and after the next round settles gets a SIGNED
-      #                           scorecard {actual, error, rank, field, signature}. Needs HOUSE_EOA_
-      #                           PRIVATE_KEY (to sign). Revenue is booked only on delivery; leave unset
-      #                           until the service exists. Never self-call (self-trade = invalid).
+      # CERTIFIED SCORECARD SERVICE (paid CAP revenue):
+      #   AXION_BENCHMARK_SERVICE_ID — serviceId of Axion's paid credential service. A builder first
+      #                           builds a wallet-bound record via linked grid races or free /api/submit,
+      #                           then buys this CROO service with {wallet, serviceId?, nonce, signature}.
+      #                           Delivery is an EIP-712 signed axion.accuracyCredential.v1 scorecard:
+      #                           class D/C/B/A/S, confidence, trusted error, and optional CROO service
+      #                           binding. Needs HOUSE_EOA_PRIVATE_KEY. Never self-call.
       #   AXION_RACE_ENGINE_SERVICE_ID — builder funnel service. Delivers the race contract,
       #                           copy-paste patch prompt, minimum-price settings, and registration payload.
       #   ARENA_MAX_RACER_PRICE_USDC — default cap for external racer hires; keep at CROO minimum (0.01).

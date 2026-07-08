@@ -188,7 +188,23 @@ interface ArenaState {
   economics?: { spendUSDC: number; revenueUSDC: number; benchmarkOrders: number; rounds: number };
   /** External agents' accumulated (free-submitted, Pyth-graded) track records: the field a paid
    *  credential is minted from. Free intake in, paid mint out. */
-  externalBoard?: { agent: string; wallet: string; label: string; rounds: number; avgError: number; bestRank: number; wins: number; fromRound?: string; toRound?: string }[];
+  externalBoard?: {
+    agent: string;
+    wallet: string;
+    serviceId?: string;
+    label: string;
+    rounds: number;
+    effectiveRounds: number;
+    avgError: number;
+    trustedError: number;
+    bestRank: number;
+    wins: number;
+    confidence: number;
+    cardClass: string;
+    scoreVersion: string;
+    fromRound?: string;
+    toRound?: string;
+  }[];
 }
 
 // Long-running server: a stray WebSocket/async error must never take down the HTTP server.
@@ -334,6 +350,55 @@ interface FreeSubmission { wallet: string; label: string; prediction: number; re
 let freeSubmissions: FreeSubmission[] = [];
 interface RecordEntry { roundId: string; label?: string; prediction: number; actual: number; errorUsd: number; rank: number; field: number; settledAtSec: number; }
 const externalRecords = new Map<string, RecordEntry[]>();
+const SCORE_VERSION = '2026-07-v1';
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function credentialIdentityForWallet(wallet: string, recs: RecordEntry[], serviceIdHint = ''): { serviceId: string; label: string } {
+  const addr = normalizeWallet(wallet);
+  const hint = serviceIdHint.trim();
+  const linked = joinedRoster.find((j) =>
+    hint
+      ? j.serviceId.toLowerCase() === hint.toLowerCase()
+      : j.ownerWallet?.toLowerCase() === addr.toLowerCase()
+  );
+  const latestLabel = [...recs].reverse().find((r) => r.label)?.label;
+  return {
+    serviceId: linked?.serviceId ?? hint,
+    label: linked?.label || latestLabel || `${addr.slice(0, 6)}…${addr.slice(-4)}`,
+  };
+}
+
+function credentialScore(recs: RecordEntry[]): Pick<Credential, 'effectiveRounds' | 'trustedErrorUsd' | 'confidence' | 'cardClass'> {
+  const rounds = recs.length;
+  if (!rounds) return { effectiveRounds: 0, trustedErrorUsd: 0, confidence: 0, cardClass: 'D' };
+  const avgErrorUsd = recs.reduce((s, r) => s + r.errorUsd, 0) / rounds;
+  const effectiveRounds = rounds;
+  // Small-sample penalty: a 3-round streak should look promising, not proven.
+  const uncertaintyPenalty = 1.25 / Math.sqrt(rounds);
+  const trustedErrorUsd = avgErrorUsd + uncertaintyPenalty;
+  const evidenceConfidence = 100 * (1 - Math.exp(-rounds / 45));
+  const confidence = Math.round(clamp(evidenceConfidence, rounds >= 1 ? 8 : 0, 95));
+  const accuracyScore = clamp(1 - trustedErrorUsd / 3, 0, 1) * 100;
+  const composite = confidence * 0.58 + accuracyScore * 0.42;
+  let cardClass = 'D';
+  if (rounds >= 150 && composite >= 86) cardClass = 'S';
+  else if (rounds >= 50 && composite >= 70) cardClass = 'A';
+  else if (rounds >= 15 && composite >= 52) cardClass = 'B';
+  else if (rounds >= 5) cardClass = 'C';
+  return {
+    effectiveRounds,
+    trustedErrorUsd: Math.round(trustedErrorUsd * 1_000_000) / 1_000_000,
+    confidence,
+    cardClass,
+  };
+}
 
 /** Publish the accumulated external track records (the field a credential is minted from). */
 function refreshExternalBoard(): void {
@@ -342,20 +407,27 @@ function refreshExternalBoard(): void {
       const n = recs.length;
       const avgError = n ? recs.reduce((s, r) => s + r.errorUsd, 0) / n : 0;
       const wins = recs.filter((r) => r.rank === 1).length;
-      const label = [...recs].reverse().find((r) => r.label)?.label || `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
+      const identity = credentialIdentityForWallet(wallet, recs);
+      const score = credentialScore(recs);
       return {
         agent: wallet,
         wallet,
-        label,
+        serviceId: identity.serviceId || undefined,
+        label: identity.label,
         rounds: n,
-        avgError: Math.round(avgError * 100) / 100,
+        effectiveRounds: score.effectiveRounds,
+        avgError: round2(avgError),
+        trustedError: round2(score.trustedErrorUsd),
         bestRank: n ? Math.min(...recs.map((r) => r.rank)) : 0,
         wins,
+        confidence: score.confidence,
+        cardClass: score.cardClass,
+        scoreVersion: SCORE_VERSION,
         fromRound: recs[0]?.roundId,
         toRound: recs[n - 1]?.roundId,
       };
     })
-    .sort((a, b) => a.avgError - b.avgError);
+    .sort((a, b) => a.trustedError - b.trustedError || b.confidence - a.confidence);
 }
 
 function normalizeWallet(raw: string): string {
@@ -372,10 +444,11 @@ function submitMessage(input: { wallet: string; label: string; prediction: numbe
   ].join('\n');
 }
 
-function mintMessage(input: { wallet: string; nonce: string }): string {
+function mintMessage(input: { wallet: string; nonce: string; serviceId?: string }): string {
   return [
     'Axion Clash credential mint',
     `wallet:${normalizeWallet(input.wallet)}`,
+    `serviceId:${input.serviceId?.trim() || ''}`,
     `nonce:${input.nonce}`,
   ].join('\n');
 }
@@ -446,17 +519,26 @@ async function crooPublicOwnerWalletForService(serviceId: string): Promise<strin
   return wallet;
 }
 
-function buildCredential(wallet: string): Credential | null {
+function buildCredential(wallet: string, serviceIdHint = ''): Credential | null {
   const addr = normalizeWallet(wallet);
   const recs = externalRecords.get(addr.toLowerCase()) ?? [];
   if (!recs.length) return null;
   const avgErrorUsd = recs.reduce((s, r) => s + r.errorUsd, 0) / recs.length;
+  const identity = credentialIdentityForWallet(addr, recs, serviceIdHint);
+  const score = credentialScore(recs);
   return {
     agent: addr,
+    serviceId: identity.serviceId,
+    label: identity.label,
+    scoreVersion: SCORE_VERSION,
     rounds: recs.length,
+    effectiveRounds: score.effectiveRounds,
     avgErrorUsd: Math.round(avgErrorUsd * 1_000_000) / 1_000_000,
+    trustedErrorUsd: score.trustedErrorUsd,
     bestRank: Math.min(...recs.map((r) => r.rank)),
     wins: recs.filter((r) => r.rank === 1).length,
+    confidence: score.confidence,
+    cardClass: score.cardClass,
     fromRound: recs[0].roundId,
     toRound: recs[recs.length - 1].roundId,
     issuedAtSec: Math.round(Date.now() / 1000),
@@ -1019,14 +1101,14 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
           void (async () => {
             try {
               const neg = await client.getNegotiation(o.negotiationId);
-              let req: { wallet?: string; address?: string; agent?: string; prediction?: number; nonce?: string; signature?: string } = {};
+              let req: { wallet?: string; address?: string; agent?: string; serviceId?: string; prediction?: number; nonce?: string; signature?: string } = {};
               try { req = JSON.parse(neg.requirements || '{}'); } catch { /* invalid below */ }
               const walletRaw = req.wallet || req.address || (/^0x[0-9a-fA-F]{40}$/.test(String(req.agent || '')) ? req.agent : '');
               if (req.prediction != null) {
                 await client.deliverOrder(o.orderId, {
                   deliverableType: DeliverableType.Text,
                   deliverableText: JSON.stringify({
-                    error: 'one-round benchmark is deprecated. First POST /api/submit for free with a wallet signature, then mint with requirements {"wallet":"0x...","nonce":"...","signature":"..."}',
+                    error: 'one-round benchmark is deprecated. First POST /api/submit for free with a wallet signature, then certify with requirements {"wallet":"0x...","serviceId":"","nonce":"...","signature":"..."}',
                   }),
                 });
                 done.add(o.orderId);
@@ -1043,12 +1125,19 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
               }
               const nonce = String(req.nonce || '').slice(0, 96);
               if (!nonce) {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include nonce + wallet signature for the mint owner' }) });
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include nonce + wallet signature for the card owner' }) });
                 done.add(o.orderId);
                 console.warn(`[credential] rejected ${o.orderId}: no mint nonce`);
                 return;
               }
-              const msg = mintMessage({ wallet, nonce });
+              const serviceId = String(req.serviceId || '').trim();
+              if (serviceId && !/^[0-9a-f-]{36}$/i.test(serviceId)) {
+                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'serviceId must be a CROO service UUID when provided' }) });
+                done.add(o.orderId);
+                console.warn(`[credential] rejected ${o.orderId}: bad serviceId`);
+                return;
+              }
+              const msg = mintMessage({ wallet, nonce, serviceId });
               let recovered = '';
               try { recovered = ethers.verifyMessage(msg, String(req.signature || '')); } catch { /* invalid below */ }
               if (recovered.toLowerCase() !== wallet.toLowerCase()) {
@@ -1057,7 +1146,29 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
                 console.warn(`[credential] rejected ${o.orderId}: bad mint signature`);
                 return;
               }
-              const credential = buildCredential(wallet);
+              if (serviceId) {
+                const publicOwner = await crooPublicOwnerWalletForService(serviceId);
+                if (!publicOwner) {
+                  await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'could not verify service owner from the CROO public store. Certify wallet-only, or retry once the service is public.' }) });
+                  done.add(o.orderId);
+                  console.warn(`[credential] rejected ${o.orderId}: no public owner for ${serviceId}`);
+                  return;
+                }
+                if (publicOwner.toLowerCase() !== wallet.toLowerCase()) {
+                  await client.deliverOrder(o.orderId, {
+                    deliverableType: DeliverableType.Text,
+                    deliverableText: JSON.stringify({
+                      error: 'serviceId owner does not match the signed wallet',
+                      expectedWallet: publicOwner,
+                      receivedWallet: wallet,
+                    }),
+                  });
+                  done.add(o.orderId);
+                  console.warn(`[credential] rejected ${o.orderId}: owner mismatch for ${serviceId}`);
+                  return;
+                }
+              }
+              const credential = buildCredential(wallet, serviceId);
               if (!credential) {
                 await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'no graded Axion record for this wallet yet. Submit forecasts free via POST /api/submit first.' }) });
                 done.add(o.orderId);
@@ -1076,7 +1187,7 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
               benchmarkRevenueUSDC += priceUSDC;
               benchmarkOrders += 1;
               refreshEconomics();
-              pushFeed(`Credential minted: ${wallet.slice(0, 6)}…${wallet.slice(-4)} · ${signed.rounds} rounds · avg error $${signed.avgErrorUsd.toFixed(2)}`);
+              pushFeed(`Card certified: ${signed.label} · class ${signed.cardClass} · ${signed.rounds} runs · trusted miss $${signed.trustedErrorUsd.toFixed(2)}`);
               console.log(`[credential] delivered accumulated credential ${o.orderId} (+${priceUSDC} USDC revenue)`);
               broadcast();
             } catch (err) {
@@ -1117,7 +1228,7 @@ function raceEngineKit(requirements: string): string {
     '{ roundId, asset, spot, deadlineSeconds, recentVol }.',
     'Return immediately with a baseline prediction from recentVol if slower data/LLM calls are not ready.',
     'Deliver exactly JSON.stringify({ prediction, rationale }) where prediction is a positive USD amplitude, not a price and not a direction.',
-    'Set the CROO race service to the minimum price. The paid product is the Axion credential mint, not race entry.',
+    'Set the CROO race service to the minimum price. The paid product is the Axion certified scorecard, not race entry.',
   ].join('\n');
   const registration = serviceId
     ? {
@@ -1131,7 +1242,7 @@ function raceEngineKit(requirements: string): string {
               message: 'Sign: Axion Clash racer wallet\\nwallet:<croo-public-wallet>\\nserviceId:<serviceId>\\nnonce:<unique>',
               addToBody: { ownerWallet, nonce: '<unique>', signature: '<wallet-signature>' },
             }
-          : 'Optional: connect/sign the CROO public wallet in the Axion Garage so grid results feed your mintable scorecard.',
+          : 'Optional: connect/sign the CROO public wallet in the Axion Garage so grid results feed your certifiable scorecard.',
       }
     : {
         note: 'Create or provide a CROO serviceId, deploy the race handler at the CROO minimum price, then POST it to /api/competitor.',
@@ -1903,7 +2014,7 @@ async function main(): Promise<void> {
           if (i >= 0) freeSubmissions[i] = sub; else freeSubmissions.push(sub); // one pending per agent
           pushFeed(`${label} submitted a signed forecast ($${p.toFixed(2)}), grading next round`);
           broadcast();
-          reply(202, { ok: true, wallet: owner, message: msg, note: 'wallet-authenticated forecast committed before the outcome; graded next round for free. Mint your credential to certify the accumulated record.' });
+          reply(202, { ok: true, wallet: owner, message: msg, note: 'wallet-authenticated forecast committed before the outcome; graded next round for free. Certify your card to publish the accumulated record.' });
         } catch (e) {
           reply(400, { error: (e as Error).message });
         }

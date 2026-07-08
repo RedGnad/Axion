@@ -79,10 +79,17 @@ export async function signScorecard(card: Scorecard, privateKey: string): Promis
  */
 export interface Credential {
   agent: string; // the authenticated wallet address the record was built under
+  serviceId: string; // CROO race serviceId when the wallet is bound to one, else empty
+  label: string; // display name certified at issuance
+  scoreVersion: string; // scoring formula version, explicit so old cards remain interpretable
   rounds: number; // graded rounds on record
+  effectiveRounds: number; // sample size after trust caps/decay (currently == rounds, versioned)
   avgErrorUsd: number; // mean absolute error vs Pyth over those rounds
+  trustedErrorUsd: number; // avg error plus small-sample uncertainty penalty
   bestRank: number; // best rank achieved
   wins: number; // rounds ranked #1
+  confidence: number; // 0-100 confidence in the sample size, not a win probability
+  cardClass: string; // D/C/B/A/S product tier derived from evidence + accuracy
   fromRound: string; // first graded round id
   toRound: string; // last graded round id
   issuedAtSec: number; // unix seconds at mint
@@ -90,6 +97,25 @@ export interface Credential {
 export interface SignedCredential extends Credential { signer: string; signature: string }
 
 const CRED_TYPES = {
+  Credential: [
+    { name: 'agent', type: 'string' },
+    { name: 'serviceId', type: 'string' },
+    { name: 'label', type: 'string' },
+    { name: 'scoreVersion', type: 'string' },
+    { name: 'rounds', type: 'uint256' },
+    { name: 'effectiveRounds', type: 'uint256' },
+    { name: 'avgErrorMicro', type: 'uint256' },
+    { name: 'trustedErrorMicro', type: 'uint256' },
+    { name: 'bestRank', type: 'uint256' },
+    { name: 'wins', type: 'uint256' },
+    { name: 'confidence', type: 'uint256' },
+    { name: 'cardClass', type: 'string' },
+    { name: 'fromRound', type: 'string' },
+    { name: 'toRound', type: 'string' },
+    { name: 'issuedAtSec', type: 'uint256' },
+  ],
+} as const;
+const LEGACY_CRED_TYPES = {
   Credential: [
     { name: 'agent', type: 'string' },
     { name: 'rounds', type: 'uint256' },
@@ -104,10 +130,17 @@ const CRED_TYPES = {
 function credValue(c: Credential): Record<string, string | bigint> {
   return {
     agent: c.agent,
+    serviceId: c.serviceId || '',
+    label: c.label || c.agent,
+    scoreVersion: c.scoreVersion || '2026-07-v1',
     rounds: BigInt(Math.max(0, Math.trunc(c.rounds))),
+    effectiveRounds: BigInt(Math.max(0, Math.trunc(c.effectiveRounds))),
     avgErrorMicro: micro(c.avgErrorUsd),
+    trustedErrorMicro: micro(c.trustedErrorUsd),
     bestRank: BigInt(Math.max(0, Math.trunc(c.bestRank))),
     wins: BigInt(Math.max(0, Math.trunc(c.wins))),
+    confidence: BigInt(Math.max(0, Math.min(100, Math.trunc(c.confidence)))),
+    cardClass: c.cardClass || 'D',
     fromRound: c.fromRound,
     toRound: c.toRound,
     issuedAtSec: BigInt(Math.max(0, Math.trunc(c.issuedAtSec))),
@@ -122,6 +155,21 @@ export function verifyCredential(signed: SignedCredential): { valid: boolean; re
   let recovered = '';
   try {
     recovered = ethers.verifyTypedData(DOMAIN, CRED_TYPES as unknown as Record<string, ethers.TypedDataField[]>, credValue(signed), signed.signature);
+    if (recovered.toLowerCase() === signed.signer.toLowerCase()) return { valid: true, recovered };
+  } catch {
+    /* try legacy below */
+  }
+  try {
+    recovered = ethers.verifyTypedData(DOMAIN, LEGACY_CRED_TYPES as unknown as Record<string, ethers.TypedDataField[]>, {
+      agent: signed.agent,
+      rounds: BigInt(Math.max(0, Math.trunc(signed.rounds))),
+      avgErrorMicro: micro(signed.avgErrorUsd),
+      bestRank: BigInt(Math.max(0, Math.trunc(signed.bestRank))),
+      wins: BigInt(Math.max(0, Math.trunc(signed.wins))),
+      fromRound: signed.fromRound,
+      toRound: signed.toRound,
+      issuedAtSec: BigInt(Math.max(0, Math.trunc(signed.issuedAtSec))),
+    }, signed.signature);
   } catch {
     return { valid: false, recovered: '' };
   }

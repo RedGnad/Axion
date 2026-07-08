@@ -1,5 +1,11 @@
 "use client";
-import { type CSSProperties, type PointerEvent, useEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type PointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   useArena,
   postPredict,
@@ -116,7 +122,10 @@ export default function Page() {
 
       {tab === "scorecards" && (
         <>
-          <ZoneLabel title="Scorecards" blurb="builder records · credential mint" />
+          <ZoneLabel
+            title="Scorecards"
+            blurb="builder records · certified cards"
+          />
           <Scorecards state={state} />
         </>
       )}
@@ -581,7 +590,8 @@ function RaceControl({
     if (r.phase === "betting") {
       if (realBetOpen) {
         // The money window is open → odds is the hero, with the close timer visible.
-        kicker = r.format === "thesis" ? "15M THESIS LIVE" : "RACE LIVE · BET WINDOW";
+        kicker =
+          r.format === "thesis" ? "15M THESIS LIVE" : "RACE LIVE · BET WINDOW";
         big = `×${formatOdds(mult)}`;
         secondary =
           betCutoffAt && betCutoffAt > now
@@ -608,7 +618,8 @@ function RaceControl({
     } else {
       // Hiring: elapsed timer (hero) + odds + a LIVE per-agent status (✓ in / ⏳ still hiring on-chain)
       // so the wait isn't a dead timer — each agent flips as its real data lands.
-      kicker = r.format === "thesis" ? "AGENTS BUILDING THESIS" : "AGENTS HIRING DATA";
+      kicker =
+        r.format === "thesis" ? "AGENTS BUILDING THESIS" : "AGENTS HIRING DATA";
       big = clock(now - openMs);
       secondary = { label: "early odds", value: `×${mult.toFixed(1)}` };
       note = `${r.competitors.filter((c) => c.estimate != null).length}/${r.competitors.length} agents in · buying data on-chain`;
@@ -1000,7 +1011,11 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
                       c.estimate != null ? (
                         <>calls {usd(c.estimate)}</>
                       ) : c.dq ? (
-                        c.failReason ? "failed this race" : "cut this race"
+                        c.failReason ? (
+                          "failed this race"
+                        ) : (
+                          "cut this race"
+                        )
                       ) : (
                         "forecasting…"
                       )
@@ -1136,7 +1151,9 @@ function ToteBoard({ state }: { state: ArenaState | null }) {
               <span
                 className="font-display text-[13px] tracking-wide"
                 style={{
-                  color: pick.correct ? "var(--color-under)" : "var(--color-over)",
+                  color: pick.correct
+                    ? "var(--color-under)"
+                    : "var(--color-over)",
                 }}
               >
                 {pick.correct ? "winner picked" : "pick missed"}
@@ -1263,7 +1280,9 @@ function UsdcBet({
             {live ? (
               <>
                 odds{" "}
-                <b style={{ color: "var(--color-volt)" }}>×{formatOdds(mult)}</b>{" "}
+                <b style={{ color: "var(--color-volt)" }}>
+                  ×{formatOdds(mult)}
+                </b>{" "}
                 · closes early to prevent late farming
               </>
             ) : raceBettable && ub.open === false ? (
@@ -1437,7 +1456,9 @@ function DailyThesis({
         <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-dim">
           One slower round per day. More time, richer calls, bigger drama.
         </p>
-        {msg ? <div className="mt-1.5 font-mono text-[11px] text-volt">{msg}</div> : null}
+        {msg ? (
+          <div className="mt-1.5 font-mono text-[11px] text-volt">{msg}</div>
+        ) : null}
       </div>
       <button
         onClick={start}
@@ -1558,7 +1579,11 @@ function LiveTicker({ state }: { state: ArenaState | null }) {
 const BASESCAN = "https://basescan.org/tx/";
 // EIP-712 schema for accuracy scorecards — MUST match src/arena/scorecard.ts exactly so a judge can
 // recover the signer independently in their own browser (the verifiability moat).
-const SCORECARD_DOMAIN = { name: "Axion Clash", version: "1", chainId: 8453 } as const;
+const SCORECARD_DOMAIN = {
+  name: "Axion Clash",
+  version: "1",
+  chainId: 8453,
+} as const;
 const SCORECARD_TYPES = {
   Scorecard: [
     { name: "agent", type: "string" },
@@ -1575,6 +1600,25 @@ const SCORECARD_TYPES = {
 const CREDENTIAL_TYPES = {
   Credential: [
     { name: "agent", type: "string" },
+    { name: "serviceId", type: "string" },
+    { name: "label", type: "string" },
+    { name: "scoreVersion", type: "string" },
+    { name: "rounds", type: "uint256" },
+    { name: "effectiveRounds", type: "uint256" },
+    { name: "avgErrorMicro", type: "uint256" },
+    { name: "trustedErrorMicro", type: "uint256" },
+    { name: "bestRank", type: "uint256" },
+    { name: "wins", type: "uint256" },
+    { name: "confidence", type: "uint256" },
+    { name: "cardClass", type: "string" },
+    { name: "fromRound", type: "string" },
+    { name: "toRound", type: "string" },
+    { name: "issuedAtSec", type: "uint256" },
+  ],
+} as const;
+const LEGACY_CREDENTIAL_TYPES = {
+  Credential: [
+    { name: "agent", type: "string" },
     { name: "rounds", type: "uint256" },
     { name: "avgErrorMicro", type: "uint256" },
     { name: "bestRank", type: "uint256" },
@@ -1584,7 +1628,8 @@ const CREDENTIAL_TYPES = {
     { name: "issuedAtSec", type: "uint256" },
   ],
 } as const;
-const usdMicro = (usd: number) => BigInt(Math.round(Math.max(0, usd) * 1_000_000));
+const usdMicro = (usd: number) =>
+  BigInt(Math.round(Math.max(0, usd) * 1_000_000));
 
 /** Recover the signer of a scorecard in-browser and confirm it matches the claimed signer. */
 async function verifyScorecard(c: SignedScorecard): Promise<boolean> {
@@ -1614,10 +1659,41 @@ async function verifyScorecard(c: SignedScorecard): Promise<boolean> {
 
 async function verifyCredential(c: SignedCredential): Promise<boolean> {
   try {
-    return await verifyTypedData({
+    const ok = await verifyTypedData({
       address: c.signer as `0x${string}`,
       domain: SCORECARD_DOMAIN,
       types: CREDENTIAL_TYPES,
+      primaryType: "Credential",
+      message: {
+        agent: c.agent,
+        serviceId: c.serviceId || "",
+        label: c.label || c.agent,
+        scoreVersion: c.scoreVersion || "2026-07-v1",
+        rounds: BigInt(Math.trunc(c.rounds)),
+        effectiveRounds: BigInt(Math.trunc(c.effectiveRounds ?? c.rounds)),
+        avgErrorMicro: usdMicro(c.avgErrorUsd),
+        trustedErrorMicro: usdMicro(c.trustedErrorUsd ?? c.avgErrorUsd),
+        bestRank: BigInt(Math.trunc(c.bestRank)),
+        wins: BigInt(Math.trunc(c.wins)),
+        confidence: BigInt(
+          Math.max(0, Math.min(100, Math.trunc(c.confidence ?? 0))),
+        ),
+        cardClass: c.cardClass || "D",
+        fromRound: c.fromRound,
+        toRound: c.toRound,
+        issuedAtSec: BigInt(Math.trunc(c.issuedAtSec)),
+      },
+      signature: c.signature as `0x${string}`,
+    });
+    if (ok) return true;
+  } catch {
+    /* try legacy below */
+  }
+  try {
+    return await verifyTypedData({
+      address: c.signer as `0x${string}`,
+      domain: SCORECARD_DOMAIN,
+      types: LEGACY_CREDENTIAL_TYPES,
       primaryType: "Credential",
       message: {
         agent: c.agent,
@@ -1640,15 +1716,24 @@ function shortAddr(addr?: string): string {
   return addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : "—";
 }
 
-function credentialMintMessage(wallet: string, nonce: string): string {
+function credentialMintMessage(
+  wallet: string,
+  nonce: string,
+  serviceId = "",
+): string {
   return [
     "Axion Clash credential mint",
     `wallet:${getAddress(wallet as `0x${string}`)}`,
+    `serviceId:${serviceId.trim()}`,
     `nonce:${nonce}`,
   ].join("\n");
 }
 
-function racerJoinMessage(wallet: string, serviceId: string, nonce: string): string {
+function racerJoinMessage(
+  wallet: string,
+  serviceId: string,
+  nonce: string,
+): string {
   return [
     "Axion Clash racer wallet",
     `wallet:${getAddress(wallet as `0x${string}`)}`,
@@ -1740,7 +1825,8 @@ function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/5 pt-2 font-mono text-[10px] text-dim">
       <span>
-        {cards.length} score{cards.length > 1 ? "s" : ""} signed · {signer.slice(0, 6)}…{signer.slice(-4)}
+        {cards.length} score{cards.length > 1 ? "s" : ""} signed ·{" "}
+        {signer.slice(0, 6)}…{signer.slice(-4)}
       </span>
       <button
         onClick={run}
@@ -1767,11 +1853,34 @@ function VerifyScores({ cards }: { cards?: SignedScorecard[] }) {
   );
 }
 
-function scoreStage(rounds: number): { label: string; pct: number; tone: string } {
-  if (rounds >= 25) return { label: "proven", pct: 100, tone: "text-volt" };
-  if (rounds >= 10) return { label: "mint-ready", pct: 78, tone: "text-volt" };
-  if (rounds >= 3) return { label: "warming", pct: 46, tone: "text-gold" };
-  return { label: "seed", pct: Math.max(12, rounds * 12), tone: "text-dim" };
+function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
+  label: string;
+  pct: number;
+  tone: string;
+  name: string;
+} {
+  const klass = (row?.cardClass || "D").toUpperCase();
+  const confidence = row?.confidence ?? 0;
+  const names: Record<string, string> = {
+    D: "provisional",
+    C: "tracked",
+    B: "seasoned",
+    A: "proven",
+    S: "elite",
+  };
+  const tones: Record<string, string> = {
+    D: "text-dim",
+    C: "text-gold",
+    B: "text-under",
+    A: "text-volt",
+    S: "text-gold",
+  };
+  return {
+    label: `Class ${klass}`,
+    name: names[klass] || "provisional",
+    pct: Math.max(10, Math.min(100, confidence || (row?.rounds ?? 0) * 8)),
+    tone: tones[klass] || "text-dim",
+  };
 }
 
 function CredentialCard({
@@ -1781,7 +1890,8 @@ function CredentialCard({
   row?: NonNullable<ArenaState["externalBoard"]>[number];
   empty?: boolean;
 }) {
-  const stage = scoreStage(row?.rounds ?? 0);
+  const stage = scoreStage(row);
+  const trustMiss = row?.trustedError ?? row?.avgError ?? 0;
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [tilt, setTilt] = useState({
     rx: 8,
@@ -1841,7 +1951,10 @@ function CredentialCard({
           style={{ transform: "translateZ(24px)" }}
           aria-hidden
         />
-        <div className="relative flex items-start justify-between gap-3" style={{ transform: "translateZ(34px)" }}>
+        <div
+          className="relative flex items-start justify-between gap-3"
+          style={{ transform: "translateZ(34px)" }}
+        >
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
               Axion scorecard
@@ -1855,7 +1968,10 @@ function CredentialCard({
           </div>
         </div>
 
-        <div className="relative mt-8 grid grid-cols-3 gap-2 text-center" style={{ transform: "translateZ(46px)" }}>
+        <div
+          className="relative mt-8 grid grid-cols-3 gap-2 text-center"
+          style={{ transform: "translateZ(46px)" }}
+        >
           <div>
             <div className="font-display text-3xl leading-none text-volt tnum">
               {row?.rounds ?? 0}
@@ -1866,10 +1982,10 @@ function CredentialCard({
           </div>
           <div>
             <div className="font-display text-3xl leading-none text-ink tnum">
-              {row ? `$${row.avgError.toFixed(2)}` : "—"}
+              {row ? `$${trustMiss.toFixed(2)}` : "—"}
             </div>
             <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
-              avg miss
+              trust miss
             </div>
           </div>
           <div>
@@ -1882,10 +1998,17 @@ function CredentialCard({
           </div>
         </div>
 
-        <div className="relative mt-8" style={{ transform: "translateZ(38px)" }}>
+        <div
+          className="relative mt-8"
+          style={{ transform: "translateZ(38px)" }}
+        >
           <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider">
-            <span className={stage.tone}>{stage.label}</span>
-            <span className="text-dim">{row ? shortAddr(row.wallet) : "link wallet"}</span>
+            <span className={stage.tone}>
+              {stage.label} · {stage.name}
+            </span>
+            <span className="text-dim">
+              {row ? `${row.confidence ?? 0}%` : "link wallet"}
+            </span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/40">
             <div
@@ -1897,8 +2020,8 @@ function CredentialCard({
       </div>
       <p className="relative mt-5 text-center text-[13px] leading-relaxed text-dim">
         {empty
-          ? "Link a racer wallet, race, then mint the card from Axion's CROO service."
-          : "This record is built from Pyth-graded forecasts and can be minted as a signed CROO delivery."}
+          ? "Link a racer wallet, race, then certify the card from Axion's CROO service."
+          : "Pyth-graded record, signed by Axion, certified through a paid CROO order."}
       </p>
     </div>
   );
@@ -1912,7 +2035,7 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
         <CredentialCard empty />
         <div className="rounded-lg border border-line/70 bg-panel2/35 p-5">
           <div className="font-display text-xl uppercase tracking-wide text-ink">
-            No cards minted yet
+            No certified cards yet
           </div>
           <p className="mt-2 text-[14px] leading-relaxed text-dim">
             The first linked racer wallet will appear here as a live card. Until
@@ -1920,7 +2043,7 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
             Journal.
           </p>
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
-            {["link wallet", "race", "mint on CROO"].map((x, i) => (
+            {["link wallet", "race", "certify on CROO"].map((x, i) => (
               <div
                 key={x}
                 className="rounded-md border border-line/70 bg-panel/60 px-3 py-3"
@@ -1955,28 +2078,37 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
         </div>
         <div className="mt-3 space-y-2">
           {board.slice(0, 8).map((r, i) => {
-            const stage = scoreStage(r.rounds);
+            const stage = scoreStage(r);
+            const trustMiss = r.trustedError ?? r.avgError;
             return (
               <div
                 key={r.wallet}
                 className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-line/70 bg-panel/60 px-3 py-2.5"
               >
-                <span className="font-display text-xl text-dim tnum">{i + 1}</span>
+                <span className="font-display text-xl text-dim tnum">
+                  {i + 1}
+                </span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-display text-[14px] uppercase tracking-wide text-ink">
                       {r.label}
                     </span>
-                    <span className={cn("font-mono text-[9px] uppercase tracking-wider", stage.tone)}>
+                    <span
+                      className={cn(
+                        "font-mono text-[9px] uppercase tracking-wider",
+                        stage.tone,
+                      )}
+                    >
                       {stage.label}
                     </span>
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] text-dim">
-                    {shortAddr(r.wallet)} · best #{r.bestRank || "—"} · {r.wins} wins
+                    {shortAddr(r.wallet)} · {r.confidence ?? 0}% confidence ·
+                    best #{r.bestRank || "—"}
                   </div>
                 </div>
                 <div className="text-right font-mono text-[11px] text-dim">
-                  <b className="text-volt">${r.avgError.toFixed(2)}</b>
+                  <b className="text-volt">${trustMiss.toFixed(2)}</b>
                   <br />
                   {r.rounds} runs
                 </div>
@@ -2000,7 +2132,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
     : undefined;
   const copy = () => {
     navigator.clipboard?.writeText(payload).then(() => {
-      setMsg({ ok: true, text: "mint pass copied" });
+      setMsg({ ok: true, text: "certify pass copied" });
       setTimeout(() => setMsg(null), 1400);
     });
   };
@@ -2009,14 +2141,20 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
     setMsg(null);
     try {
       const wallet = getAddress(address);
+      const serviceId = row?.serviceId || "";
       const nonce = `mint:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
       const signature = await signMessageAsync({
-        message: credentialMintMessage(wallet, nonce),
+        message: credentialMintMessage(wallet, nonce, serviceId),
       });
-      setPayload(JSON.stringify({ wallet, nonce, signature }, null, 2));
-      setMsg({ ok: true, text: "pass ready for the CROO mint" });
+      setPayload(
+        JSON.stringify({ wallet, serviceId, nonce, signature }, null, 2),
+      );
+      setMsg({ ok: true, text: "certify pass ready" });
     } catch (e) {
-      setMsg({ ok: false, text: ((e as Error).message || "signature rejected").slice(0, 90) });
+      setMsg({
+        ok: false,
+        text: ((e as Error).message || "signature rejected").slice(0, 90),
+      });
     }
   };
   return (
@@ -2024,11 +2162,12 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="font-display text-lg uppercase tracking-wide text-volt">
-            Mint pass
+            Certify pass
           </div>
           <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-dim">
-            The card is certified by buying Axion&apos;s credential service on
-            CROO. This button prepares the wallet proof for that order.
+            Buy Axion&apos;s CROO credential service with this pass. Axion
+            returns a signed card for this wallet, bound to the CROO service
+            when available.
           </p>
         </div>
         <a
@@ -2054,7 +2193,8 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
             {shortAddr(address)}
             {row ? (
               <span className="ml-2 text-volt">
-                {row.rounds} runs · avg ${row.avgError.toFixed(2)}
+                Class {row.cardClass || "D"} · {row.rounds} runs · trust $
+                {(row.trustedError ?? row.avgError).toFixed(2)}
               </span>
             ) : (
               <span className="ml-2 text-gold">
@@ -2067,7 +2207,11 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
             disabled={signing || !row}
             className="mt-3 w-full rounded-lg bg-volt py-3 font-display text-[14px] uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110 disabled:opacity-40"
           >
-            {signing ? "signing..." : row ? "prepare mint pass" : "race once with this wallet"}
+            {signing
+              ? "signing..."
+              : row
+                ? "prepare certify pass"
+                : "race once with this wallet"}
           </button>
           {payload ? (
             <div className="mt-3 rounded-md border border-line bg-panel/75 p-3">
@@ -2090,7 +2234,12 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
         </>
       )}
       {msg ? (
-        <div className={cn("mt-2 font-mono text-[11px]", msg.ok ? "text-volt" : "text-over")}>
+        <div
+          className={cn(
+            "mt-2 font-mono text-[11px]",
+            msg.ok ? "text-volt" : "text-over",
+          )}
+        >
           {msg.text}
         </div>
       ) : null}
@@ -2101,15 +2250,35 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
 function CredentialVerifier() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState<{ ok: boolean; signer?: string; agent?: string; rounds?: number; error?: string } | null>(null);
+  const [res, setRes] = useState<{
+    ok: boolean;
+    signer?: string;
+    agent?: string;
+    label?: string;
+    rounds?: number;
+    cardClass?: string;
+    error?: string;
+  } | null>(null);
   const run = async () => {
     setBusy(true);
     setRes(null);
     try {
-      const parsed = JSON.parse(text || "{}") as SignedCredential | { credential?: SignedCredential };
-      const credential = "credential" in parsed && parsed.credential ? parsed.credential : parsed as SignedCredential;
+      const parsed = JSON.parse(text || "{}") as
+        | SignedCredential
+        | { credential?: SignedCredential };
+      const credential =
+        "credential" in parsed && parsed.credential
+          ? parsed.credential
+          : (parsed as SignedCredential);
       const ok = await verifyCredential(credential);
-      setRes({ ok, signer: credential.signer, agent: credential.agent, rounds: credential.rounds });
+      setRes({
+        ok,
+        signer: credential.signer,
+        agent: credential.agent,
+        label: credential.label,
+        rounds: credential.rounds,
+        cardClass: credential.cardClass,
+      });
     } catch (e) {
       setRes({ ok: false, error: (e as Error).message || "invalid JSON" });
     } finally {
@@ -2155,7 +2324,7 @@ function CredentialVerifier() {
             )}
           >
             {res.ok
-              ? `authentic · ${res.rounds} runs · ${shortAddr(res.agent)} · sealed by ${shortAddr(res.signer)}`
+              ? `authentic · class ${res.cardClass || "D"} · ${res.rounds} runs · ${res.label || shortAddr(res.agent)} · sealed by ${shortAddr(res.signer)}`
               : `not authentic · ${res.error || "signature mismatch"}`}
           </div>
         ) : null}
@@ -2183,9 +2352,12 @@ function Scorecards({ state }: { state: ArenaState | null }) {
         {[
           ["race", "a linked agent calls ETH"],
           ["grade", "Pyth scores the miss"],
-          ["mint", "CROO seals the card"],
+          ["certify", "CROO seals the card"],
         ].map(([k, v], i) => (
-          <div key={k} className="rounded-md border border-line/70 bg-panel2/35 px-3 py-3">
+          <div
+            key={k}
+            className="rounded-md border border-line/70 bg-panel2/35 px-3 py-3"
+          >
             <div className="flex items-center gap-2">
               <span className="font-display text-xl text-volt">{i + 1}</span>
               <span className="font-display text-[14px] uppercase tracking-wide text-ink">
@@ -2232,7 +2404,7 @@ function Scorecards({ state }: { state: ArenaState | null }) {
                   {economics.benchmarkOrders}
                 </div>
                 <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
-                  mints
+                  certs
                 </div>
               </div>
             </div>
@@ -2343,36 +2515,46 @@ function Ledger({ state }: { state: ArenaState | null }) {
                         const order = comps
                           .map((c) => ({ c, x: pct(c.estimate as number) }))
                           .sort((a, b) => a.x - b.x);
-                        const laid: { c: (typeof comps)[number]; x: number; y: number }[] = [];
+                        const laid: {
+                          c: (typeof comps)[number];
+                          x: number;
+                          y: number;
+                        }[] = [];
                         let gStart = 0;
                         for (let i = 1; i <= order.length; i++) {
-                          if (i === order.length || order[i].x - order[i - 1].x > 3) {
+                          if (
+                            i === order.length ||
+                            order[i].x - order[i - 1].x > 3
+                          ) {
                             const size = i - gStart;
                             for (let k = gStart; k < i; k++) {
-                              const y = size <= 1 ? 50 : 22 + ((k - gStart) / (size - 1)) * 56;
+                              const y =
+                                size <= 1
+                                  ? 50
+                                  : 22 + ((k - gStart) / (size - 1)) * 56;
                               laid.push({ c: order[k].c, x: order[k].x, y });
                             }
                             gStart = i;
                           }
                         }
                         return laid.map(({ c, x, y }) => (
-                        <span
-                          key={c.id}
-                          title={`${c.label} called ${usd(c.estimate)}`}
-                          className="absolute z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                          style={{
-                            left: `${x}%`,
-                            top: `${y}%`,
-                            zIndex: c.isWinner ? 25 : 20,
-                            background: livery(c.id),
-                            outline: c.isWinner
-                              ? "2px solid var(--color-gold)"
-                              : "none",
-                            boxShadow: c.isWinner
-                              ? "0 0 10px var(--color-gold)"
-                              : `0 0 6px ${livery(c.id)}99`,
-                          }}
-                        />
+                          <span
+                            key={c.id}
+                            title={`${c.label} called ${usd(c.estimate)}`}
+                            className="absolute z-20 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                            style={{
+                              left: `${x}%`,
+                              top: `${y}%`,
+                              zIndex: c.isWinner ? 25 : 20,
+                              background: livery(c.id),
+                              outline: c.isWinner
+                                ? "2px solid var(--color-gold)"
+                                : "none",
+                              boxShadow: c.isWinner
+                                ? "0 0 10px var(--color-gold)"
+                                : `0 0 6px ${livery(c.id)}99`,
+                            }}
+                          />
                         ));
                       })()}
                     </div>
@@ -2429,7 +2611,9 @@ function Ledger({ state }: { state: ArenaState | null }) {
                             <>
                               <b className="text-ink">Arena</b>→
                               {cap(e.competitor)}
-                              <span className="ml-1 text-dim">(race entry)</span>
+                              <span className="ml-1 text-dim">
+                                (race entry)
+                              </span>
                             </>
                           ) : (
                             <>
@@ -2546,7 +2730,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
           </div>
         ) : (
           lbOrdered.map((r, i) => {
-            const confidence = r.confidence ?? (r.rounds / (r.rounds + 12));
+            const confidence = r.confidence ?? r.rounds / (r.rounds + 12);
             const lowConfidence = confidence < 0.55;
             const inactive = activeIds.size > 0 && !activeIds.has(r.id);
             return (
@@ -2595,15 +2779,17 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
                     "w-14 text-right font-mono text-[11px] tnum",
                     lowConfidence ? "text-dim" : "text-volt",
                   )}
-                  title={
-                    `trusted score = avg/recent error plus uncertainty penalty ${r.uncertainty != null ? `($${r.uncertainty.toFixed(2)})` : ''}`
-                  }
+                  title={`trusted score = avg/recent error plus uncertainty penalty ${r.uncertainty != null ? `($${r.uncertainty.toFixed(2)})` : ""}`}
                 >
                   {usd(r.trustedScore ?? r.avgError)}
                 </span>
                 <span
                   className="w-14 text-right font-mono text-[11px] tnum text-dim"
-                  title={r.recentAvgError != null ? `recent avg ${usd(r.recentAvgError)}` : "raw avg error"}
+                  title={
+                    r.recentAvgError != null
+                      ? `recent avg ${usd(r.recentAvgError)}`
+                      : "raw avg error"
+                  }
                 >
                   {usd(r.avgError)}
                 </span>
@@ -2823,12 +3009,12 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                     ))}
                   </div>
                 </div>
-          ) : (
-            <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-4 text-[13px] leading-relaxed text-dim">
-              No paid data hires yet. When racers buy data, the providers will
-              appear here.
-            </div>
-          )}
+              ) : (
+                <div className="mt-4 rounded-lg border border-line/70 bg-panel2/35 p-4 text-[13px] leading-relaxed text-dim">
+                  No paid data hires yet. When racers buy data, the providers
+                  will appear here.
+                </div>
+              )}
             </>
           )}
         </>
@@ -2922,7 +3108,7 @@ Rules: prediction must be a number > 0 (an amplitude, NOT a price and NOT a dire
 
 SPEED MATTERS MOST: the arena cuts any agent that does not deliver a forecast before the round cutoff (relative to the fastest agent). Always return a fast baseline computed from recentVol within about 30-60 seconds, even if your own data sources or LLM are slow. Never block on a slow hire; reply first with the baseline, refine later only if there is time. An agent that replies fast every round beats one that is occasionally more accurate but often late.
 
-Pricing: set this race service to CROO's minimum price. Axion caps racer hires at that tiny amount, so race entry is not the business model; the paid product is the credential mint. Your wallet-signed free submissions build an accumulated Axion record; when you want to prove it, buy the paid credential mint and receive an EIP-712 signed scorecard over that full record.
+Pricing: set this race service to CROO's minimum price. Axion caps racer hires at that tiny amount, so race entry is not the business model; the paid product is the certified scorecard. Your linked races or wallet-signed free submissions build an accumulated Axion record; when you want to prove it, buy Axion's paid credential service and receive an EIP-712 signed card over that full record.
 
 Show me the exact code to add, where to put it, how to create or reuse the dedicated Axion race serviceId, and how to deploy without changing my existing non-race services.`;
 
@@ -3043,10 +3229,17 @@ function Join() {
     setBusy(true);
     setMsg({ ok: true, text: "adding your agent to the next grid…" });
     try {
-      let ownerPayload: { ownerWallet?: string; nonce?: string; signature?: string } = {};
+      let ownerPayload: {
+        ownerWallet?: string;
+        nonce?: string;
+        signature?: string;
+      } = {};
       if (linkScorecard) {
         if (!isConnected || !address) {
-          setMsg({ ok: false, text: "connect a scorecard wallet, or turn the card link off" });
+          setMsg({
+            ok: false,
+            text: "connect a scorecard wallet, or turn the card link off",
+          });
           setBusy(false);
           return;
         }
@@ -3108,7 +3301,8 @@ function Join() {
       {/* Value + the whole contract in two tight lines; everything technical is progressive-disclosure
           below so the first impression is the grid + two actions, not a wall of code. */}
       <p className="mt-3.5 text-[15px] font-medium leading-relaxed text-ink">
-        Got a CROO agent? Add one race service, wire the handler, then claim a lane.
+        Got a CROO agent? Add one race service, wire the handler, then claim a
+        lane.
       </p>
       <p className="mt-2 text-[13.5px] leading-relaxed text-dim">
         Axion hires your service each round. Return one ETH-move forecast. Win:
@@ -3235,14 +3429,15 @@ const prediction = /* your estimate of |ETH move| over the window, in USD */;
 deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
               <p className="text-[12.5px] leading-relaxed text-volt/90">
                 Reply fast, refine later. The arena cuts any agent that does not
-                answer before the round cutoff, so always return a quick baseline
-                from recentVol (about 30-60s) instead of blocking on a slow data
-                hire. Fast every round beats occasionally-more-accurate but late.
+                answer before the round cutoff, so always return a quick
+                baseline from recentVol (about 30-60s) instead of blocking on a
+                slow data hire. Fast every round beats
+                occasionally-more-accurate but late.
               </p>
               <p className="text-[12.5px] leading-relaxed text-dim">
-                Race at CROO&apos;s minimum price. Your signed free submits build
-                a record; the paid 0.10 USDC mint certifies that accumulated
-                record on{" "}
+                Race at CROO&apos;s minimum price. Your signed free submits
+                build a record; the paid 0.10 USDC card certifies that
+                accumulated record on{" "}
                 <a
                   href={AXION_AGENT_URL}
                   target="_blank"
@@ -3315,7 +3510,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                       ✗ {vres.reason}
                     </div>
                     <div className="mt-1 text-[13px] leading-relaxed text-dim">
-                    Fix what your race service returns{" "}
+                      Fix what your race service returns{" "}
                       <b className="text-ink">in your backend code</b>, redeploy
                       it, then check again. Your race serviceId stays the same.
                     </div>
@@ -3403,8 +3598,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                   </div>
                 ) : null}
                 <div className="mt-2 text-[12.5px] leading-relaxed text-dim">
-                  Linked racers turn grid results into a mintable Axion card. Skip
-                  this only for a quick test run.
+                  Linked racers turn grid results into a certifiable Axion card.
+                  Skip this only for a quick test run.
                 </div>
               </div>
               <details className="mt-2 group">

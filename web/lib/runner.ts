@@ -82,20 +82,33 @@ export interface SignedScorecard {
 export interface ExternalRecordRow {
   agent: string;
   wallet: string;
+  serviceId?: string;
   label: string;
   rounds: number;
+  effectiveRounds: number;
   avgError: number;
+  trustedError: number;
   bestRank: number;
   wins: number;
+  confidence: number;
+  cardClass: string;
+  scoreVersion: string;
   fromRound?: string;
   toRound?: string;
 }
 export interface SignedCredential {
   agent: string;
+  serviceId: string;
+  label: string;
+  scoreVersion: string;
   rounds: number;
+  effectiveRounds: number;
   avgErrorUsd: number;
+  trustedErrorUsd: number;
   bestRank: number;
   wins: number;
+  confidence: number;
+  cardClass: string;
   fromRound: string;
   toRound: string;
   issuedAtSec: number;
