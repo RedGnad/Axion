@@ -687,17 +687,8 @@ async function validateCredentialMintRequirements(raw: string): Promise<Credenti
   }
 
   if (serviceId) {
-    const publicOwner = await crooPublicOwnerWalletForService(serviceId);
     const linked = joinedRoster.find((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase());
-    if (publicOwner && publicOwner.toLowerCase() !== wallet.toLowerCase()) {
-      return {
-        ok: false,
-        error: 'serviceId owner does not match the signed wallet',
-        expectedWallet: publicOwner,
-        receivedWallet: wallet,
-      };
-    }
-    if (!publicOwner && linked?.ownerWallet && linked.ownerWallet.toLowerCase() !== wallet.toLowerCase()) {
+    if (linked?.ownerWallet && linked.ownerWallet.toLowerCase() !== wallet.toLowerCase()) {
       return {
         ok: false,
         error: 'serviceId is already linked to a different Axion card wallet',
@@ -2072,14 +2063,7 @@ async function main(): Promise<void> {
                 return reply(401, { error: 'invalid owner signature for racer wallet', messageToSign: msg });
               }
               const publicOwner = await crooPublicOwnerWalletForService(serviceId);
-              if (publicOwner && publicOwner.toLowerCase() !== verifiedOwner.toLowerCase()) {
-                return reply(401, {
-                  error: 'scorecard wallet must match the CROO public wallet for this service',
-                  expectedWallet: publicOwner,
-                  receivedWallet: verifiedOwner,
-                });
-              }
-              ownerVerified = !!publicOwner;
+              ownerVerified = !!publicOwner && publicOwner.toLowerCase() === verifiedOwner.toLowerCase();
             }
             const desiredName = cleanRacerLabel(label, serviceId);
             const verifiedOwnerKey = racerOwnerKey(verifiedOwner);
