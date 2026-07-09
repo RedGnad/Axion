@@ -476,6 +476,10 @@ function mintMessage(input: { wallet: string; nonce: string; serviceId?: string 
   ].join('\n');
 }
 
+type CredentialMintCheck =
+  | { ok: true; wallet: string; serviceId: string; credential: Credential }
+  | { ok: false; error: string; messageToSign?: string; expectedWallet?: string; receivedWallet?: string };
+
 function racerJoinMessage(input: { wallet: string; serviceId: string; nonce: string }): string {
   return [
     'Axion Clash racer wallet',
@@ -566,6 +570,70 @@ function buildCredential(wallet: string, serviceIdHint = ''): Credential | null 
     toRound: recs[recs.length - 1].roundId,
     issuedAtSec: Math.round(Date.now() / 1000),
   };
+}
+
+async function validateCredentialMintRequirements(raw: string): Promise<CredentialMintCheck> {
+  let req: { wallet?: string; address?: string; agent?: string; serviceId?: string; prediction?: number; nonce?: string; signature?: string } = {};
+  try {
+    req = JSON.parse(raw || '{}');
+  } catch {
+    return { ok: false, error: 'requirements must be valid JSON' };
+  }
+  if (req.prediction != null) {
+    return {
+      ok: false,
+      error: 'one-round benchmark is deprecated. First POST /api/submit for free with a wallet signature, then certify with requirements {"wallet":"0x...","serviceId":"","nonce":"...","signature":"..."}',
+    };
+  }
+  const walletRaw = req.wallet || req.address || (/^0x[0-9a-fA-F]{40}$/.test(String(req.agent || '')) ? req.agent : '');
+  let wallet = '';
+  try {
+    wallet = normalizeWallet(String(walletRaw || ''));
+  } catch {
+    return { ok: false, error: 'requirements must include {"wallet":"0x..."} for the record owner' };
+  }
+  if (!wallet) return { ok: false, error: 'requirements must include {"wallet":"0x..."} for the record owner' };
+
+  const nonce = String(req.nonce || '').slice(0, 96);
+  if (!nonce) return { ok: false, error: 'requirements must include nonce + wallet signature for the card owner' };
+
+  const serviceId = String(req.serviceId || '').trim();
+  if (serviceId && !/^[0-9a-f-]{36}$/i.test(serviceId)) {
+    return { ok: false, error: 'serviceId must be a CROO service UUID when provided' };
+  }
+
+  const msg = mintMessage({ wallet, nonce, serviceId });
+  let recovered = '';
+  try {
+    recovered = ethers.verifyMessage(msg, String(req.signature || ''));
+  } catch {
+    return { ok: false, error: 'invalid wallet signature for credential mint', messageToSign: msg };
+  }
+  if (recovered.toLowerCase() !== wallet.toLowerCase()) {
+    return { ok: false, error: 'invalid wallet signature for credential mint', messageToSign: msg };
+  }
+
+  if (serviceId) {
+    const publicOwner = await crooPublicOwnerWalletForService(serviceId);
+    if (!publicOwner) {
+      return { ok: false, error: 'could not verify service owner from the CROO public store. Certify wallet-only, or retry once the service is public.' };
+    }
+    if (publicOwner.toLowerCase() !== wallet.toLowerCase()) {
+      return {
+        ok: false,
+        error: 'serviceId owner does not match the signed wallet',
+        expectedWallet: publicOwner,
+        receivedWallet: wallet,
+      };
+    }
+  }
+
+  const credential = buildCredential(wallet, serviceId);
+  if (!credential) {
+    return { ok: false, error: 'no graded Axion record for this wallet yet. Submit forecasts free via POST /api/submit first.' };
+  }
+  if (!process.env.HOUSE_EOA_PRIVATE_KEY) return { ok: false, error: 'credential signer is not configured' };
+  return { ok: true, wallet, serviceId, credential };
 }
 
 function ownerWalletForRacer(competitorId: string): string | undefined {
@@ -1076,6 +1144,15 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
       for (const n of negs) {
         if (n.serviceId !== serviceId && n.serviceId !== benchmarkId && n.serviceId !== raceEngineId) continue;
         try {
+          if (n.serviceId === benchmarkId) {
+            const neg = await client.getNegotiation(n.negotiationId);
+            const checked = await validateCredentialMintRequirements(neg.requirements ?? '{}');
+            if (!checked.ok) {
+              await client.rejectNegotiation(n.negotiationId, checked.error);
+              console.warn(`[credential] rejected negotiation ${n.negotiationId}: ${checked.error}`);
+              continue;
+            }
+          }
           await client.acceptNegotiation(n.negotiationId);
           const kind = n.serviceId === benchmarkId ? 'benchmark' : n.serviceId === raceEngineId ? 'race-engine' : 'hire';
           console.log(`[axion] accepted ${kind} ${n.negotiationId}`);
@@ -1127,91 +1204,32 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
           void (async () => {
             try {
               const neg = await client.getNegotiation(o.negotiationId);
-              let req: { wallet?: string; address?: string; agent?: string; serviceId?: string; prediction?: number; nonce?: string; signature?: string } = {};
-              try { req = JSON.parse(neg.requirements || '{}'); } catch { /* invalid below */ }
-              const walletRaw = req.wallet || req.address || (/^0x[0-9a-fA-F]{40}$/.test(String(req.agent || '')) ? req.agent : '');
-              if (req.prediction != null) {
+              const checked = await validateCredentialMintRequirements(neg.requirements ?? '{}');
+              if (!checked.ok) {
                 await client.deliverOrder(o.orderId, {
                   deliverableType: DeliverableType.Text,
                   deliverableText: JSON.stringify({
-                    error: 'one-round benchmark is deprecated. First POST /api/submit for free with a wallet signature, then certify with requirements {"wallet":"0x...","serviceId":"","nonce":"...","signature":"..."}',
+                    error: checked.error,
+                    ...(checked.messageToSign ? { messageToSign: checked.messageToSign } : {}),
+                    ...(checked.expectedWallet ? { expectedWallet: checked.expectedWallet } : {}),
+                    ...(checked.receivedWallet ? { receivedWallet: checked.receivedWallet } : {}),
                   }),
                 });
                 done.add(o.orderId);
-                console.warn(`[credential] rejected legacy one-round benchmark ${o.orderId}`);
-                return;
-              }
-              let wallet = '';
-              try { wallet = normalizeWallet(String(walletRaw || '')); } catch { /* invalid below */ }
-              if (!wallet) {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include {"wallet":"0x..."} for the record owner' }) });
-                done.add(o.orderId);
-                console.warn(`[credential] rejected ${o.orderId}: no wallet`);
-                return;
-              }
-              const nonce = String(req.nonce || '').slice(0, 96);
-              if (!nonce) {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'requirements must include nonce + wallet signature for the card owner' }) });
-                done.add(o.orderId);
-                console.warn(`[credential] rejected ${o.orderId}: no mint nonce`);
-                return;
-              }
-              const serviceId = String(req.serviceId || '').trim();
-              if (serviceId && !/^[0-9a-f-]{36}$/i.test(serviceId)) {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'serviceId must be a CROO service UUID when provided' }) });
-                done.add(o.orderId);
-                console.warn(`[credential] rejected ${o.orderId}: bad serviceId`);
-                return;
-              }
-              const msg = mintMessage({ wallet, nonce, serviceId });
-              let recovered = '';
-              try { recovered = ethers.verifyMessage(msg, String(req.signature || '')); } catch { /* invalid below */ }
-              if (recovered.toLowerCase() !== wallet.toLowerCase()) {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'invalid wallet signature for credential mint', messageToSign: msg }) });
-                done.add(o.orderId);
-                console.warn(`[credential] rejected ${o.orderId}: bad mint signature`);
-                return;
-              }
-              if (serviceId) {
-                const publicOwner = await crooPublicOwnerWalletForService(serviceId);
-                if (!publicOwner) {
-                  await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'could not verify service owner from the CROO public store. Certify wallet-only, or retry once the service is public.' }) });
-                  done.add(o.orderId);
-                  console.warn(`[credential] rejected ${o.orderId}: no public owner for ${serviceId}`);
-                  return;
-                }
-                if (publicOwner.toLowerCase() !== wallet.toLowerCase()) {
-                  await client.deliverOrder(o.orderId, {
-                    deliverableType: DeliverableType.Text,
-                    deliverableText: JSON.stringify({
-                      error: 'serviceId owner does not match the signed wallet',
-                      expectedWallet: publicOwner,
-                      receivedWallet: wallet,
-                    }),
-                  });
-                  done.add(o.orderId);
-                  console.warn(`[credential] rejected ${o.orderId}: owner mismatch for ${serviceId}`);
-                  return;
-                }
-              }
-              const credential = buildCredential(wallet, serviceId);
-              if (!credential) {
-                await client.deliverOrder(o.orderId, { deliverableType: DeliverableType.Text, deliverableText: JSON.stringify({ error: 'no graded Axion record for this wallet yet. Submit forecasts free via POST /api/submit first.' }) });
-                done.add(o.orderId);
-                console.warn(`[credential] rejected ${o.orderId}: no record for ${wallet}`);
+                console.warn(`[credential] rejected paid order ${o.orderId}: ${checked.error}`);
                 return;
               }
               const scoreKey = process.env.HOUSE_EOA_PRIVATE_KEY;
               if (!scoreKey) throw new Error('HOUSE_EOA_PRIVATE_KEY required to sign credentials');
-              const signed = await signCredential(credential, scoreKey);
+              const signed = await signCredential(checked.credential, scoreKey);
               const delivered = await client.deliverOrder(o.orderId, {
                 deliverableType: DeliverableType.Text,
                 deliverableText: JSON.stringify({ type: 'axion.accuracyCredential.v1', credential: signed }),
               });
               done.add(o.orderId);
               const certifiedAtSec = Math.round(Date.now() / 1000);
-              certifiedCards.set(wallet.toLowerCase(), {
-                wallet,
+              certifiedCards.set(checked.wallet.toLowerCase(), {
+                wallet: checked.wallet,
                 serviceId: signed.serviceId,
                 label: signed.label,
                 cardClass: signed.cardClass,
