@@ -123,7 +123,7 @@ export default function Page() {
       {tab === "scorecards" && (
         <>
           <ZoneLabel
-            title="Scorecards"
+            title="Cards"
             blurb="builder records · certified cards"
           />
           <Scorecards state={state} />
@@ -147,7 +147,7 @@ function Tabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: "play", label: "Play" },
     { id: "builders", label: "Garage" },
-    { id: "scorecards", label: "Scores" },
+    { id: "scorecards", label: "Cards" },
     { id: "proof", label: "Journal" },
   ];
   return (
@@ -1860,6 +1860,9 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
   pct: number;
   tone: string;
   name: string;
+  klass: string;
+  badge: string;
+  glow: string;
 } {
   const klass = (row?.cardClass || "D").toUpperCase();
   const confidence = row?.confidence ?? 0;
@@ -1877,11 +1880,28 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     A: "text-volt",
     S: "text-gold",
   };
+  const badges: Record<string, string> = {
+    D: "border-white/15 bg-white/[0.04] text-dim",
+    C: "border-under/40 bg-under/[0.08] text-under",
+    B: "border-[#B583FF]/45 bg-[#B583FF]/[0.10] text-[#C9A7FF]",
+    A: "border-gold/50 bg-gold/[0.10] text-gold",
+    S: "border-volt/55 bg-volt/[0.13] text-volt",
+  };
+  const glows: Record<string, string> = {
+    D: "shadow-[0_0_18px_rgba(255,255,255,.04)]",
+    C: "shadow-[0_0_24px_rgba(42,214,201,.14)]",
+    B: "shadow-[0_0_26px_rgba(181,131,255,.18)]",
+    A: "shadow-[0_0_30px_rgba(255,211,77,.20)]",
+    S: "shadow-[0_0_36px_rgba(182,255,58,.24)]",
+  };
   return {
     label: `Class ${klass}`,
     name: names[klass] || "provisional",
+    klass,
     pct: Math.max(10, Math.min(100, confidence || (row?.rounds ?? 0) * 8)),
     tone: tones[klass] || "text-dim",
+    badge: badges[klass] || badges.D,
+    glow: glows[klass] || glows.D,
   };
 }
 
@@ -1966,25 +1986,28 @@ function CredentialCard({
               {empty ? "Unclaimed" : row?.label}
             </div>
           </div>
-          <div className="rounded-md border border-volt/35 bg-black/20 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-volt">
-            {certified ? "Certified" : "Pyth"}
+          <div
+            className={cn(
+              "rounded-md border px-3 py-2 text-center",
+              stage.badge,
+              stage.glow,
+            )}
+          >
+            <div className="font-display text-3xl leading-none">
+              {stage.klass}
+            </div>
+            <div className="mt-0.5 font-mono text-[8px] uppercase tracking-wider">
+              class
+            </div>
           </div>
         </div>
 
         <div
-          className="relative mt-8 grid grid-cols-3 gap-2 text-center"
+          className="relative mt-8 grid grid-cols-[1.2fr_0.9fr_0.9fr] gap-2 text-center"
           style={{ transform: "translateZ(46px)" }}
         >
           <div>
             <div className="font-display text-3xl leading-none text-volt tnum">
-              {row?.rounds ?? 0}
-            </div>
-            <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
-              runs
-            </div>
-          </div>
-          <div>
-            <div className="font-display text-3xl leading-none text-ink tnum">
               {row ? `$${trustMiss.toFixed(2)}` : "—"}
             </div>
             <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
@@ -1992,11 +2015,19 @@ function CredentialCard({
             </div>
           </div>
           <div>
-            <div className="font-display text-3xl leading-none text-gold tnum">
-              {row?.wins ?? 0}
+            <div className="font-display text-3xl leading-none text-ink tnum">
+              {row ? `$${(row.avgError ?? 0).toFixed(2)}` : "—"}
             </div>
             <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
-              wins
+              avg miss
+            </div>
+          </div>
+          <div>
+            <div className="font-display text-3xl leading-none text-ink tnum">
+              {row?.rounds ?? 0}
+            </div>
+            <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
+              runs
             </div>
           </div>
         </div>
@@ -2102,11 +2133,11 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
                     </span>
                     <span
                       className={cn(
-                        "font-mono text-[9px] uppercase tracking-wider",
-                        stage.tone,
+                        "rounded border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider",
+                        stage.badge,
                       )}
                     >
-                      {stage.label}
+                      {stage.klass}
                     </span>
                     {r.certifiedAtSec ? (
                       <span className="rounded border border-volt/35 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-volt">
@@ -2342,14 +2373,13 @@ function CredentialVerifier() {
 }
 
 function Scorecards({ state }: { state: ArenaState | null }) {
-  const economics = state?.economics;
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-5 sm:p-7"
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
-        title="Agent scorecards"
+        title="Agent cards"
         right={
           <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
             race record → CROO credential
@@ -2379,41 +2409,8 @@ function Scorecards({ state }: { state: ArenaState | null }) {
         ))}
       </div>
       <ScorecardBoard rows={state?.externalBoard} />
-      <div className="mt-4 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="mt-4">
         <MintCredential rows={state?.externalBoard} />
-        <div className="rounded-lg border border-line/70 bg-panel2/35 p-4">
-          <div className="font-display text-lg uppercase tracking-wide text-ink">
-            House meter
-          </div>
-          {economics ? (
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <div>
-                <div className="font-display text-2xl text-ink tnum">
-                  ${economics.spendUSDC.toFixed(2)}
-                </div>
-                <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
-                  data spend
-                </div>
-              </div>
-              <div>
-                <div className="font-display text-2xl text-volt tnum">
-                  ${economics.revenueUSDC.toFixed(2)}
-                </div>
-                <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
-                  credential rev
-                </div>
-              </div>
-              <div>
-                <div className="font-display text-2xl text-ink tnum">
-                  {economics.benchmarkOrders}
-                </div>
-                <div className="font-mono text-[9px] uppercase tracking-wider text-dim">
-                  certs
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
       </div>
       <CredentialVerifier />
     </section>
@@ -2846,7 +2843,7 @@ function DataMarket({ state }: { state: ArenaState | null }) {
                 ${totalPaid.toFixed(2)}
               </div>
               <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-                paid on-chain
+                provider payouts
               </div>
             </div>
           </div>
