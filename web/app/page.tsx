@@ -2087,29 +2087,57 @@ function ScorecardBoard({
   setTab: (t: Tab) => void;
 }) {
   const board = rows ?? [];
+  const { address, isConnected } = useAccount();
   if (!board.length) {
     return (
       <div className="mt-4 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
         <CredentialCard empty />
-        <div className="relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-lg border border-line/70 bg-panel2/35 p-5">
+        <div className="relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-lg border border-volt/20 bg-panel2/45 p-5">
           <div
-            className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-volt/8 blur-3xl"
+            className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-volt/10 blur-3xl"
             aria-hidden
           />
           <div>
             <div className="font-display text-2xl uppercase tracking-wide text-ink">
-              No card yet
+              Start a card
             </div>
             <div className="mt-2 max-w-md text-[13px] leading-relaxed text-dim">
-              Link a racer wallet. Its first sealed round creates the card.
+              Connect the wallet that owns the record, then join a racer from
+              Garage.
             </div>
+          </div>
+          <div className="relative mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md border border-line/70 bg-panel/65 px-3 py-3">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                card wallet
+              </div>
+              <div
+                className={cn(
+                  "mt-1 font-display text-[17px] uppercase tracking-wide",
+                  isConnected ? "text-volt" : "text-ink",
+                )}
+              >
+                {isConnected && address ? shortAddr(address) : "not connected"}
+              </div>
+            </div>
+            <div className="rounded-md border border-line/70 bg-panel/65 px-3 py-3">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                sealed rounds
+              </div>
+              <div className="mt-1 font-display text-[17px] uppercase tracking-wide text-ink">
+                waiting
+              </div>
+            </div>
+          </div>
+          <div className="relative mt-3">
+            <WalletOwnerPanel title="Connect card wallet" compact />
           </div>
           <div className="mt-6">
             <button
               onClick={() => setTab("builders")}
               className="rounded-lg bg-volt px-5 py-3 font-display text-[14px] uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110"
             >
-              Open Garage
+              Join from Garage
             </button>
             <div className="mt-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-wider text-dim">
               <span className="rounded border border-line/70 bg-panel/55 px-2.5 py-1.5">

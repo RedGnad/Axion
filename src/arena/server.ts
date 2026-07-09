@@ -615,14 +615,20 @@ async function validateCredentialMintRequirements(raw: string): Promise<Credenti
 
   if (serviceId) {
     const publicOwner = await crooPublicOwnerWalletForService(serviceId);
-    if (!publicOwner) {
-      return { ok: false, error: 'could not verify service owner from the CROO public store. Certify wallet-only, or retry once the service is public.' };
-    }
-    if (publicOwner.toLowerCase() !== wallet.toLowerCase()) {
+    const linked = joinedRoster.find((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase());
+    if (publicOwner && publicOwner.toLowerCase() !== wallet.toLowerCase()) {
       return {
         ok: false,
         error: 'serviceId owner does not match the signed wallet',
         expectedWallet: publicOwner,
+        receivedWallet: wallet,
+      };
+    }
+    if (!publicOwner && linked?.ownerWallet && linked.ownerWallet.toLowerCase() !== wallet.toLowerCase()) {
+      return {
+        ok: false,
+        error: 'serviceId is already linked to a different Axion card wallet',
+        expectedWallet: linked.ownerWallet,
         receivedWallet: wallet,
       };
     }
@@ -1984,15 +1990,14 @@ async function main(): Promise<void> {
                 return reply(401, { error: 'invalid owner signature for racer wallet', messageToSign: msg });
               }
               const publicOwner = await crooPublicOwnerWalletForService(serviceId);
-              if (!publicOwner) return reply(409, { error: 'could not verify this service owner from the CROO public store. Join without scorecard wallet, or retry when the service is visible in the public catalog.' });
-              if (publicOwner.toLowerCase() !== verifiedOwner.toLowerCase()) {
+              if (publicOwner && publicOwner.toLowerCase() !== verifiedOwner.toLowerCase()) {
                 return reply(401, {
                   error: 'scorecard wallet must match the CROO public wallet for this service',
                   expectedWallet: publicOwner,
                   receivedWallet: verifiedOwner,
                 });
               }
-              ownerVerified = true;
+              ownerVerified = !!publicOwner;
             }
             const durable = joinedRoster.find((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase());
             if (verifiedOwner && durable?.ownerWallet && durable.ownerWallet.toLowerCase() !== verifiedOwner.toLowerCase()) {
@@ -2016,7 +2021,7 @@ async function main(): Promise<void> {
               refreshRoster();
               pushFeed(`${name} updated${verifiedOwner ? ' · scorecard wallet linked' : ''}${payout ? ' · payout wallet linked' : ''}`);
               broadcast();
-              return reply(200, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || row?.ownerWallet || null, note: verifiedOwner ? 'wallet linked — future grid results build this scorecard' : 'agent settings updated' });
+              return reply(200, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || row?.ownerWallet || null, recordWalletVerified: ownerVerified || row?.ownerVerified || false, note: verifiedOwner ? 'wallet linked — future grid results build this scorecard' : 'agent settings updated' });
             }
             if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
             let name = (label || `agent-${serviceId.slice(0, 4)}`).replace(/[^\w -]/g, '').slice(0, 24) || `agent-${serviceId.slice(0, 4)}`;
@@ -2036,7 +2041,7 @@ async function main(): Promise<void> {
             refreshRoster(); // the new agent is now bettable for the next race (idle predictions)
             pushFeed(`New competitor joined: ${name}${verifiedOwner ? ' · scorecard wallet linked' : ''}`);
             broadcast();
-            reply(202, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || null, note: verifiedOwner ? 'joined — grid results will build this wallet-bound scorecard' : 'joined — first race validates the handler response' });
+            reply(202, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || null, recordWalletVerified: ownerVerified, note: verifiedOwner ? 'joined — grid results will build this wallet-bound scorecard' : 'joined — first race validates the handler response' });
           } catch (e) {
             reply(400, { error: (e as Error).message });
           }
