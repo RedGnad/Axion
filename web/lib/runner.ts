@@ -31,6 +31,7 @@ export interface RoundView {
   line?: number;
   amplitude?: number;
   liveAmplitude?: number;
+  openAtMs?: number;
   raceStartMs?: number;
   settleAtMs?: number;
   betCloseAtMs?: number;

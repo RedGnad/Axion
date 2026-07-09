@@ -58,6 +58,8 @@ interface RoundView {
   amplitude?: number;
   /** Live realized amplitude from Pyth during the reveal window (the moving "current move"). */
   liveAmplitude?: number;
+  /** When the hiring phase opened; clients use it for honest progress feedback while agents source. */
+  openAtMs?: number;
   /** When the race (reveal window) started — the client animates progress between this and settleAtMs. */
   raceStartMs?: number;
   settleAtMs?: number;
@@ -303,6 +305,62 @@ let nextPredictPending: { agentId: string; visitorId: string }[] = [];
 
 function isDisabledRacerService(serviceId: string): boolean {
   return DISABLED_RACER_SERVICE_IDS.has(serviceId.trim().toLowerCase());
+}
+
+function cleanRacerLabel(raw: string | undefined, serviceId: string): string {
+  const fallback = `agent-${serviceId.slice(0, 4)}`;
+  const cleaned = String(raw || fallback)
+    .replace(/[^\w -]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\*+$/g, '')
+    .trim()
+    .slice(0, 24)
+    .trim();
+  return cleaned || fallback;
+}
+
+function racerLabelKey(label: string): string {
+  return label.replace(/\*+$/g, '').trim().toLowerCase();
+}
+
+function racerOwnerKey(ownerWallet?: string): string {
+  if (!ownerWallet) return '';
+  try {
+    return normalizeWallet(ownerWallet).toLowerCase();
+  } catch {
+    return ownerWallet.trim().toLowerCase();
+  }
+}
+
+function dedupeJoinedRoster(): boolean {
+  if (!joinedRoster.length) return false;
+  const seenKeys = new Set<string>();
+  const seenServices = new Set<string>();
+  const next: JoinedRacer[] = [];
+  let changed = false;
+
+  for (let i = joinedRoster.length - 1; i >= 0; i--) {
+    const row = { ...joinedRoster[i] };
+    const cleanLabel = cleanRacerLabel(row.label, row.serviceId);
+    if (cleanLabel !== row.label) {
+      row.label = cleanLabel;
+      changed = true;
+    }
+    const serviceKey = row.serviceId.toLowerCase();
+    const ownerKey = racerOwnerKey(row.ownerWallet);
+    const identityKey = ownerKey ? `wallet:${ownerKey}` : `label:${racerLabelKey(row.label)}`;
+    if (seenServices.has(serviceKey) || seenKeys.has(identityKey)) {
+      changed = true;
+      continue;
+    }
+    seenServices.add(serviceKey);
+    seenKeys.add(identityKey);
+    next.unshift(row);
+  }
+
+  if (next.length !== joinedRoster.length) changed = true;
+  joinedRoster = next.slice(-50);
+  return changed;
 }
 
 function removeCommunityCompetitor(idOrServiceId: string, reason: string, opts: { persist?: boolean } = {}): boolean {
@@ -947,9 +1005,11 @@ async function loadHistory(): Promise<void> {
   // The leaderboard is a derived credential surface, not source state. Rebuild it from verified round
   // history so past pruning bugs cannot erase an agent's earned record (e.g. agent-b525).
   rebuildLeaderboardFromHistory();
+  const deduped = dedupeJoinedRoster();
   const disabled = pruneDisabledCommunityRacers({ persist: false });
-  if (disabled) {
-    console.log(`[arena-server] pruned ${disabled} disabled community racer(s) from durable roster`);
+  if (deduped || disabled) {
+    if (deduped) console.log('[arena-server] deduped durable community roster');
+    if (disabled) console.log(`[arena-server] pruned ${disabled} disabled community racer(s) from durable roster`);
     saveHistory();
   }
   // First ever run (no persisted timeline): backfill the evolution view from REAL history — the
@@ -1494,6 +1554,7 @@ async function runOneRound(
           windowSeconds,
           phase: 'open',
           openPrice,
+          openAtMs: roundOpenMs,
           // Calibrated expected race start (descending countdown target), and the DQ cutoff = that + grace
           // (known upfront, computed in loop) → the red grace bar fills over [etaRaceStartMs, dqAtMs].
           etaRaceStartMs: roundOpenMs + HIRING_ETA_MS,
@@ -1543,9 +1604,12 @@ async function runOneRound(
           const badContract = /invalid response/i.test(reason);
           const paidRacer = /minimum price|price.*cap|price\s.*>\scap/i.test(reason);
           const missingService = /SERVICE_NOT_FOUND|service not found/i.test(reason);
-          if (isRemote && (badContract || paidRacer || missingService)) {
+          const offlineProvider = /PROVIDER_NOT_ACCEPTING_ORDERS|provider is not accept|not accepting orders/i.test(reason);
+          if (isRemote && (badContract || paidRacer || missingService || offlineProvider)) {
             const fix = missingService
               ? 'Use the CROO serviceId from the live race service, then re-register from the Garage.'
+              : offlineProvider
+              ? 'Provider is offline/not accepting orders. Deploy it live, then re-register from the Garage.'
               : paidRacer
               ? 'Set the CROO race service to the minimum price, then re-register from the Garage.'
               : 'Return valid {prediction, rationale}, then re-register from the Garage.';
@@ -2002,11 +2066,41 @@ async function main(): Promise<void> {
               }
               ownerVerified = !!publicOwner;
             }
+            const desiredName = cleanRacerLabel(label, serviceId);
+            const verifiedOwnerKey = racerOwnerKey(verifiedOwner);
+            if (verifiedOwnerKey) {
+              for (const row of [...joinedRoster]) {
+                if (row.serviceId.toLowerCase() === serviceId.toLowerCase()) continue;
+                if (racerOwnerKey(row.ownerWallet) !== verifiedOwnerKey) continue;
+                removeCommunityCompetitor(row.serviceId, 'Replaced by the updated race service.', { persist: false });
+              }
+            }
+            const duplicateLabel = competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
+              c.kind === 'remote' &&
+              racerLabelKey(c.id) === racerLabelKey(desiredName) &&
+              c.serviceId.toLowerCase() !== serviceId.toLowerCase()
+            );
+            if (duplicateLabel) {
+              const row = joinedRoster.find((j) => j.serviceId.toLowerCase() === duplicateLabel.serviceId.toLowerCase());
+              if (verifiedOwnerKey && racerOwnerKey(row?.ownerWallet) === verifiedOwnerKey) {
+                removeCommunityCompetitor(duplicateLabel.serviceId, 'Replaced by the updated race service.', { persist: false });
+              } else {
+                return reply(409, { error: 'racer label already exists. Connect its scorecard wallet to replace it, or choose another label.' });
+              }
+            }
             const durable = joinedRoster.find((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase());
             if (verifiedOwner && durable?.ownerWallet && durable.ownerWallet.toLowerCase() !== verifiedOwner.toLowerCase()) {
               return reply(409, { error: 'this service already has a different scorecard wallet linked. Re-register it as a new CROO service or ask Axion to rotate it manually.' });
             }
-            const existing = competitors.find((c) => c.kind === 'remote' && c.serviceId === serviceId);
+            let existing = competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
+              c.kind === 'remote' && c.serviceId === serviceId
+            );
+            if (existing && existing.id !== desiredName) {
+              if (!verifiedOwnerKey) return reply(409, { error: 'connect the scorecard wallet to rename this racer' });
+              if (metaById.has(desiredName)) return reply(409, { error: 'racer label already exists. Choose another label.' });
+              removeCommunityCompetitor(serviceId, 'Updated racer label.', { persist: false });
+              existing = undefined;
+            }
             if (existing) {
               if (!verifiedOwner && !payout) return reply(409, { error: 'agent already in the arena' });
               const name = existing.id;
@@ -2027,8 +2121,8 @@ async function main(): Promise<void> {
               return reply(200, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || row?.ownerWallet || null, recordWalletVerified: ownerVerified || row?.ownerVerified || false, note: verifiedOwner ? 'wallet linked — future grid results build this scorecard' : 'agent settings updated' });
             }
             if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
-            let name = (label || `agent-${serviceId.slice(0, 4)}`).replace(/[^\w -]/g, '').slice(0, 24) || `agent-${serviceId.slice(0, 4)}`;
-            while (metaById.has(name)) name += '*';
+            const name = desiredName;
+            if (metaById.has(name)) return reply(409, { error: 'racer label already exists. Connect its scorecard wallet to replace it, or choose another label.' });
 
             // No paid pre-flight hire here: joining should be fast and free. The first real race validates
             // the deliverable and auto-purges bad community agents that do not return {prediction,rationale}.

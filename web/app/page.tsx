@@ -83,6 +83,7 @@ export default function Page() {
                 title="The grid"
                 right={
                   <div className="flex items-center gap-3">
+                    <HiringProgress state={state} />
                     <MoveBadge state={state} />
                     <PhaseTag state={state} online={online} />
                   </div>
@@ -454,6 +455,49 @@ function MoveBadge({ state }: { state: ArenaState | null }) {
       }}
     >
       {label} {usd(val)}
+    </span>
+  );
+}
+
+const HIRING_PROGRESS_MS = 150_000;
+
+function HiringProgress({ state }: { state: ArenaState | null }) {
+  const r = state?.round;
+  const active =
+    state?.status === "running" &&
+    r?.phase === "open" &&
+    typeof r.openAtMs === "number";
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active, r?.id]);
+  if (!active || !r?.openAtMs) return null;
+
+  const elapsed = Math.max(0, now - r.openAtMs);
+  const progress = Math.min(1, elapsed / HIRING_PROGRESS_MS);
+  const over = elapsed >= HIRING_PROGRESS_MS;
+  const deg = Math.round(progress * 360);
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-under"
+      title={`hiring ${clock(elapsed)}`}
+    >
+      <span
+        className={cn(
+          "grid h-6 w-6 place-items-center rounded-full",
+          over && "animate-pulse",
+        )}
+        style={{
+          background: `conic-gradient(#45a3ff ${deg}deg, rgba(69,163,255,.14) 0deg)`,
+          boxShadow: over ? "0 0 18px rgba(69,163,255,.35)" : undefined,
+        }}
+      >
+        <span className="h-3.5 w-3.5 rounded-full bg-panel" />
+      </span>
+      <span className="hidden sm:inline">hiring</span>
     </span>
   );
 }

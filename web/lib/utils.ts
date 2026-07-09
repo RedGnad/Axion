@@ -27,7 +27,7 @@ function colorHash(input: string): number {
 }
 
 export const livery = (id: string) => {
-  const key = id.toLowerCase();
+  const key = id.toLowerCase().replace(/\*+$/g, '');
   if (LIVERY[key]) return LIVERY[key];
   // Community racers should not collapse into the same orange badge. A hash hue gives every serviceId/
   // label a stable team color without needing manual curation.
