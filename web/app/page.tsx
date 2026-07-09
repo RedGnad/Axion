@@ -126,7 +126,7 @@ export default function Page() {
             title="Cards"
             blurb="builder records · certified cards"
           />
-          <Scorecards state={state} />
+          <Scorecards state={state} setTab={setTab} />
         </>
       )}
 
@@ -2079,34 +2079,46 @@ function CredentialCard({
   );
 }
 
-function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
+function ScorecardBoard({
+  rows,
+  setTab,
+}: {
+  rows?: ArenaState["externalBoard"];
+  setTab: (t: Tab) => void;
+}) {
   const board = rows ?? [];
   if (!board.length) {
     return (
-      <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+      <div className="mt-4 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
         <CredentialCard empty />
-        <div className="flex min-h-[280px] flex-col justify-between rounded-lg border border-line/70 bg-panel2/35 p-5">
+        <div className="relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-lg border border-line/70 bg-panel2/35 p-5">
+          <div
+            className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-volt/8 blur-3xl"
+            aria-hidden
+          />
           <div>
-            <div className="font-display text-xl uppercase tracking-wide text-ink">
-              First card waiting
+            <div className="font-display text-2xl uppercase tracking-wide text-ink">
+              No card yet
             </div>
-            <div className="mt-2 max-w-lg text-[13px] leading-relaxed text-dim">
-              Link a racer wallet in Garage. Its sealed rounds will appear here
-              as a certifiable card.
+            <div className="mt-2 max-w-md text-[13px] leading-relaxed text-dim">
+              Link a racer wallet. Its first sealed round creates the card.
             </div>
           </div>
-          <div className="mt-5 grid gap-2 sm:grid-cols-3">
-            {["link", "race", "certify"].map((x, i) => (
-              <div
-                key={x}
-                className="rounded-md border border-line/70 bg-panel/60 px-3 py-3"
-              >
-                <div className="font-display text-lg text-volt">{i + 1}</div>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-                  {x}
-                </div>
-              </div>
-            ))}
+          <div className="mt-6">
+            <button
+              onClick={() => setTab("builders")}
+              className="rounded-lg bg-volt px-5 py-3 font-display text-[14px] uppercase tracking-wide text-[#0a0a0b] transition hover:brightness-110"
+            >
+              Open Garage
+            </button>
+            <div className="mt-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-wider text-dim">
+              <span className="rounded border border-line/70 bg-panel/55 px-2.5 py-1.5">
+                Pyth graded
+              </span>
+              <span className="rounded border border-line/70 bg-panel/55 px-2.5 py-1.5">
+                CROO certifiable
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -2224,7 +2236,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
             Certify card
           </div>
           <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-            wallet proof → CROO order
+            CROO credential
           </div>
         </div>
         <a
@@ -2242,7 +2254,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
         <div className="rounded-md border border-line/70 bg-panel/60 px-3 py-3">
           {!isConnected ? (
             <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              connect wallet
+              choose a wallet
             </div>
           ) : row ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -2271,7 +2283,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
             </div>
           ) : (
             <div className="font-mono text-[10px] uppercase tracking-wider text-gold">
-              no card for this wallet yet
+              no card for this wallet
             </div>
           )}
           <button
@@ -2283,7 +2295,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
               ? "signing..."
               : row
                 ? "prepare certify pass"
-                : "race once with this wallet"}
+                : "select card wallet"}
           </button>
         </div>
       </div>
@@ -2405,7 +2417,13 @@ function CredentialVerifier() {
   );
 }
 
-function Scorecards({ state }: { state: ArenaState | null }) {
+function Scorecards({
+  state,
+  setTab,
+}: {
+  state: ArenaState | null;
+  setTab: (t: Tab) => void;
+}) {
   const board = state?.externalBoard ?? [];
   const certified = board.filter((r) => r.certifiedAtSec).length;
   return (
@@ -2421,33 +2439,12 @@ function Scorecards({ state }: { state: ArenaState | null }) {
           </span>
         }
       />
-      <div className="mt-4 overflow-hidden rounded-lg border border-line/70 bg-panel2/35">
-        <div className="grid gap-px bg-line/80 sm:grid-cols-3">
-          {[
-            ["Race", "linked agent"],
-            ["Grade", "Pyth miss"],
-            ["Certify", "CROO seal"],
-          ].map(([k, v], i) => (
-            <div key={k} className="bg-panel2/80 px-3 py-3">
-              <div className="flex items-center gap-2">
-                <span className="font-display text-xl text-volt tnum">
-                  0{i + 1}
-                </span>
-                <span className="font-display text-[14px] uppercase tracking-wide text-ink">
-                  {k}
-                </span>
-              </div>
-              <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-                {v}
-              </div>
-            </div>
-          ))}
+      <ScorecardBoard rows={state?.externalBoard} setTab={setTab} />
+      {board.length ? (
+        <div className="mt-4">
+          <MintCredential rows={state?.externalBoard} />
         </div>
-      </div>
-      <ScorecardBoard rows={state?.externalBoard} />
-      <div className="mt-4">
-        <MintCredential rows={state?.externalBoard} />
-      </div>
+      ) : null}
       <CredentialVerifier />
     </section>
   );
