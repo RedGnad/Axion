@@ -1542,8 +1542,11 @@ async function runOneRound(
           const isRemote = competitors.some((x) => x.id === competitor && x.kind === 'remote');
           const badContract = /invalid response/i.test(reason);
           const paidRacer = /minimum price|price.*cap|price\s.*>\scap/i.test(reason);
-          if (isRemote && (badContract || paidRacer)) {
-            const fix = paidRacer
+          const missingService = /SERVICE_NOT_FOUND|service not found/i.test(reason);
+          if (isRemote && (badContract || paidRacer || missingService)) {
+            const fix = missingService
+              ? 'Use the CROO serviceId from the live race service, then re-register from the Garage.'
+              : paidRacer
               ? 'Set the CROO race service to the minimum price, then re-register from the Garage.'
               : 'Return valid {prediction, rationale}, then re-register from the Garage.';
             removeCommunityCompetitor(competitor, fix);
