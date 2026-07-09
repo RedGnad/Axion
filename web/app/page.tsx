@@ -17,7 +17,7 @@ import {
   type SignedScorecard,
 } from "@/lib/runner";
 import { postUsdcBet, USDC_ADDRESS, ERC20_TRANSFER_ABI } from "@/lib/bet";
-import { cn, livery, usd } from "@/lib/utils";
+import { assignLivery, cn, livery, usd } from "@/lib/utils";
 import Race from "@/components/Race";
 import {
   useAccount,
@@ -34,6 +34,14 @@ type Tab = "play" | "builders" | "scorecards" | "proof";
 
 export default function Page() {
   const { state, online } = useArena(2000);
+  // Resolve the team colors for the WHOLE visible field before any child calls livery(): two racers
+  // must never share a color, and that can only be decided from the full set of ids.
+  assignLivery([
+    ...(state?.roster ?? []).map((r) => r.id),
+    ...(state?.leaderboard ?? []).map((r) => r.id),
+    ...(state?.round?.competitors ?? []).map((c) => c.id),
+    ...(state?.history ?? []).flatMap((h) => (h.competitors ?? []).map((c) => c.id)),
+  ]);
   const [tab, setTab] = useState<Tab>("play");
   const [intro, setIntro] = useState(false);
   useEffect(() => {
