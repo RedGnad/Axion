@@ -1768,9 +1768,11 @@ function WalletOwnerPanel({
           <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
             {title}
           </div>
-          <div className="mt-1 text-[12.5px] leading-relaxed text-dim">
-            Personal EOA that owns the scorecard. Sign only; no spend here.
-          </div>
+          {!compact ? (
+            <div className="mt-1 text-[12.5px] leading-relaxed text-dim">
+              sign only
+            </div>
+          ) : null}
         </div>
         {isConnected && address ? (
           <div className="flex items-center gap-2">
@@ -1892,6 +1894,7 @@ function CredentialCard({
 }) {
   const stage = scoreStage(row);
   const trustMiss = row?.trustedError ?? row?.avgError ?? 0;
+  const certified = !!row?.certifiedAtSec;
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [tilt, setTilt] = useState({
     rx: 8,
@@ -1964,7 +1967,7 @@ function CredentialCard({
             </div>
           </div>
           <div className="rounded-md border border-volt/35 bg-black/20 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-volt">
-            Pyth
+            {certified ? "Certified" : "Pyth"}
           </div>
         </div>
 
@@ -2018,11 +2021,20 @@ function CredentialCard({
           </div>
         </div>
       </div>
-      <p className="relative mt-5 text-center text-[13px] leading-relaxed text-dim">
-        {empty
-          ? "Link a racer wallet, race, then certify the card from Axion's CROO service."
-          : "Pyth-graded record, signed by Axion, certified through a paid CROO order."}
-      </p>
+      {empty ? null : (
+        <div className="relative mt-5 flex justify-center">
+          <span
+            className={cn(
+              "rounded-md border px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider",
+              certified
+                ? "border-volt/45 bg-volt/[0.06] text-volt"
+                : "border-line bg-panel/50 text-dim",
+            )}
+          >
+            {certified ? "CROO certified" : "ready to certify"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -2035,13 +2047,8 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
         <CredentialCard empty />
         <div className="rounded-lg border border-line/70 bg-panel2/35 p-5">
           <div className="font-display text-xl uppercase tracking-wide text-ink">
-            No certified cards yet
+            No cards yet
           </div>
-          <p className="mt-2 text-[14px] leading-relaxed text-dim">
-            The first linked racer wallet will appear here as a live card. Until
-            then, the race leaderboard stays in Play and the raw proof stays in
-            Journal.
-          </p>
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
             {["link wallet", "race", "certify on CROO"].map((x, i) => (
               <div
@@ -2101,6 +2108,11 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
                     >
                       {stage.label}
                     </span>
+                    {r.certifiedAtSec ? (
+                      <span className="rounded border border-volt/35 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider text-volt">
+                        certified
+                      </span>
+                    ) : null}
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] text-dim">
                     {shortAddr(r.wallet)} · {r.confidence ?? 0}% confidence ·
@@ -2164,11 +2176,6 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
           <div className="font-display text-lg uppercase tracking-wide text-volt">
             Certify pass
           </div>
-          <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-dim">
-            Buy Axion&apos;s CROO credential service with this pass. Axion
-            returns a signed card for this wallet, bound to the CROO service
-            when available.
-          </p>
         </div>
         <a
           href={AXION_AGENT_URL}
@@ -2181,11 +2188,11 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
       </div>
 
       <div className="mt-4">
-        <WalletOwnerPanel title="Card owner" compact />
+        <WalletOwnerPanel title="Card wallet" compact />
       </div>
       {!isConnected ? (
-        <div className="mt-3 rounded-md border border-line/70 bg-panel/45 px-3 py-2 text-[12.5px] leading-relaxed text-dim">
-          Connect the wallet that should own the public scorecard.
+        <div className="mt-3 rounded-md border border-line/70 bg-panel/45 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-dim">
+          connect wallet
         </div>
       ) : (
         <>
@@ -2195,6 +2202,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
               <span className="ml-2 text-volt">
                 Class {row.cardClass || "D"} · {row.rounds} runs · trust $
                 {(row.trustedError ?? row.avgError).toFixed(2)}
+                {row.certifiedAtSec ? " · certified" : ""}
               </span>
             ) : (
               <span className="ml-2 text-gold">
@@ -2377,10 +2385,6 @@ function Scorecards({ state }: { state: ArenaState | null }) {
           <div className="font-display text-lg uppercase tracking-wide text-ink">
             House meter
           </div>
-          <p className="mt-1 text-[13px] leading-relaxed text-dim">
-            Race spend and credential revenue stay separate, so growth never
-            hides the cost of bootstrapping agents.
-          </p>
           {economics ? (
             <div className="mt-4 grid grid-cols-3 gap-2">
               <div>
@@ -2684,18 +2688,7 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
       className="reveal rounded-lg border border-line bg-panel/70 p-6 sm:p-7"
       style={{ animationDelay: "220ms" }}
     >
-      <SectionTitle
-        title="Standings"
-        right={
-          <span
-            className="font-mono text-[11px] uppercase tracking-wider text-dim"
-            title="ranked by confidence-adjusted accuracy: raw error plus an uncertainty penalty that shrinks with repeated, recent rounds"
-          >
-            trusted ranking
-          </span>
-        }
-      />
-      <div className="mb-1 mt-4 flex items-center gap-3 px-3 font-mono text-[11px] uppercase tracking-wider text-dim">
+      <div className="mb-1 flex items-center gap-3 px-3 font-mono text-[11px] uppercase tracking-wider text-dim">
         <span className="w-5">#</span>
         <span className="h-3 w-3" />
         <span className="flex-1">agent</span>
@@ -3238,7 +3231,7 @@ function Join() {
         if (!isConnected || !address) {
           setMsg({
             ok: false,
-            text: "connect a scorecard wallet, or turn the card link off",
+            text: "connect card wallet, or turn card link off",
           });
           setBusy(false);
           return;
@@ -3428,16 +3421,10 @@ function Join() {
 const prediction = /* your estimate of |ETH move| over the window, in USD */;
 deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
               <p className="text-[12.5px] leading-relaxed text-volt/90">
-                Reply fast, refine later. The arena cuts any agent that does not
-                answer before the round cutoff, so always return a quick
-                baseline from recentVol (about 30-60s) instead of blocking on a
-                slow data hire. Fast every round beats
-                occasionally-more-accurate but late.
+                Reply fast. Fall back to recentVol if anything is slow.
               </p>
               <p className="text-[12.5px] leading-relaxed text-dim">
-                Race at CROO&apos;s minimum price. Your signed free submits
-                build a record; the paid 0.10 USDC card certifies that
-                accumulated record on{" "}
+                Minimum-price race service. Certify the record on{" "}
                 <a
                   href={AXION_AGENT_URL}
                   target="_blank"
@@ -3583,7 +3570,7 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                       )}
                     />
                     <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
-                      scorecard wallet
+                      card wallet
                     </span>
                   </button>
                   {!linkScorecard ? (
@@ -3594,13 +3581,9 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
                 </div>
                 {linkScorecard ? (
                   <div className="mt-3">
-                    <WalletOwnerPanel title="Scorecard owner" compact />
+                    <WalletOwnerPanel title="Card wallet" compact />
                   </div>
                 ) : null}
-                <div className="mt-2 text-[12.5px] leading-relaxed text-dim">
-                  Linked racers turn grid results into a certifiable Axion card.
-                  Skip this only for a quick test run.
-                </div>
               </div>
               <details className="mt-2 group">
                 <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
@@ -3628,9 +3611,8 @@ deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
             </div>
           </div>
 
-          <p className="mt-9 border-t border-line pt-4 text-[13px] leading-relaxed text-dim">
-            Bad response later? Fix the backend, redeploy, re-check, re-join.
-            Same race serviceId.
+          <p className="mt-9 border-t border-line pt-4 font-mono text-[10px] uppercase tracking-wider text-dim">
+            fix backend · redeploy · re-check
           </p>
         </>
       )}

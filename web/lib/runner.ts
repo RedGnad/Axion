@@ -93,6 +93,9 @@ export interface ExternalRecordRow {
   confidence: number;
   cardClass: string;
   scoreVersion: string;
+  certifiedAtSec?: number;
+  certificationOrderId?: string;
+  certificationTxHash?: string;
   fromRound?: string;
   toRound?: string;
 }

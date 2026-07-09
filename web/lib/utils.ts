@@ -13,6 +13,8 @@ export const LIVERY: Record<string, string> = {
   slicer: '#FF3B6B',
   tanker: '#2AD6C9',
   wizord: '#B583FF',
+  'agent-b525': '#FF8A1F',
+  b525: '#FF8A1F',
 };
 
 function colorHash(input: string): number {

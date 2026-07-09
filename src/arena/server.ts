@@ -202,6 +202,9 @@ interface ArenaState {
     confidence: number;
     cardClass: string;
     scoreVersion: string;
+    certifiedAtSec?: number;
+    certificationOrderId?: string;
+    certificationTxHash?: string;
     fromRound?: string;
     toRound?: string;
   }[];
@@ -349,7 +352,19 @@ let remoteBuyer: Awaited<ReturnType<typeof createRemoteBuyer>> | null = null;
 interface FreeSubmission { wallet: string; label: string; prediction: number; reasonHash: string; submitMs: number; nonce: string; }
 let freeSubmissions: FreeSubmission[] = [];
 interface RecordEntry { roundId: string; label?: string; prediction: number; actual: number; errorUsd: number; rank: number; field: number; settledAtSec: number; }
+interface CertifiedCard {
+  wallet: string;
+  serviceId: string;
+  label: string;
+  cardClass: string;
+  rounds: number;
+  trustedErrorUsd: number;
+  certifiedAtSec: number;
+  orderId: string;
+  txHash?: string;
+}
 const externalRecords = new Map<string, RecordEntry[]>();
+const certifiedCards = new Map<string, CertifiedCard>();
 const SCORE_VERSION = '2026-07-v1';
 
 function clamp(n: number, min: number, max: number): number {
@@ -358,6 +373,10 @@ function clamp(n: number, min: number, max: number): number {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function latestCertification(wallet: string): CertifiedCard | undefined {
+  return certifiedCards.get(normalizeWallet(wallet).toLowerCase());
 }
 
 function credentialIdentityForWallet(wallet: string, recs: RecordEntry[], serviceIdHint = ''): { serviceId: string; label: string } {
@@ -409,6 +428,7 @@ function refreshExternalBoard(): void {
       const wins = recs.filter((r) => r.rank === 1).length;
       const identity = credentialIdentityForWallet(wallet, recs);
       const score = credentialScore(recs);
+      const cert = latestCertification(wallet);
       return {
         agent: wallet,
         wallet,
@@ -423,6 +443,9 @@ function refreshExternalBoard(): void {
         confidence: score.confidence,
         cardClass: score.cardClass,
         scoreVersion: SCORE_VERSION,
+        certifiedAtSec: cert?.certifiedAtSec,
+        certificationOrderId: cert?.orderId,
+        certificationTxHash: cert?.txHash,
         fromRound: recs[0]?.roundId,
         toRound: recs[n - 1]?.roundId,
       };
@@ -809,14 +832,16 @@ async function loadHistory(): Promise<void> {
     joinedRoster?: JoinedRacer[];
     racesToday?: number; racesDayKey?: string; nextRoundAtMs?: number;
     externalRecords?: [string, RecordEntry[]][];
+    certifiedCards?: [string, CertifiedCard][];
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
     for (const p of d.seenPairs ?? []) seenPairs.add(p);
     for (const [agent, recs] of d.externalRecords ?? []) externalRecords.set(agent, recs); // durable track records
-    refreshExternalBoard();
+    for (const [wallet, cert] of d.certifiedCards ?? []) certifiedCards.set(wallet, cert);
     if (d.storeEvents?.length) storeEvents = d.storeEvents.slice(0, 14);
     if (d.joinedRoster?.length) joinedRoster = d.joinedRoster.slice(0, 50);
+    refreshExternalBoard();
     // Restore the daily subsidy counter so the cap HOLDS across restarts (else a redeploy/spin-down
     // resets it to 0 and a bot could drain us). refreshBudget() rolls it over if the UTC day changed.
     if (typeof d.racesToday === 'number') racesToday = d.racesToday;
@@ -895,6 +920,7 @@ function saveHistory(): void {
     knownProviderIds: [...knownProviderIds], seenPairs: [...seenPairs], storeEvents,
     joinedRoster, racesToday, racesDayKey, nextRoundAtMs: state.nextRoundAtMs,
     externalRecords: [...externalRecords.entries()], // durable track records (the credential base)
+    certifiedCards: [...certifiedCards.entries()],
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
@@ -1178,15 +1204,29 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
               const scoreKey = process.env.HOUSE_EOA_PRIVATE_KEY;
               if (!scoreKey) throw new Error('HOUSE_EOA_PRIVATE_KEY required to sign credentials');
               const signed = await signCredential(credential, scoreKey);
-              await client.deliverOrder(o.orderId, {
+              const delivered = await client.deliverOrder(o.orderId, {
                 deliverableType: DeliverableType.Text,
                 deliverableText: JSON.stringify({ type: 'axion.accuracyCredential.v1', credential: signed }),
               });
               done.add(o.orderId);
+              const certifiedAtSec = Math.round(Date.now() / 1000);
+              certifiedCards.set(wallet.toLowerCase(), {
+                wallet,
+                serviceId: signed.serviceId,
+                label: signed.label,
+                cardClass: signed.cardClass,
+                rounds: signed.rounds,
+                trustedErrorUsd: signed.trustedErrorUsd,
+                certifiedAtSec,
+                orderId: o.orderId,
+                txHash: delivered.txHash || o.deliverTxHash || o.payTxHash || undefined,
+              });
               const priceUSDC = Number(o.price) / 1_000_000 || 0;
               benchmarkRevenueUSDC += priceUSDC;
               benchmarkOrders += 1;
               refreshEconomics();
+              refreshExternalBoard();
+              saveHistory();
               pushFeed(`Card certified: ${signed.label} · class ${signed.cardClass} · ${signed.rounds} runs · trusted miss $${signed.trustedErrorUsd.toFixed(2)}`);
               console.log(`[credential] delivered accumulated credential ${o.orderId} (+${priceUSDC} USDC revenue)`);
               broadcast();
