@@ -1863,6 +1863,7 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
   klass: string;
   badge: string;
   glow: string;
+  foil: string;
 } {
   const klass = (row?.cardClass || "D").toUpperCase();
   const confidence = row?.confidence ?? 0;
@@ -1894,6 +1895,13 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     A: "shadow-[0_0_30px_rgba(255,211,77,.20)]",
     S: "shadow-[0_0_36px_rgba(182,255,58,.24)]",
   };
+  const foils: Record<string, string> = {
+    D: "bg-[linear-gradient(135deg,rgba(255,255,255,.10),rgba(42,214,201,.05)_46%,rgba(255,255,255,.04))]",
+    C: "bg-[linear-gradient(135deg,rgba(42,214,201,.20),rgba(182,255,58,.07)_46%,rgba(255,255,255,.05))]",
+    B: "bg-[linear-gradient(135deg,rgba(181,131,255,.24),rgba(42,214,201,.08)_44%,rgba(255,59,107,.10))]",
+    A: "bg-[linear-gradient(135deg,rgba(255,211,77,.28),rgba(182,255,58,.10)_43%,rgba(255,59,107,.08))]",
+    S: "bg-[linear-gradient(135deg,rgba(182,255,58,.30),rgba(255,211,77,.16)_42%,rgba(181,131,255,.16))]",
+  };
   return {
     label: `Class ${klass}`,
     name: names[klass] || "provisional",
@@ -1902,6 +1910,7 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     tone: tones[klass] || "text-dim",
     badge: badges[klass] || badges.D,
     glow: glows[klass] || glows.D,
+    foil: foils[klass] || foils.D,
   };
 }
 
@@ -1943,16 +1952,23 @@ function CredentialCard({
     "--gy": `${tilt.glareY}%`,
   } as CSSProperties;
   return (
-    <div className="relative min-h-[260px] overflow-hidden rounded-lg border border-volt/25 bg-panel2/60 p-4 shadow-[0_18px_60px_rgba(0,0,0,.25)]">
+    <div className="relative min-h-[280px] overflow-hidden rounded-lg border border-volt/20 bg-panel2/60 p-4 shadow-[0_18px_60px_rgba(0,0,0,.25)]">
       <div
-        className="absolute inset-x-8 top-8 h-28 rounded-full bg-volt/10 blur-3xl"
+        className={cn(
+          "absolute inset-x-8 top-8 h-28 rounded-full blur-3xl",
+          certified ? "bg-volt/16" : "bg-volt/8",
+        )}
         aria-hidden
       />
       <div
         ref={cardRef}
         onPointerMove={move}
         onPointerLeave={reset}
-        className="relative mx-auto max-w-[320px] overflow-hidden rounded-lg border border-white/12 bg-[linear-gradient(135deg,rgba(182,255,58,.16),rgba(42,214,201,.08)_42%,rgba(255,59,107,.10))] p-4 shadow-[0_24px_50px_rgba(0,0,0,.35)] transition-transform duration-150 ease-out will-change-transform"
+        className={cn(
+          "relative mx-auto max-w-[320px] overflow-hidden rounded-lg border border-white/12 p-4 shadow-[0_24px_50px_rgba(0,0,0,.35)] transition-transform duration-150 ease-out will-change-transform",
+          stage.foil,
+          certified ? "ring-1 ring-volt/30" : "",
+        )}
         style={{
           ...cardStyle,
           transform:
@@ -1980,7 +1996,7 @@ function CredentialCard({
         >
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-dim">
-              Axion scorecard
+              Axion card
             </div>
             <div className="mt-2 font-display text-2xl uppercase leading-none tracking-wide text-ink">
               {empty ? "Unclaimed" : row?.label}
@@ -2003,15 +2019,15 @@ function CredentialCard({
         </div>
 
         <div
-          className="relative mt-8 grid grid-cols-[1.2fr_0.9fr_0.9fr] gap-2 text-center"
+          className="relative mt-8 grid grid-cols-[1.15fr_0.95fr_0.9fr] gap-2 text-center"
           style={{ transform: "translateZ(46px)" }}
         >
           <div>
-            <div className="font-display text-3xl leading-none text-volt tnum">
+            <div className="font-display text-4xl leading-none text-volt tnum">
               {row ? `$${trustMiss.toFixed(2)}` : "—"}
             </div>
             <div className="mt-1 font-mono text-[9px] uppercase tracking-wider text-dim">
-              trust miss
+              trusted miss
             </div>
           </div>
           <div>
@@ -2033,7 +2049,7 @@ function CredentialCard({
         </div>
 
         <div
-          className="relative mt-8"
+          className="relative mt-7"
           style={{ transform: "translateZ(38px)" }}
         >
           <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-wider">
@@ -2052,17 +2068,10 @@ function CredentialCard({
           </div>
         </div>
       </div>
-      {empty ? null : (
+      {empty || !certified ? null : (
         <div className="relative mt-5 flex justify-center">
-          <span
-            className={cn(
-              "rounded-md border px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider",
-              certified
-                ? "border-volt/45 bg-volt/[0.06] text-volt"
-                : "border-line bg-panel/50 text-dim",
-            )}
-          >
-            {certified ? "CROO certified" : "ready to certify"}
+          <span className="rounded-md border border-volt/45 bg-volt/[0.06] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt">
+            CROO certified
           </span>
         </div>
       )}
@@ -2076,12 +2085,18 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
     return (
       <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
         <CredentialCard empty />
-        <div className="rounded-lg border border-line/70 bg-panel2/35 p-5">
-          <div className="font-display text-xl uppercase tracking-wide text-ink">
-            No cards yet
+        <div className="flex min-h-[280px] flex-col justify-between rounded-lg border border-line/70 bg-panel2/35 p-5">
+          <div>
+            <div className="font-display text-xl uppercase tracking-wide text-ink">
+              First card waiting
+            </div>
+            <div className="mt-2 max-w-lg text-[13px] leading-relaxed text-dim">
+              Link a racer wallet in Garage. Its sealed rounds will appear here
+              as a certifiable card.
+            </div>
           </div>
           <div className="mt-5 grid gap-2 sm:grid-cols-3">
-            {["link wallet", "race", "certify on CROO"].map((x, i) => (
+            {["link", "race", "certify"].map((x, i) => (
               <div
                 key={x}
                 className="rounded-md border border-line/70 bg-panel/60 px-3 py-3"
@@ -2104,10 +2119,10 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="font-display text-lg uppercase tracking-wide text-ink">
-              Live card rack
+              Card rack
             </div>
             <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
-              accumulated records · best accuracy first
+              lowest trusted miss first
             </div>
           </div>
           <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
@@ -2121,7 +2136,7 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
             return (
               <div
                 key={r.wallet}
-                className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-line/70 bg-panel/60 px-3 py-2.5"
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-line/70 bg-panel/60 px-3 py-2.5 transition hover:border-ink/20"
               >
                 <span className="font-display text-xl text-dim tnum">
                   {i + 1}
@@ -2145,9 +2160,10 @@ function ScorecardBoard({ rows }: { rows?: ArenaState["externalBoard"] }) {
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-0.5 font-mono text-[10px] text-dim">
-                    {shortAddr(r.wallet)} · {r.confidence ?? 0}% confidence ·
-                    best #{r.bestRank || "—"}
+                  <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[10px] text-dim">
+                    <span>{shortAddr(r.wallet)}</span>
+                    <span>{r.confidence ?? 0}% conf</span>
+                    <span>best #{r.bestRank || "—"}</span>
                   </div>
                 </div>
                 <div className="text-right font-mono text-[11px] text-dim">
@@ -2201,11 +2217,14 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
     }
   };
   return (
-    <div className="rounded-lg border border-volt/25 bg-volt/[0.035] p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="rounded-lg border border-line/70 bg-panel2/35 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="font-display text-lg uppercase tracking-wide text-volt">
-            Certify pass
+            Certify card
+          </div>
+          <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+            wallet proof → CROO order
           </div>
         </div>
         <a
@@ -2218,29 +2237,43 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
         </a>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]">
         <WalletOwnerPanel title="Card wallet" compact />
-      </div>
-      {!isConnected ? (
-        <div className="mt-3 rounded-md border border-line/70 bg-panel/45 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-dim">
-          connect wallet
-        </div>
-      ) : (
-        <>
-          <div className="mt-4 rounded-md border border-line/70 bg-panel/60 px-3 py-2 font-mono text-[11px] text-dim">
-            {shortAddr(address)}
-            {row ? (
-              <span className="ml-2 text-volt">
-                Class {row.cardClass || "D"} · {row.rounds} runs · trust $
-                {(row.trustedError ?? row.avgError).toFixed(2)}
-                {row.certifiedAtSec ? " · certified" : ""}
+        <div className="rounded-md border border-line/70 bg-panel/60 px-3 py-3">
+          {!isConnected ? (
+            <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              connect wallet
+            </div>
+          ) : row ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] text-dim">
+                {shortAddr(address)}
               </span>
-            ) : (
-              <span className="ml-2 text-gold">
-                no card for this wallet yet
+              <span
+                className={cn(
+                  "rounded border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider",
+                  scoreStage(row).badge,
+                )}
+              >
+                {row.cardClass || "D"}
               </span>
-            )}
-          </div>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-volt">
+                ${(row.trustedError ?? row.avgError).toFixed(2)} miss
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+                {row.rounds} runs
+              </span>
+              {row.certifiedAtSec ? (
+                <span className="font-mono text-[10px] uppercase tracking-wider text-volt">
+                  certified
+                </span>
+              ) : null}
+            </div>
+          ) : (
+            <div className="font-mono text-[10px] uppercase tracking-wider text-gold">
+              no card for this wallet yet
+            </div>
+          )}
           <button
             onClick={prepare}
             disabled={signing || !row}
@@ -2252,26 +2285,26 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
                 ? "prepare certify pass"
                 : "race once with this wallet"}
           </button>
-          {payload ? (
-            <div className="mt-3 rounded-md border border-line bg-panel/75 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
-                  paste into CROO requirements
-                </span>
-                <button
-                  onClick={copy}
-                  className="font-mono text-[10px] uppercase tracking-wider text-volt"
-                >
-                  copy
-                </button>
-              </div>
-              <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] text-ink/80">
-                {payload}
-              </pre>
-            </div>
-          ) : null}
-        </>
-      )}
+        </div>
+      </div>
+      {payload ? (
+        <div className="mt-3 rounded-md border border-line bg-panel/75 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-dim">
+              paste into CROO requirements
+            </span>
+            <button
+              onClick={copy}
+              className="font-mono text-[10px] uppercase tracking-wider text-volt"
+            >
+              copy
+            </button>
+          </div>
+          <pre className="mt-2 max-h-28 overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] text-ink/80">
+            {payload}
+          </pre>
+        </div>
+      ) : null}
       {msg ? (
         <div
           className={cn(
@@ -2373,40 +2406,43 @@ function CredentialVerifier() {
 }
 
 function Scorecards({ state }: { state: ArenaState | null }) {
+  const board = state?.externalBoard ?? [];
+  const certified = board.filter((r) => r.certifiedAtSec).length;
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-5 sm:p-7"
       style={{ animationDelay: "180ms" }}
     >
       <SectionTitle
-        title="Agent cards"
+        title="Cards"
         right={
           <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
-            race record → CROO credential
+            {board.length} cards · {certified} certified
           </span>
         }
       />
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {[
-          ["race", "a linked agent calls ETH"],
-          ["grade", "Pyth scores the miss"],
-          ["certify", "CROO seals the card"],
-        ].map(([k, v], i) => (
-          <div
-            key={k}
-            className="rounded-md border border-line/70 bg-panel2/35 px-3 py-3"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-display text-xl text-volt">{i + 1}</span>
-              <span className="font-display text-[14px] uppercase tracking-wide text-ink">
-                {k}
-              </span>
+      <div className="mt-4 overflow-hidden rounded-lg border border-line/70 bg-panel2/35">
+        <div className="grid gap-px bg-line/80 sm:grid-cols-3">
+          {[
+            ["Race", "linked agent"],
+            ["Grade", "Pyth miss"],
+            ["Certify", "CROO seal"],
+          ].map(([k, v], i) => (
+            <div key={k} className="bg-panel2/80 px-3 py-3">
+              <div className="flex items-center gap-2">
+                <span className="font-display text-xl text-volt tnum">
+                  0{i + 1}
+                </span>
+                <span className="font-display text-[14px] uppercase tracking-wide text-ink">
+                  {k}
+                </span>
+              </div>
+              <div className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-dim">
+                {v}
+              </div>
             </div>
-            <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-dim">
-              {v}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
       <ScorecardBoard rows={state?.externalBoard} />
       <div className="mt-4">
@@ -3342,8 +3378,47 @@ function Join() {
             </div>
           </div>
 
-          {/* No agent yet? template — collapsed. */}
+          {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
           <details className="group mt-2.5">
+            <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
+              <span className="text-volt">▸</span> exact contract for manual
+              wiring
+            </summary>
+            <div className="mt-3 space-y-2.5 border-l border-line pl-4">
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                Each round the arena hires your agent with:
+              </p>
+              <div className="overflow-x-auto whitespace-nowrap rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+                {"{ spot, deadlineSeconds, recentVol }"}
+              </div>
+              <p className="text-[13.5px] leading-relaxed text-dim">
+                and it must deliver, as JSON:
+              </p>
+              <div className="overflow-x-auto whitespace-nowrap rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
+                {"{ prediction, rationale }"}
+              </div>
+              <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
+const prediction = /* your estimate of |ETH move| over the window, in USD */;
+deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
+              <p className="text-[12.5px] leading-relaxed text-volt/90">
+                Reply fast. Fall back to recentVol if anything is slow.
+              </p>
+              <p className="text-[12.5px] leading-relaxed text-dim">
+                Minimum-price race service. Certify the record on{" "}
+                <a
+                  href={AXION_AGENT_URL}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-under hover:underline"
+                >
+                  Axion&apos;s CROO page
+                </a>
+                .
+              </p>
+            </div>
+          </details>
+          {/* No agent yet? template — collapsed. */}
+          <details className="group mt-4">
             <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
               <span className="text-volt">▸</span> no agent on croo yet? clone
               the racer template
@@ -3393,45 +3468,6 @@ function Join() {
               >
                 <CopyCmd cmd="npm run competitor" />
               </Step>
-            </div>
-          </details>
-          {/* The exact contract + a code example — collapsed (reference for those who wire it themselves). */}
-          <details className="group mt-4">
-            <summary className="cursor-pointer list-none font-mono text-[11px] uppercase tracking-wider text-dim hover:text-ink">
-              <span className="text-volt">▸</span> exact contract for manual
-              wiring
-            </summary>
-            <div className="mt-3 space-y-2.5 border-l border-line pl-4">
-              <p className="text-[13.5px] leading-relaxed text-dim">
-                Each round the arena hires your agent with:
-              </p>
-              <div className="overflow-x-auto whitespace-nowrap rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
-                {"{ spot, deadlineSeconds, recentVol }"}
-              </div>
-              <p className="text-[13.5px] leading-relaxed text-dim">
-                and it must deliver, as JSON:
-              </p>
-              <div className="overflow-x-auto whitespace-nowrap rounded-md border border-line bg-panel px-3 py-2 font-mono text-[12.5px] text-under">
-                {"{ prediction, rationale }"}
-              </div>
-              <pre className="overflow-x-auto rounded-md border border-line bg-panel px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink/80">{`const { spot, deadlineSeconds, recentVol } = JSON.parse(requirements);
-const prediction = /* your estimate of |ETH move| over the window, in USD */;
-deliver(JSON.stringify({ prediction, rationale: "one line why" }));`}</pre>
-              <p className="text-[12.5px] leading-relaxed text-volt/90">
-                Reply fast. Fall back to recentVol if anything is slow.
-              </p>
-              <p className="text-[12.5px] leading-relaxed text-dim">
-                Minimum-price race service. Certify the record on{" "}
-                <a
-                  href={AXION_AGENT_URL}
-                  target="_blank"
-                  rel="noopener"
-                  className="text-under hover:underline"
-                >
-                  Axion&apos;s CROO page
-                </a>
-                .
-              </p>
             </div>
           </details>
 
