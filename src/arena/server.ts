@@ -363,6 +363,21 @@ function dedupeJoinedRoster(): boolean {
   return changed;
 }
 
+function visibleCompetitorsForRound(comps: CompetitorView[] = []): CompetitorView[] {
+  const byKey = new Map<string, CompetitorView>();
+  const order: string[] = [];
+  for (const c of comps) {
+    const key = racerLabelKey(c.id || c.label);
+    if (!byKey.has(key)) order.push(key);
+    byKey.set(key, {
+      ...c,
+      id: c.id.replace(/\*+$/g, ''),
+      label: c.label.replace(/\*+$/g, ''),
+    });
+  }
+  return order.map((key) => byKey.get(key)!);
+}
+
 function removeCommunityCompetitor(idOrServiceId: string, reason: string, opts: { persist?: boolean } = {}): boolean {
   const remote = competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
     c.kind === 'remote' && (c.id === idOrServiceId || c.serviceId.toLowerCase() === idOrServiceId.toLowerCase())
@@ -1037,7 +1052,7 @@ async function loadHistory(): Promise<void> {
       amplitude: last.amplitude,
       line: last.line,
       settleAtMs: Date.parse(last.settledAt) || Date.now(),
-      competitors: last.competitors ?? [],
+      competitors: visibleCompetitorsForRound(last.competitors ?? []),
     };
     for (const e of (last.edges ?? []).slice().reverse()) {
       pushFeed(e.raceEntry ? `Arena hired ${e.label} to race. Round settled` : `${e.label} hired. Round settled`, BASESCAN + e.payTxHash);
@@ -1865,7 +1880,7 @@ function showLastSettledRound(): void {
     amplitude: last.amplitude,
     line: last.line,
     settleAtMs: Date.parse(last.settledAt) || Date.now(),
-    competitors: last.competitors ?? [],
+    competitors: visibleCompetitorsForRound(last.competitors ?? []),
   };
 }
 
