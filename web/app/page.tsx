@@ -2075,9 +2075,31 @@ function CredentialCard({
               {empty ? "Unclaimed" : row?.label}
             </div>
           </div>
+          {/* Certification seal: a foil stamp struck into the card face, collectible-style. It sits
+              with the class badge (the credential cluster) so it never covers a metric. */}
+          {certified ? (
+            <div
+              className="ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full"
+              title="CROO certified"
+              style={{
+                background: `conic-gradient(from 210deg, rgba(${stage.rgb},.55), rgba(255,255,255,.18), rgba(${stage.rgb},.38), rgba(255,255,255,.10), rgba(${stage.rgb},.55))`,
+                boxShadow: `0 0 16px rgba(${stage.rgb},.30), inset 0 0 5px rgba(0,0,0,.55)`,
+              }}
+            >
+              <div className="flex h-9 w-9 flex-col items-center justify-center rounded-full bg-[#0c0c10]">
+                <span className="font-display text-[13px] leading-none" style={{ color: `rgb(${stage.rgb})` }}>
+                  ✓
+                </span>
+                <span className="mt-0.5 font-mono text-[5px] uppercase tracking-[0.18em] text-dim">
+                  CROO
+                </span>
+              </div>
+            </div>
+          ) : null}
           <div
             className={cn(
               "rounded-md border px-3 py-2 text-center",
+              certified ? "" : "ml-auto",
               stage.badge,
               stage.glow,
             )}
@@ -2141,13 +2163,7 @@ function CredentialCard({
           </div>
         </div>
       </div>
-      {empty || !certified ? null : (
-        <div className="relative mt-5 flex justify-center">
-          <span className="rounded-md border border-volt/45 bg-volt/[0.06] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt">
-            CROO certified
-          </span>
-        </div>
-      )}
+      {/* Certification lives ON the card as a foil seal now; no pill below the object. */}
     </div>
   );
 }
