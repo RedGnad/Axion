@@ -911,6 +911,7 @@ function refreshTrustedLeaderboard(): void {
   const now = Date.now();
   const halfLifeMs = 14 * 24 * 60 * 60 * 1000;
   const priorRounds = 12;
+  const alias = racerAliasMap(); // renamed racers: credit old-label rounds to the current identity
 
   const observedErrors: number[] = [];
   const recent = new Map<string, { weightedError: number; weight: number }>();
@@ -919,12 +920,13 @@ function refreshTrustedLeaderboard(): void {
     const w = Math.pow(0.5, ageMs / halfLifeMs);
     for (const c of h.competitors ?? []) {
       if (!c.id || !Number.isFinite(c.error)) continue;
+      const id = alias.get(c.id) ?? c.id;
       const err = Number(c.error);
       observedErrors.push(err);
-      const row = recent.get(c.id) ?? { weightedError: 0, weight: 0 };
+      const row = recent.get(id) ?? { weightedError: 0, weight: 0 };
       row.weightedError += err * w;
       row.weight += w;
-      recent.set(c.id, row);
+      recent.set(id, row);
     }
   }
 
@@ -977,14 +979,33 @@ function bumpLeaderboard(competitorIds: string[], winners: string[], errors: Rec
   refreshTrustedLeaderboard();
 }
 
+/** OLD label -> CURRENT label for every community service that raced under another name. A rename is
+ *  a full identity change: the standings row must follow the racer, so past rounds are aggregated
+ *  under the new label. History itself is never rewritten (per-round journal and signed scorecards
+ *  keep the name the racer wore that day). */
+function racerAliasMap(): Map<string, string> {
+  const byService = new Map(joinedRoster.map((j) => [j.serviceId.toLowerCase(), j.label]));
+  const m = new Map<string, string>();
+  for (const h of state.history) {
+    for (const e of h.edges ?? []) {
+      if (!e.raceEntry || !e.serviceId) continue;
+      const current = byService.get(e.serviceId.toLowerCase());
+      if (current && e.competitor !== current) m.set(e.competitor, current);
+    }
+  }
+  return m;
+}
+
 function rebuildLeaderboardFromHistory(): void {
+  const alias = racerAliasMap();
   const rows = new Map<string, { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }>();
   for (const h of state.history) {
     for (const c of h.competitors ?? []) {
       if (!c.id || !Number.isFinite(c.error)) continue;
-      const row = rows.get(c.id) ?? {
-        id: c.id,
-        label: c.label || personaMeta(c.id).label,
+      const id = alias.get(c.id) ?? c.id;
+      const row = rows.get(id) ?? {
+        id,
+        label: alias.get(c.id) ?? c.label ?? personaMeta(id).label,
         wins: 0,
         rounds: 0,
         sumError: 0,
@@ -994,7 +1015,7 @@ function rebuildLeaderboardFromHistory(): void {
       row.wins += c.isWinner ? 1 : 0;
       row.sumError += Number(c.error);
       row.avgError = row.sumError / row.rounds;
-      rows.set(c.id, row);
+      rows.set(id, row);
     }
   }
   if (!rows.size) return;
