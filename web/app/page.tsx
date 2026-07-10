@@ -1889,6 +1889,7 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
   foil: string;
   sheen: string;
   sheenO: number;
+  rgb: string;
 } {
   const klass = (row?.cardClass || "D").toUpperCase();
   const confidence = row?.confidence ?? 0;
@@ -1939,6 +1940,15 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     S: "rgba(255,59,107,.40) 44%, rgba(245,197,66,.38) 47%, rgba(182,255,58,.40) 50%, rgba(42,214,201,.38) 53%, rgba(181,131,255,.40) 56%",
   };
   const sheenOs: Record<string, number> = { D: 0.5, C: 0.65, B: 0.7, A: 0.75, S: 0.9 };
+  // The class color as a raw triplet: drives the card's tinted corners, edge and aura inline, so the
+  // whole object reads as MADE of its class color instead of grey plastic with a colored sticker.
+  const rgbs: Record<string, string> = {
+    D: "203,210,222",
+    C: "42,214,201",
+    B: "181,131,255",
+    A: "245,197,66",
+    S: "182,255,58",
+  };
   return {
     label: `Class ${klass}`,
     name: names[klass] || "provisional",
@@ -1950,6 +1960,7 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     foil: foils[klass] || foils.D,
     sheen: sheens[klass] || sheens.D,
     sheenO: sheenOs[klass] ?? sheenOs.D,
+    rgb: rgbs[klass] || rgbs.D,
   };
 }
 
@@ -1999,10 +2010,8 @@ function CredentialCard({
   return (
     <div className="relative min-h-[280px] overflow-hidden rounded-lg border border-volt/20 bg-panel2/60 p-4 shadow-[0_18px_60px_rgba(0,0,0,.25)]">
       <div
-        className={cn(
-          "absolute inset-x-8 top-8 h-28 rounded-full blur-3xl",
-          certified ? "bg-volt/16" : "bg-volt/8",
-        )}
+        className="absolute inset-x-8 top-8 h-28 rounded-full blur-3xl"
+        style={{ backgroundColor: `rgba(${stage.rgb},${certified ? 0.16 : 0.1})` }}
         aria-hidden
       />
       <div
@@ -2010,23 +2019,25 @@ function CredentialCard({
         onPointerMove={move}
         onPointerLeave={reset}
         className={cn(
-          "relative mx-auto max-w-[320px] overflow-hidden rounded-lg border border-white/12 p-4 shadow-[0_24px_50px_rgba(0,0,0,.35)] transition-transform duration-150 ease-out will-change-transform",
+          "relative mx-auto max-w-[320px] overflow-hidden rounded-lg border bg-[#0f0f13] p-4 transition-transform duration-150 ease-out will-change-transform",
           stage.foil,
           certified ? "ring-1 ring-volt/30" : "",
         )}
         style={{
           ...cardStyle,
+          borderColor: `rgba(${stage.rgb},.32)`,
+          boxShadow: `0 24px 50px rgba(0,0,0,.35), 0 0 44px rgba(${stage.rgb},.14)`,
           transform:
             "perspective(900px) rotateX(var(--rx)) rotateY(var(--ry)) translateZ(0)",
           transformStyle: "preserve-3d",
         }}
       >
+        {/* Class-tinted base: two color pools in opposite corners; the center stays dark so the
+            numbers keep their contrast. This is what makes the card read as MADE of its class color. */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-70"
+          className="pointer-events-none absolute inset-0"
           style={{
-            background:
-              "radial-gradient(circle at var(--gx) var(--gy), rgba(255,255,255,.22), transparent 34%)",
-            transform: "translateZ(36px)",
+            background: `radial-gradient(130% 120% at 18% -10%, rgba(${stage.rgb},.22), transparent 52%), radial-gradient(120% 130% at 108% 112%, rgba(${stage.rgb},.13), transparent 50%)`,
           }}
           aria-hidden
         />
