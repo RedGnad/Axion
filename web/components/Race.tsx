@@ -142,7 +142,7 @@ export default function Race({ round }: { round: RoundView | null }) {
             </span>
             <div
               data-kart={c.id}
-              className="absolute top-2.5 z-20 flex -translate-x-1/2 flex-col items-center gap-0.5 sm:top-4 sm:gap-1"
+              className="absolute top-2.5 z-20 flex -translate-x-1/2 flex-col items-center gap-0.5 group-hover:z-50 sm:top-4 sm:gap-1"
               style={{ left: A0 + '%', opacity: c.dq ? 0.35 : 1 }}
             >
               {/* Instant reasoning tooltip — hover the lane, appears at the agent's kart with no delay. */}

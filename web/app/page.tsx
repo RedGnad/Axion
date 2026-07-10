@@ -1808,6 +1808,9 @@ function WalletOwnerPanel({
   const { address, isConnected } = useAccount();
   const { connectors, connect, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  // One "connect wallet" action, SaaS-style: the wallet list only appears when there is an actual
+  // choice to make (2+ providers detected). A row of brand buttons up front reads as clutter.
+  const [pickWallet, setPickWallet] = useState(false);
   const seen = new Set<string>();
   const wallets = connectors.filter((c) =>
     seen.has(c.name) ? false : (seen.add(c.name), true),
@@ -1844,8 +1847,23 @@ function WalletOwnerPanel({
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {wallets.length ? (
-              wallets.slice(0, 3).map((c) => (
+            {wallets.length === 0 ? (
+              <span className="font-mono text-[10px] uppercase tracking-wider text-gold">
+                no wallet detected
+              </span>
+            ) : !pickWallet ? (
+              <button
+                onClick={() =>
+                  wallets.length === 1
+                    ? connect({ connector: wallets[0] })
+                    : setPickWallet(true)
+                }
+                className="rounded-md border border-volt/45 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
+              >
+                {isPending ? "connecting..." : "connect wallet"}
+              </button>
+            ) : (
+              wallets.slice(0, 4).map((c) => (
                 <button
                   key={c.uid}
                   onClick={() => connect({ connector: c })}
@@ -1854,10 +1872,6 @@ function WalletOwnerPanel({
                   {isPending ? "connecting..." : c.name}
                 </button>
               ))
-            ) : (
-              <span className="font-mono text-[10px] uppercase tracking-wider text-gold">
-                no wallet detected
-              </span>
             )}
           </div>
         )}
@@ -2208,9 +2222,15 @@ function ScorecardBoard({
       </div>
     );
   }
+  // The hero card is YOURS, not the leader's: connected wallet's card if it has one, else the
+  // placeholder inviting you to start one. Everyone else's cards live in the rack on the right.
+  const mine =
+    isConnected && address
+      ? board.find((r) => r.wallet.toLowerCase() === address.toLowerCase())
+      : undefined;
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-      <CredentialCard row={board[0]} />
+      {mine ? <CredentialCard row={mine} /> : <CredentialCard empty />}
       <div className="rounded-lg border border-line/70 bg-panel2/35 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -2338,7 +2358,7 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
         <div className="rounded-md border border-line/70 bg-panel/60 px-3 py-3">
           {!isConnected ? (
             <div className="font-mono text-[10px] uppercase tracking-wider text-dim">
-              choose a wallet
+              connect a wallet to load its card
             </div>
           ) : row ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -2379,7 +2399,9 @@ function MintCredential({ rows }: { rows?: ArenaState["externalBoard"] }) {
               ? "signing..."
               : row
                 ? "prepare certify pass"
-                : "select card wallet"}
+                : !isConnected
+                  ? "connect wallet first"
+                  : "no card for this wallet yet"}
           </button>
         </div>
       </div>
@@ -2791,10 +2813,14 @@ function Leaderboard({ state }: { state: ArenaState | null }) {
   // Server order is confidence-adjusted: raw error + uncertainty penalty from sample size/freshness.
   // No hard threshold: small samples can rank, but only if they beat the uncertainty penalty.
   const lbOrdered = lb;
+  // Confidence = rounds/(rounds+12): evidence volume, not skill. Five rungs so an agent visibly climbs
+  // (12 rounds = 50%, 48 = 80%, 108 = 90%) instead of sitting in "early" for its first month.
   const confidenceLabel = (v?: number) => {
     const pct = Math.round((v ?? 0) * 100);
+    if (pct >= 90) return `veteran ${pct}%`;
     if (pct >= 80) return `proven ${pct}%`;
-    if (pct >= 55) return `solid ${pct}%`;
+    if (pct >= 65) return `solid ${pct}%`;
+    if (pct >= 45) return `rising ${pct}%`;
     return `early ${pct}%`;
   };
   return (
