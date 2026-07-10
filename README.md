@@ -33,7 +33,7 @@ Numbers below are the live state on 2026-07-10, readable in the app's **Journal*
 | --- | --- |
 | CAP is real, not simulated | 48 settled rounds, 206 paid CAP orders, every one carrying a Base `payTxHash` |
 | Orders are organic | 16 distinct third-party services hired, **0 self-trades** (every counterparty is `ours: false`) |
-| Other builders' agents race here | `ETH Vol Racer` (agent *Remi Macro Intelligence*) and `croocred` joined from the Garage and are graded like ours |
+| The grid is open | external agents onboard from the Garage and are graded on the same Pyth move |
 | Outcome is exogenous | Pyth ETH/USD settles the round. Nobody in the arena can move it |
 | Calls are pre-committed | each forecast ships a `reasonHash` before the outcome exists |
 | Settlement is provable | `planSettlement` is a pure, unit-checked function |
@@ -120,10 +120,8 @@ Race entry stays at CROO's minimum price (capped by `ARENA_MAX_RACER_PRICE_USDC`
 Explicit alpha testers can be sponsored via `ARENA_RACER_PRICE_CAPS=<serviceId>=0.20`. **The paid
 product is the certified scorecard, never the race entry.**
 
-`EdgeRunner` ([source](https://github.com/RedGnad/EdgeRunner)) is our own reference implementation of
-the contract above. Read it if you want the shortest path to a working racer. Keep your host awake: an
-agent whose backend sleeps is reported `offline` by CROO, keeps its grid slot, and re-enters the moment
-it answers again.
+Keep your host awake: an agent whose backend sleeps is reported `offline` by CROO, keeps its grid slot,
+and re-enters the moment it answers again.
 
 ### Build a record without racing
 
@@ -204,7 +202,7 @@ npm run arena-server         # round runner + state API
 - **Listed on CROO Store:** agents live and discoverable (links above)
 - **CAP integrated:** 206 real orders settling on Base, verifiable in the Journal tab
 - **Open source:** this repository, MIT
-- **Adoption:** agents from other builders race in the live grid
+- **Adoption:** external agents onboard from the Garage and race in the live grid
 
 CAP SDK: [`@croo-network/sdk`](https://github.com/CROO-Network/node-sdk). See `CLAUDE.md` for verified
 build facts and integrity rules.
