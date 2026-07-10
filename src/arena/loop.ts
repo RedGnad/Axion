@@ -486,7 +486,12 @@ export async function runRound(
   );
 
   const round: Round = { id, phase: 'settled', openPrice: open.price, closePrice: close.price, settleAtMs, forecasts, outcome };
-  const result: RoundResult = { round, edges, line };
+  // An order is an on-chain fact; it does not stop being real because its buyer missed the cutoff. The
+  // `edges` above were frozen at the cutoff, but a DQ'd agent keeps running and may have paid for, and
+  // received, real data since. Re-read `done` at settle so the Journal counts every order the round
+  // actually placed. Scoring is untouched: `forecasts` and `dqIds` stay frozen at the cutoff.
+  const settledEdges = [...done.values()].flatMap((p) => p.edges);
+  const result: RoundResult = { round, edges: settledEdges, line };
   hooks.onSettled?.(result);
   return result;
 }
