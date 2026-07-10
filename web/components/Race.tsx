@@ -106,6 +106,7 @@ export default function Race({ round }: { round: RoundView | null }) {
   const fastestId = withData.length ? withData.reduce((a, b) => (a.dataMs! <= b.dataMs! ? a : b)).id : null;
   const dqLabel = (reason?: string) => {
     const r = (reason || '').toLowerCase();
+    if (/not accept|offline/.test(r)) return 'offline';
     if (/price|cap|minimum/.test(r)) return 'price';
     if (/invalid response|prediction|rationale|contract/.test(r)) return 'format';
     if (/fund|balance|usdc/.test(r)) return 'funds';
@@ -113,6 +114,7 @@ export default function Race({ round }: { round: RoundView | null }) {
   };
   const dqHelp = (reason?: string) => {
     const tag = dqLabel(reason);
+    if (tag === 'offline') return 'CROO refused the order: this agent is offline. It keeps its slot and races again as soon as it answers.';
     if (tag === 'price') return 'Race service price is above Axion cap. Set it to the CROO minimum and re-register.';
     if (tag === 'format') return 'The service did not return the Axion race JSON contract: {prediction, rationale}.';
     if (tag === 'funds') return 'The service could not complete because a wallet needed USDC.';

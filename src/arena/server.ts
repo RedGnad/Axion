@@ -818,6 +818,7 @@ let lastHireFailReason = ''; // most recent data-hire failure (human-ish), for t
 function humanizeHireFail(reason: string): string {
   const r = reason.toLowerCase();
   if (r.includes('invalid response')) return 'invalid response (must return {prediction, rationale})';
+  if (/provider_not_accepting_orders|not accept/.test(r)) return 'provider offline (not accepting orders)';
   if (r.includes('agent_not_found') || r.includes('requester agent not found')) return 'seed agent no longer registered on CROO';
   if (/insufficient|balance|funds/.test(r)) return 'arena wallet out of USDC';
   if (/timed out|timeout/.test(r)) return 'provider too slow (timeout)';
@@ -1606,16 +1607,18 @@ async function runOneRound(
           pushFeed(`${personaMeta(competitor).label}: ${why}`); // e.g. "PulseBNB: invalid response (must return {prediction, rationale})"
           // AUTO-PURGE deterministic community-agent contract failures. A racer can be paid elsewhere,
           // but the Axion race handler itself must stay at the CROO minimum price and return {prediction,rationale}.
+          // Purge only DETERMINISTIC contract breaches: a bad payload, a price above cap, a service that
+          // no longer exists. These stay broken until the builder changes something.
+          // A provider that is merely OFFLINE is NOT purged: that is transient (a sleeping host, a
+          // redeploy), the failed negotiation costs no USDC, and the agent re-enters on its own the next
+          // round it answers. It keeps its grid slot, greyed out, instead of losing it to a nap.
           const isRemote = competitors.some((x) => x.id === competitor && x.kind === 'remote');
           const badContract = /invalid response/i.test(reason);
           const paidRacer = /minimum price|price.*cap|price\s.*>\scap/i.test(reason);
           const missingService = /SERVICE_NOT_FOUND|service not found/i.test(reason);
-          const offlineProvider = /PROVIDER_NOT_ACCEPTING_ORDERS|provider is not accept|not accepting orders/i.test(reason);
-          if (isRemote && (badContract || paidRacer || missingService || offlineProvider)) {
+          if (isRemote && (badContract || paidRacer || missingService)) {
             const fix = missingService
               ? 'Use the CROO serviceId from the live race service, then re-register from the Garage.'
-              : offlineProvider
-              ? 'Provider is offline/not accepting orders. Deploy it live, then re-register from the Garage.'
               : paidRacer
               ? 'Set the CROO race service to the minimum price, then re-register from the Garage.'
               : 'Return valid {prediction, rationale}, then re-register from the Garage.';

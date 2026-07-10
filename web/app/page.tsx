@@ -35,13 +35,17 @@ type Tab = "play" | "builders" | "scorecards" | "proof";
 export default function Page() {
   const { state, online } = useArena(2000);
   // Resolve the team colors for the WHOLE visible field before any child calls livery(): two racers
-  // must never share a color, and that can only be decided from the full set of ids.
-  assignLivery([
-    ...(state?.roster ?? []).map((r) => r.id),
+  // must never share a color, and that can only be decided from the full set of ids. Feed them in a
+  // STABLE order (roster = join order, then everyone else alphabetically) so a reload replays the same
+  // assignment: the leaderboard is sorted by score, so reading colors off it would reshuffle the grid
+  // every time the standings move.
+  const seen = (state?.roster ?? []).map((r) => r.id);
+  const alsoSeen = [
     ...(state?.leaderboard ?? []).map((r) => r.id),
     ...(state?.round?.competitors ?? []).map((c) => c.id),
     ...(state?.history ?? []).flatMap((h) => (h.competitors ?? []).map((c) => c.id)),
-  ]);
+  ].filter((id) => !seen.includes(id));
+  assignLivery([...seen, ...new Set(alsoSeen.sort())]);
   const [tab, setTab] = useState<Tab>("play");
   const [intro, setIntro] = useState(false);
   useEffect(() => {

@@ -32,7 +32,7 @@ function colorHash(input: string): number {
 const liveryKey = (id: string) => id.toLowerCase().replace(/\*+$/g, '');
 const hueGap = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
 
-/** Hues resolved by the last assignLivery() pass, keyed by racer. */
+/** Hue held by each racer. Written ONCE per racer and never rewritten: a color is owned, not recomputed. */
 const assignedHues = new Map<string, number>();
 /** Below this separation two liveries read as the same color, so the hash hue gets overridden. */
 const COMFORT_GAP = 28;
@@ -54,19 +54,20 @@ function pickHue(preferred: number, taken: number[]): number {
 }
 
 /**
- * Resolve one distinct hue per community racer. A raw `hash % 360` collides constantly at this scale
- * (edgerunner 102, dca-signal 106, pulsebnb 124 and alphaprobe 135 all read as the same green), so the
- * hash is only a PREFERENCE here: racers are walked in a stable order and any crowded hue is moved to
- * the emptiest arc of the wheel. Pass the full set of visible ids on every state change.
+ * Give each community racer one distinct hue, ONCE. A raw `hash % 360` collides constantly at this
+ * scale (edgerunner 102, dca-signal 106, pulsebnb 124 and alphaprobe 135 all read as the same green),
+ * so the hash is only a PREFERENCE: a crowded hue is moved to the emptiest arc of the wheel.
+ *
+ * A racer that already owns a hue KEEPS it. Only newcomers are placed, against every hue already
+ * spoken for, so a joining agent can never recolor the field. `ids` must arrive in a stable order
+ * (roster join order first) so a page reload replays the same assignment.
  */
 export function assignLivery(ids: string[]): void {
-  const racers = [...new Set(ids.map(liveryKey).filter((k) => k && !LIVERY[k]))].sort();
-  const taken = [...RESERVED_HUES];
-  assignedHues.clear();
-  for (const key of racers) {
-    const hue = pickHue(colorHash(key) % 360, taken);
-    taken.push(hue);
-    assignedHues.set(key, hue);
+  for (const id of ids) {
+    const key = liveryKey(id);
+    if (!key || LIVERY[key] || assignedHues.has(key)) continue;
+    const taken = [...RESERVED_HUES, ...assignedHues.values()];
+    assignedHues.set(key, pickHue(colorHash(key) % 360, taken));
   }
 }
 
