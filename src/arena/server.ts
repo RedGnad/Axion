@@ -719,6 +719,32 @@ function appendExternalRecord(wallet: string, entry: RecordEntry): boolean {
   return true;
 }
 
+/** Credit a freshly linked wallet with the graded races its racer ALREADY ran (whatever the 50-round
+ *  history retains). A race is a fact about the racer, not about when its owner showed up, so linking
+ *  late must not erase the record. appendExternalRecord de-dupes by roundId, so re-linking, re-joining
+ *  or racing again never double-counts a round. */
+function backfillRacerRecords(competitorId: string, wallet: string): number {
+  let added = 0;
+  for (const h of [...state.history].reverse()) { // oldest first so the record reads chronologically
+    const graded = (h.competitors ?? []).filter((c) => !c.dq && Number.isFinite(c.error) && Number.isFinite(c.estimate));
+    const me = graded.find((c) => c.id === competitorId);
+    if (!me) continue;
+    const rank = 1 + graded.filter((c) => (c.error as number) < (me.error as number)).length; // ties share the better rank, same as settle
+    const ok = appendExternalRecord(wallet, {
+      roundId: h.id,
+      label: personaMeta(competitorId).label,
+      prediction: me.estimate as number,
+      actual: h.amplitude,
+      errorUsd: me.error as number,
+      rank,
+      field: graded.length,
+      settledAtSec: Math.round((Date.parse(h.settledAt) || Date.now()) / 1000),
+    });
+    if (ok) added++;
+  }
+  return added;
+}
+
 // "The store evolves" tracking (§ data-market). Persisted so a restart never re-emits the whole
 // catalog as "new". knownProviderIds = serviceIds seen in past censuses; seenPairs = (agent|provider)
 // hires we've already counted; storeEvents = the readable evolution timeline (real deltas only).
@@ -2121,9 +2147,11 @@ async function main(): Promise<void> {
                 joinedRoster = joinedRoster.slice(-50);
               }
               if (payout) setAgentPayout(name, payout);
+              const backfilled = verifiedOwner ? backfillRacerRecords(name, verifiedOwner) : 0;
+              if (backfilled) refreshExternalBoard();
               saveHistory();
               refreshRoster();
-              pushFeed(`${name} updated${verifiedOwner ? ' · scorecard wallet linked' : ''}${payout ? ' · payout wallet linked' : ''}`);
+              pushFeed(`${name} updated${verifiedOwner ? ' · scorecard wallet linked' : ''}${backfilled ? ` · ${backfilled} past race${backfilled > 1 ? 's' : ''} credited to the card` : ''}${payout ? ' · payout wallet linked' : ''}`);
               broadcast();
               return reply(200, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || row?.ownerWallet || null, recordWalletVerified: ownerVerified || row?.ownerVerified || false, note: verifiedOwner ? 'wallet linked — future grid results build this scorecard' : 'agent settings updated' });
             }
@@ -2140,10 +2168,14 @@ async function main(): Promise<void> {
             if (payout) setAgentPayout(name, payout); // route this agent's winning purse on-chain
             joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined, ownerVerified: ownerVerified || undefined });
             joinedRoster = joinedRoster.slice(-50);
+            // A racer can REJOIN under its old label (purge, redeploy): credit the graded races the
+            // history still holds for that label, so a hiccup never wipes a builder's card.
+            const backfilled = verifiedOwner ? backfillRacerRecords(name, verifiedOwner) : 0;
+            if (backfilled) refreshExternalBoard();
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
             refreshRoster(); // the new agent is now bettable for the next race (idle predictions)
-            pushFeed(`New competitor joined: ${name}${verifiedOwner ? ' · scorecard wallet linked' : ''}`);
+            pushFeed(`New competitor joined: ${name}${verifiedOwner ? ' · scorecard wallet linked' : ''}${backfilled ? ` · ${backfilled} past race${backfilled > 1 ? 's' : ''} credited to the card` : ''}`);
             broadcast();
             reply(202, { ok: true, name, payout: !!payout, recordWallet: verifiedOwner || null, recordWalletVerified: ownerVerified, note: verifiedOwner ? 'joined — grid results will build this wallet-bound scorecard' : 'joined — first race validates the handler response' });
           } catch (e) {

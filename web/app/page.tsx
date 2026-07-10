@@ -19,6 +19,7 @@ import {
 import { postUsdcBet, USDC_ADDRESS, ERC20_TRANSFER_ABI } from "@/lib/bet";
 import { assignLivery, cn, livery, usd } from "@/lib/utils";
 import Race from "@/components/Race";
+import ConnectModal from "@/components/ConnectModal";
 import {
   useAccount,
   useConnect,
@@ -1267,7 +1268,7 @@ function UsdcBet({
   const raceBettable = r?.phase === "open" || r?.phase === "betting";
   const live = !!ub?.open && raceBettable; // real-money bets close early; free picks can stay simple
   const { address, isConnected, chainId } = useAccount();
-  const { connectors, connect, isPending: connecting } = useConnect();
+  const { isPending: connecting } = useConnect();
   const { switchChainAsync } = useSwitchChain();
   const { writeContractAsync } = useWriteContract();
   const [amount, setAmount] = useState(0.1);
@@ -1278,12 +1279,6 @@ function UsdcBet({
   const max = ub.maxBetUSDC;
   const poolOf = (id: string) =>
     ub.pool.byAgent.find((p) => p.id === id)?.amount ?? "0.00";
-
-  // De-dupe connectors by name (EIP-6963 + injected can both list the same wallet).
-  const seen = new Set<string>();
-  const wallets = connectors.filter((c) =>
-    seen.has(c.name) ? false : (seen.add(c.name), true),
-  );
 
   const bet = async (agentId: string) => {
     if (!live || !r || !address || !agentId) return;
@@ -1355,39 +1350,18 @@ function UsdcBet({
       </div>
 
       {!isConnected ? (
-        !pickWallet ? (
+        <>
           <button
-            onClick={() =>
-              wallets.length === 1
-                ? connect({ connector: wallets[0] })
-                : setPickWallet(true)
-            }
+            onClick={() => setPickWallet(true)}
             className="mt-4 w-full rounded-lg border-2 border-volt/60 py-3.5 font-display text-base uppercase tracking-wide text-volt transition hover:bg-volt/10"
           >
             {connecting ? "connecting…" : "connect wallet to bet"}
           </button>
-        ) : (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {wallets.length === 0 ? (
-              <span className="font-mono text-[13px] text-dim">
-                no wallet detected. Install MetaMask / Rabby / Phantom
-              </span>
-            ) : (
-              wallets.map((c) => (
-                <button
-                  key={c.uid}
-                  onClick={() => {
-                    connect({ connector: c });
-                    setPickWallet(false);
-                  }}
-                  className="rounded-lg border border-line px-4 py-2.5 font-mono text-[13px] hover:border-volt/60"
-                >
-                  {c.name}
-                </button>
-              ))
-            )}
-          </div>
-        )
+          <ConnectModal
+            open={pickWallet}
+            onClose={() => setPickWallet(false)}
+          />
+        </>
       ) : (
         <>
           <div className="mt-4 flex items-center gap-2">
@@ -1806,15 +1780,10 @@ function WalletOwnerPanel({
   compact?: boolean;
 }) {
   const { address, isConnected } = useAccount();
-  const { connectors, connect, isPending } = useConnect();
   const { disconnect } = useDisconnect();
-  // One "connect wallet" action, SaaS-style: the wallet list only appears when there is an actual
-  // choice to make (2+ providers detected). A row of brand buttons up front reads as clutter.
+  // One "connect wallet" action; the wallet choice lives in an overlay modal (ConnectModal), never
+  // as a row of brand buttons inside the page.
   const [pickWallet, setPickWallet] = useState(false);
-  const seen = new Set<string>();
-  const wallets = connectors.filter((c) =>
-    seen.has(c.name) ? false : (seen.add(c.name), true),
-  );
   return (
     <div
       className={cn(
@@ -1846,34 +1815,18 @@ function WalletOwnerPanel({
             </button>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {wallets.length === 0 ? (
-              <span className="font-mono text-[10px] uppercase tracking-wider text-gold">
-                no wallet detected
-              </span>
-            ) : !pickWallet ? (
-              <button
-                onClick={() =>
-                  wallets.length === 1
-                    ? connect({ connector: wallets[0] })
-                    : setPickWallet(true)
-                }
-                className="rounded-md border border-volt/45 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
-              >
-                {isPending ? "connecting..." : "connect wallet"}
-              </button>
-            ) : (
-              wallets.slice(0, 4).map((c) => (
-                <button
-                  key={c.uid}
-                  onClick={() => connect({ connector: c })}
-                  className="rounded-md border border-volt/45 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
-                >
-                  {isPending ? "connecting..." : c.name}
-                </button>
-              ))
-            )}
-          </div>
+          <>
+            <button
+              onClick={() => setPickWallet(true)}
+              className="rounded-md border border-volt/45 px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-volt hover:bg-volt/10"
+            >
+              connect wallet
+            </button>
+            <ConnectModal
+              open={pickWallet}
+              onClose={() => setPickWallet(false)}
+            />
+          </>
         )}
       </div>
     </div>
