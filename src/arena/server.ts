@@ -721,13 +721,24 @@ function appendExternalRecord(wallet: string, entry: RecordEntry): boolean {
 
 /** Credit a freshly linked wallet with the graded races its racer ALREADY ran (whatever the 50-round
  *  history retains). A race is a fact about the racer, not about when its owner showed up, so linking
- *  late must not erase the record. appendExternalRecord de-dupes by roundId, so re-linking, re-joining
- *  or racing again never double-counts a round. */
-function backfillRacerRecords(competitorId: string, wallet: string): number {
+ *  late must not erase the record. Rounds are matched by SERVICE ID through their raceEntry edge, not
+ *  by label, so a Garage rename cannot orphan the record (b525 renamed to Remi and lost 13 races to a
+ *  label-keyed lookup). appendExternalRecord de-dupes by roundId, so re-linking, re-joining or racing
+ *  again never double-counts a round. */
+function backfillRacerRecords(serviceId: string, competitorId: string, wallet: string): number {
   let added = 0;
+  const sid = serviceId.toLowerCase();
+  // Every label this service has raced under (raceEntry edges) plus its current one. Matching rounds
+  // against the whole alias set also covers rounds whose entry edge is missing (entry-hire hiccup).
+  const aliases = new Set<string>([competitorId]);
+  for (const h of state.history) {
+    for (const e of h.edges ?? []) {
+      if (e.raceEntry && (e.serviceId ?? '').toLowerCase() === sid) aliases.add(e.competitor);
+    }
+  }
   for (const h of [...state.history].reverse()) { // oldest first so the record reads chronologically
     const graded = (h.competitors ?? []).filter((c) => !c.dq && Number.isFinite(c.error) && Number.isFinite(c.estimate));
-    const me = graded.find((c) => c.id === competitorId);
+    const me = graded.find((c) => aliases.has(c.id));
     if (!me) continue;
     const rank = 1 + graded.filter((c) => (c.error as number) < (me.error as number)).length; // ties share the better rank, same as settle
     const ok = appendExternalRecord(wallet, {
@@ -1967,7 +1978,17 @@ async function main(): Promise<void> {
       if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
       let restored = 0;
       for (const j of joinedRoster) {
-        if (competitors.some((c) => c.kind === 'remote' && c.serviceId === j.serviceId)) continue;
+        const seeded = competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
+          c.kind === 'remote' && c.serviceId === j.serviceId);
+        if (seeded) {
+          if (seeded.id === j.label) continue;
+          // Same service under two labels: the DURABLE roster row is the builder's latest identity
+          // (a Garage rename), so it wins over the COMPETITOR_ROSTER env seed. Skipping here instead
+          // used to resurrect the env label on every redeploy, silently orphaning the builder's
+          // linked wallet (label lookup) and rename.
+          competitors = competitors.filter((c) => c !== seeded);
+          metaById.delete(seeded.id);
+        }
         competitors.push(makeRemoteCompetitor(remoteBuyer, j.serviceId, j.label));
         metaById.set(j.label, { label: j.label, blurb: 'community agent' });
         if (j.payout && isPayoutAddress(j.payout)) setAgentPayout(j.label, j.payout); // re-arm winning-purse routing
@@ -1975,6 +1996,19 @@ async function main(): Promise<void> {
       }
       if (competitors.length && state.status === 'view-only') state.status = 'idle';
       console.log(`[arena-server] restored ${restored} community competitor(s) from durable roster`);
+      // Self-heal wallet-bound records: a wallet may have been linked moments before a redeploy, or
+      // under a label the env seed later overwrote, so re-run the backfill for every linked racer.
+      // Idempotent (per-round de-dupe), safe on every boot.
+      let healed = 0;
+      for (const j of joinedRoster) {
+        if (!j.ownerWallet) continue;
+        try { healed += backfillRacerRecords(j.serviceId, j.label, j.ownerWallet); } catch { /* bad row, skip it */ }
+      }
+      if (healed) {
+        refreshExternalBoard();
+        saveHistory();
+        console.log(`[arena-server] scorecard heal: credited ${healed} past race record(s) at boot`);
+      }
     } catch (err) {
       console.warn(`[arena-server] could not restore community roster: ${(err as Error).message}`);
     }
@@ -2147,7 +2181,7 @@ async function main(): Promise<void> {
                 joinedRoster = joinedRoster.slice(-50);
               }
               if (payout) setAgentPayout(name, payout);
-              const backfilled = verifiedOwner ? backfillRacerRecords(name, verifiedOwner) : 0;
+              const backfilled = verifiedOwner ? backfillRacerRecords(serviceId, name, verifiedOwner) : 0;
               if (backfilled) refreshExternalBoard();
               saveHistory();
               refreshRoster();
@@ -2170,7 +2204,7 @@ async function main(): Promise<void> {
             joinedRoster = joinedRoster.slice(-50);
             // A racer can REJOIN under its old label (purge, redeploy): credit the graded races the
             // history still holds for that label, so a hiccup never wipes a builder's card.
-            const backfilled = verifiedOwner ? backfillRacerRecords(name, verifiedOwner) : 0;
+            const backfilled = verifiedOwner ? backfillRacerRecords(serviceId, name, verifiedOwner) : 0;
             if (backfilled) refreshExternalBoard();
             saveHistory(); // DURABLE: the join survives restarts (re-instantiated at boot)
             if (state.status === 'view-only') state.status = 'idle';
