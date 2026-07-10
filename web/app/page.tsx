@@ -139,6 +139,11 @@ export default function Page() {
           <ZoneLabel
             title="Cards"
             blurb="builder records · certified cards"
+            right={
+              (state?.externalBoard?.length ?? 0) > 0
+                ? `${state!.externalBoard!.length} card${state!.externalBoard!.length > 1 ? "s" : ""} · ${state!.externalBoard!.filter((r) => r.certifiedAtSec).length} certified`
+                : undefined
+            }
           />
           <Scorecards state={state} setTab={setTab} />
         </>
@@ -2550,20 +2555,13 @@ function Scorecards({
   setTab: (t: Tab) => void;
 }) {
   const board = state?.externalBoard ?? [];
-  const certified = board.filter((r) => r.certifiedAtSec).length;
   return (
     <section
       className="reveal rounded-lg border border-line bg-panel/70 p-5 sm:p-7"
       style={{ animationDelay: "180ms" }}
     >
-      <SectionTitle
-        title="Cards"
-        right={
-          <span className="font-mono text-[11px] uppercase tracking-wider text-dim">
-            {board.length} cards · {certified} certified
-          </span>
-        }
-      />
+      {/* No inner "Cards" title: the tab's ZoneLabel already heads this zone (and carries the count),
+          so a second identical heading here was pure duplication. */}
       <ScorecardBoard rows={state?.externalBoard} setTab={setTab} />
       {board.length ? (
         <div className="mt-4">
@@ -3808,10 +3806,12 @@ function ZoneLabel({
   step,
   title,
   blurb,
+  right,
 }: {
   step?: string;
   title: string;
   blurb?: string;
+  right?: React.ReactNode;
 }) {
   return (
     <div className="mt-14 mb-6 flex items-baseline gap-3 border-b border-line/60 pb-3">
@@ -3832,6 +3832,11 @@ function ZoneLabel({
           </p>
         ) : null}
       </div>
+      {right ? (
+        <span className="ml-auto self-center font-mono text-[11px] uppercase tracking-wider text-dim">
+          {right}
+        </span>
+      ) : null}
     </div>
   );
 }
