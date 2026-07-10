@@ -652,6 +652,17 @@ async function validateCredentialMintRequirements(raw: string): Promise<Credenti
   } catch {
     return { ok: false, error: 'requirements must be valid JSON' };
   }
+  // The CROO store checkout wraps whatever the buyer pastes into {"text":"<string>"}. Unwrap it so a
+  // certify pass pasted there is read as the pass itself, not as one opaque string (a builder's valid
+  // pass was rejected with "wallet required" because of this envelope).
+  const inner = (req as { text?: unknown }).text;
+  if (typeof inner === 'string' && inner.trim().startsWith('{')) {
+    try {
+      req = JSON.parse(inner);
+    } catch {
+      return { ok: false, error: 'requirements.text must be the certify pass JSON copied from the Cards tab' };
+    }
+  }
   if (req.prediction != null) {
     return {
       ok: false,
