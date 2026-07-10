@@ -435,6 +435,8 @@ interface CertifiedCard {
   certifiedAtSec: number;
   orderId: string;
   txHash?: string;
+  /** USDC actually paid for this certification (revenue accounting survives restarts through it). */
+  priceUSDC?: number;
 }
 const externalRecords = new Map<string, RecordEntry[]>();
 const certifiedCards = new Map<string, CertifiedCard>();
@@ -1046,6 +1048,7 @@ async function loadHistory(): Promise<void> {
     racesToday?: number; racesDayKey?: string; nextRoundAtMs?: number;
     externalRecords?: [string, RecordEntry[]][];
     certifiedCards?: [string, CertifiedCard][];
+    benchmarkRevenueUSDC?: number; benchmarkOrders?: number;
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
@@ -1061,6 +1064,16 @@ async function loadHistory(): Promise<void> {
     if (d.racesDayKey) racesDayKey = d.racesDayKey;
     // Restore the scheduled next-race time so the countdown is reliable across restarts.
     if (typeof d.nextRoundAtMs === 'number') state.nextRoundAtMs = d.nextRoundAtMs;
+    // Credential revenue must survive restarts (a reboot was zeroing a REAL paid sale in economics).
+    // Older blobs lack the counters: derive the floor from the persisted certified cards themselves
+    // (the CLAIM PASS service has always sold at 0.10 USDC, hence the legacy default).
+    if (typeof d.benchmarkOrders === 'number') {
+      benchmarkOrders = d.benchmarkOrders;
+      benchmarkRevenueUSDC = d.benchmarkRevenueUSDC ?? 0;
+    } else {
+      benchmarkOrders = certifiedCards.size;
+      benchmarkRevenueUSDC = [...certifiedCards.values()].reduce((s, c) => s + (c.priceUSDC ?? 0.1), 0);
+    }
   };
   const fromStore = await loadState<Persisted>();
   if (fromStore) {
@@ -1136,6 +1149,7 @@ function saveHistory(): void {
     joinedRoster, racesToday, racesDayKey, nextRoundAtMs: state.nextRoundAtMs,
     externalRecords: [...externalRecords.entries()], // durable track records (the credential base)
     certifiedCards: [...certifiedCards.entries()],
+    benchmarkRevenueUSDC, benchmarkOrders, // real sales survive restarts
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));
@@ -1375,6 +1389,7 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
               });
               done.add(o.orderId);
               const certifiedAtSec = Math.round(Date.now() / 1000);
+              const priceUSDC = Number(o.price) / 1_000_000 || 0;
               certifiedCards.set(checked.wallet.toLowerCase(), {
                 wallet: checked.wallet,
                 serviceId: signed.serviceId,
@@ -1385,8 +1400,8 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
                 certifiedAtSec,
                 orderId: o.orderId,
                 txHash: delivered.txHash || o.deliverTxHash || o.payTxHash || undefined,
+                priceUSDC,
               });
-              const priceUSDC = Number(o.price) / 1_000_000 || 0;
               benchmarkRevenueUSDC += priceUSDC;
               benchmarkOrders += 1;
               refreshEconomics();
