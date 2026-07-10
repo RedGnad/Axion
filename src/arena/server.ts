@@ -821,6 +821,11 @@ function humanizeHireFail(reason: string): string {
   if (/provider_not_accepting_orders|not accept/.test(r)) return 'provider offline (not accepting orders)';
   if (r.includes('agent_not_found') || r.includes('requester agent not found')) return 'seed agent no longer registered on CROO';
   if (/insufficient|balance|funds/.test(r)) return 'arena wallet out of USDC';
+  // Split the two hire timeouts: the order-creation one costs nothing, the completion one fires AFTER
+  // payOrder, so the escrow is already funded and only refunds on expiry. Same word "timeout", very
+  // different consequence. Keep both clear of the words dqLabel() matches on (price/format/funds).
+  if (/waiting for order creation/.test(r)) return 'provider never took the order (timeout)';
+  if (/waiting for completion/.test(r)) return 'provider took the order but never delivered (timeout)';
   if (/timed out|timeout/.test(r)) return 'provider too slow (timeout)';
   if (/create_failed|rejected|reject/.test(r)) return 'provider rejected the order';
   return reason.slice(0, 80);
