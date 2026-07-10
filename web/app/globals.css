@@ -66,6 +66,16 @@ body::after {
 
 .reveal { animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
+/* Credential-card holographic foil at rest: a slow drift of the light band so the card feels alive
+   without a pointer. Cycle starts and ends on the card's reset position (58% 22%), so the handoff
+   between idle drift and pointer tracking never snaps. */
+@keyframes holo-drift {
+  0%, 100% { background-position: 58% 22%, 0 0; }
+  38% { background-position: 24% 68%, 0 0; }
+  72% { background-position: 78% 46%, 0 0; }
+}
+.holo-idle { animation: holo-drift 9s ease-in-out infinite; }
+
 /* swap-in for the race-control hero when its mode changes (win flash ⇄ countdown) */
 @keyframes swapin { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 .swapin { animation: swapin 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }

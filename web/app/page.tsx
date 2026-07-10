@@ -1887,6 +1887,8 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
   badge: string;
   glow: string;
   foil: string;
+  sheen: string;
+  sheenO: number;
 } {
   const klass = (row?.cardClass || "D").toUpperCase();
   const confidence = row?.confidence ?? 0;
@@ -1925,6 +1927,18 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     A: "bg-[linear-gradient(135deg,rgba(255,211,77,.28),rgba(182,255,58,.10)_43%,rgba(255,59,107,.08))]",
     S: "bg-[linear-gradient(135deg,rgba(182,255,58,.30),rgba(255,211,77,.16)_42%,rgba(181,131,255,.16))]",
   };
+  // Holographic foil sweep: the light band that lives IN the material and moves with the pointer.
+  // Each class is a different metal (steel, teal, violet, gold); only S earns the full spectrum.
+  // Stops stay tight around 50% so the sweep reads as a narrow RAY crossing the card, never a wash
+  // that milks the whole face and eats label contrast.
+  const sheens: Record<string, string> = {
+    D: "rgba(200,208,220,.30) 47%, rgba(255,255,255,.12) 50%, rgba(160,170,185,.22) 53%",
+    C: "rgba(42,214,201,.42) 47%, rgba(182,255,58,.18) 50%, rgba(42,214,201,.30) 53%",
+    B: "rgba(181,131,255,.44) 46.5%, rgba(42,214,201,.20) 50%, rgba(255,59,107,.24) 53.5%",
+    A: "rgba(245,197,66,.46) 46.5%, rgba(255,59,107,.22) 50%, rgba(245,197,66,.32) 53.5%",
+    S: "rgba(255,59,107,.40) 44%, rgba(245,197,66,.38) 47%, rgba(182,255,58,.40) 50%, rgba(42,214,201,.38) 53%, rgba(181,131,255,.40) 56%",
+  };
+  const sheenOs: Record<string, number> = { D: 0.5, C: 0.65, B: 0.7, A: 0.75, S: 0.9 };
   return {
     label: `Class ${klass}`,
     name: names[klass] || "provisional",
@@ -1934,6 +1948,8 @@ function scoreStage(row?: NonNullable<ArenaState["externalBoard"]>[number]): {
     badge: badges[klass] || badges.D,
     glow: glows[klass] || glows.D,
     foil: foils[klass] || foils.D,
+    sheen: sheens[klass] || sheens.D,
+    sheenO: sheenOs[klass] ?? sheenOs.D,
   };
 }
 
@@ -1948,6 +1964,8 @@ function CredentialCard({
   const trustMiss = row?.trustedError ?? row?.avgError ?? 0;
   const certified = !!row?.certifiedAtSec;
   const cardRef = useRef<HTMLDivElement | null>(null);
+  // `held` = pointer on the card: the foil follows the hand; at rest it drifts on its own (holo-idle).
+  const [held, setHeld] = useState(false);
   const [tilt, setTilt] = useState({
     rx: 8,
     ry: -10,
@@ -1960,6 +1978,7 @@ function CredentialCard({
     const rect = el.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width;
     const py = (e.clientY - rect.top) / rect.height;
+    setHeld(true);
     setTilt({
       rx: (0.5 - py) * 15,
       ry: (px - 0.5) * 18,
@@ -1967,7 +1986,10 @@ function CredentialCard({
       glareY: py * 100,
     });
   };
-  const reset = () => setTilt({ rx: 8, ry: -10, glareX: 58, glareY: 22 });
+  const reset = () => {
+    setHeld(false);
+    setTilt({ rx: 8, ry: -10, glareX: 58, glareY: 22 });
+  };
   const cardStyle = {
     "--rx": `${tilt.rx}deg`,
     "--ry": `${tilt.ry}deg`,
@@ -2011,6 +2033,23 @@ function CredentialCard({
         <div
           className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_0%,rgba(255,255,255,.08)_42%,transparent_58%)] opacity-60"
           style={{ transform: "translateZ(24px)" }}
+          aria-hidden
+        />
+        {/* Holographic foil: a light band living IN the material (color-dodge over the dark base),
+            crossed by hairline diffraction lines that catch it. It tracks the pointer while held and
+            drifts slowly on its own at rest, so the card never reads as dead plastic. */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 mix-blend-color-dodge",
+            !held && "holo-idle",
+          )}
+          style={{
+            background: `linear-gradient(115deg, transparent 40%, ${stage.sheen}, transparent 60%), repeating-linear-gradient(105deg, rgba(255,255,255,.028) 0 1px, transparent 1px 3px)`,
+            backgroundSize: "240% 240%, auto",
+            backgroundPosition: "var(--gx) var(--gy), 0 0",
+            opacity: stage.sheenO,
+            transform: "translateZ(30px)",
+          }}
           aria-hidden
         />
         <div

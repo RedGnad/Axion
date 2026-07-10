@@ -40,17 +40,26 @@ const COMFORT_GAP = 28;
 /** Distance from `hue` to the nearest hue already in use. */
 const clearance = (hue: number, taken: number[]) => taken.reduce((m, t) => Math.min(m, hueGap(t, hue)), 360);
 
+/** Mid-blue reads flat on the dark track at our fixed 88%/62%, so the override search saves that band
+ *  for a crowded wheel instead of handing it to the first collision. */
+const MUTED_BAND: [number, number] = [195, 250];
+
 /** Keep the hash hue when it is comfortably clear, else take the hue FARTHEST from every taken one.
- *  The farthest-point pick always exists, so a racer can never fall back onto a used color. */
+ *  Among fallbacks, a punchy hue wins over a muted-band one unless the muted one is clearly freer
+ *  (>12 degrees): blues arrive late, they are never banned. The farthest-point pick always exists,
+ *  so a racer can never fall back onto a used color. */
 function pickHue(preferred: number, taken: number[]): number {
   if (clearance(preferred, taken) >= COMFORT_GAP) return preferred;
   let best = preferred;
   let bestClearance = -1;
+  let punchy = preferred;
+  let punchyClearance = -1;
   for (let hue = 0; hue < 360; hue++) {
     const c = clearance(hue, taken);
     if (c > bestClearance) { bestClearance = c; best = hue; }
+    if ((hue < MUTED_BAND[0] || hue > MUTED_BAND[1]) && c > punchyClearance) { punchyClearance = c; punchy = hue; }
   }
-  return best;
+  return punchyClearance >= bestClearance - 12 ? punchy : best;
 }
 
 /**
