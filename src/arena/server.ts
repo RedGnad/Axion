@@ -6,7 +6,7 @@ import { loadCompetitors, runRound, createRemoteBuyer, makeRemoteCompetitor, typ
 import { PERSONALITIES } from './personalities.js';
 import { fetchPythPrice } from './oracle.js';
 import { loadState, saveState, storeEnabled } from './store.js';
-import { candidatesForCapability, discoverProviders, markProviderSucceeded } from './discovery.js';
+import { candidatesForCapability, discoverProviders, markProviderSucceeded, restoreProviderSignals, serializeProviderSignals, type ProviderSignal } from './discovery.js';
 import { houseEnabled, houseAddress, verifyBetTx, recordBet, poolFor, settleHouseBets, MAX_BET_USDC, setAgentPayout, clearAgentPayout, isPayoutAddress } from './housebet.js';
 import { validateCompetitorResponse } from './competitor-contract.js';
 import { signCredential, signScorecard, type Credential, type SignedScorecard } from './scorecard.js';
@@ -1092,6 +1092,7 @@ async function loadHistory(): Promise<void> {
     externalRecords?: [string, RecordEntry[]][];
     certifiedCards?: [string, CertifiedCard][];
     benchmarkRevenueUSDC?: number; benchmarkOrders?: number;
+    providerSignals?: [string, ProviderSignal][];
   };
   const restoreMeta = (d: Persisted): void => {
     for (const id of d.knownProviderIds ?? []) knownProviderIds.add(id);
@@ -1112,6 +1113,7 @@ async function loadHistory(): Promise<void> {
     // (the CLAIM PASS service has always sold at 0.10 USDC, hence the legacy default).
     if (typeof d.benchmarkOrders === 'number') {
       benchmarkOrders = d.benchmarkOrders;
+      restoreProviderSignals(d.providerSignals); // the bandit keeps its experience across redeploys
       benchmarkRevenueUSDC = d.benchmarkRevenueUSDC ?? 0;
     } else {
       benchmarkOrders = certifiedCards.size;
@@ -1198,6 +1200,7 @@ function saveHistory(): void {
     externalRecords: [...externalRecords.entries()], // durable track records (the credential base)
     certifiedCards: [...certifiedCards.entries()],
     benchmarkRevenueUSDC, benchmarkOrders, // real sales survive restarts
+    providerSignals: serializeProviderSignals(), // what the procurement bandit has learned about suppliers
   };
   try {
     writeFileSync(HISTORY_FILE, JSON.stringify(blob, null, 2));

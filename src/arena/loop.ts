@@ -2,7 +2,7 @@ import { AgentClient } from '@croo-network/sdk';
 import { EventBus } from '../events.js';
 import { Orchestrator, type HireResult } from '../orchestrator.js';
 import { getDataAgent, DATA_AGENTS, type RosterEntry } from '../roster.js';
-import { candidatesForCapability, markProviderFailed, markProviderSucceeded, markProviderTried, isProviderUntried, providerHealthWeight } from './discovery.js';
+import { candidatesForCapability, chooseByUcb, markProviderFailed, markProviderHired, markProviderSucceeded } from './discovery.js';
 import { fetchPythPrice } from './oracle.js';
 import { PERSONALITIES, type Personality } from './personalities.js';
 import { forecast, type DataInput } from './forecast.js';
@@ -181,7 +181,6 @@ function buildRequirements(capability: string): string {
 // from the live catalog, with light exploration to qualify new high-demand providers on-chain.
 const LIVE_SOURCING = process.env.ARENA_LIVE_SOURCING === '1';
 const isCuratedSeed = (serviceId: string): boolean => DATA_AGENTS.some((e) => e.serviceId === serviceId);
-const PROVIDER_EXPLORATION_RATE = Math.max(0, Math.min(1, Number(process.env.ARENA_PROVIDER_EXPLORATION_RATE ?? '0.02')));
 
 function parseRacerPriceCaps(): Map<string, number> {
   const out = new Map<string, number>();
@@ -215,37 +214,17 @@ const OWN_SERVICE_IDS = new Set<string>(
   ].filter((x): x is string => !!x),
 );
 
-/** Choose the data provider for a capability: curated seed by default; with live sourcing on, the best
- *  store provider by real 7d demand, occasionally an untried newcomer (to grow distinct A2A counterparties). */
+/** Choose the data provider for a capability: curated seed by default; with live sourcing on, the CROO
+ *  store itself is the supplier pool and the pick is a UCB1 bandit over it (see `chooseByUcb`). It
+ *  exploits what delivers and reaches for what it has never tried, so the sweep of the store is
+ *  automatic, bounded (still one hire per capability, no extra USDC) and self-terminating. */
 async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   const seed = getDataAgent(capability) ?? null;
   if (!LIVE_SOURCING) return seed;
   const cands = (await candidatesForCapability(capability)).filter((c) => !OWN_SERVICE_IDS.has(c.serviceId)); // never self-trade
-  if (!cands.length) return seed;
-  // ROTATE so WHICH provider is hired varies round to round (real store dynamism), demand-weighted so
-  // high-demand providers show up more often but never EXCLUSIVELY (previously it always took the
-  // single #1 → looked frozen on the same handful). Provider health is a soft weight, not a ban:
-  // timeouts/slow hires become less likely, then recover as their score decays.
-  const pool = cands.slice(0, 12);
-  // orders7d >= 1 (not 5): fresh store listings have low 7d demand, so a >=5 gate kept the untried
-  // pool empty once the high-demand matches were all tried → the arena froze on the same handful.
-  // >=1 lets genuinely new providers be probed, growing distinct A2A counterparties.
-  const untried = cands.filter((c) => isProviderUntried(c.serviceId) && c.orders7d >= 1);
-  let pick: (typeof cands)[number];
-  if (untried.length && Math.random() < PROVIDER_EXPLORATION_RATE) {
-    pick = untried[Math.floor(Math.random() * Math.min(untried.length, 5))];
-  } else {
-    // sqrt-dampened demand weighting: still favors high-demand providers, but not so overwhelmingly
-    // that the single #1 is picked every round (raw orders7d gaps are ~100:1 → it looked frozen).
-    // Dampened, comparable-demand candidates actually alternate round to round → visible variety.
-    const w = (c: (typeof cands)[number]) =>
-      Math.sqrt(Math.max(1, c.orders7d)) * providerHealthWeight(c.serviceId);
-    const total = pool.reduce((s, c) => s + w(c), 0);
-    let r = Math.random() * total;
-    pick = pool[pool.length - 1];
-    for (const c of pool) { r -= w(c); if (r <= 0) { pick = c; break; } }
-  }
-  markProviderTried(pick.serviceId);
+  const pick = chooseByUcb(cands);
+  if (!pick) return seed;
+  markProviderHired(pick.serviceId);
   return { capability, serviceId: pick.serviceId, label: pick.name, ours: false };
 }
 
