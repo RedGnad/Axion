@@ -1354,6 +1354,30 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
   if (serviceId) console.log(`[axion] forecast provider online on service ${serviceId}`);
   if (benchmarkId) console.log(`[axion] benchmark provider online on service ${benchmarkId}`);
   if (raceEngineId) console.log(`[axion] race-engine kit provider online on service ${raceEngineId}`);
+  // Heal the cards sold before we knew better: they link OUR deliverOrder tx, which moves no USDC at
+  // all, so the one link that proves a builder paid us proved nothing. Re-read each sale and point it
+  // at the buyer's pay tx. Idempotent, and a card whose order can no longer be read is left alone.
+  void (async () => {
+    let healed = 0;
+    for (const [wallet, card] of certifiedCards) {
+      if (!card.orderId) continue;
+      try {
+        const o = await client.getOrder(card.orderId) as { payTxHash?: string; price?: unknown };
+        const price = Number(o.price) / 1_000_000 || card.priceUSDC || CREDENTIAL_PRICE_USDC;
+        if (!o.payTxHash || (o.payTxHash === card.txHash && price === card.priceUSDC)) continue;
+        certifiedCards.set(wallet, { ...card, txHash: o.payTxHash || card.txHash, priceUSDC: price });
+        healed++;
+      } catch { /* order no longer readable: keep what we stored */ }
+    }
+    if (healed) {
+      benchmarkRevenueUSDC = [...certifiedCards.values()].reduce((s, c) => s + (c.priceUSDC || CREDENTIAL_PRICE_USDC), 0);
+      refreshEconomics();
+      refreshExternalBoard();
+      saveHistory();
+      console.log(`[credential] repointed ${healed} certification link(s) at the buyer's payment tx`);
+      broadcast();
+    }
+  })();
   const done = new Set<string>();
   const inFlight = new Set<string>();
   const tick = async (): Promise<void> => {
