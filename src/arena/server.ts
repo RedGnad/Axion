@@ -1140,7 +1140,10 @@ async function loadHistory(): Promise<void> {
     }
   }
   const renamedBack = healDefaultedRacerLabels();
-  if (renamedBack) console.log(`[arena-server] restored ${renamedBack} racer name(s) clobbered by the default label`);
+  if (renamedBack) {
+    console.log(`[arena-server] restored ${renamedBack} racer name(s) clobbered by the default label`);
+    refreshExternalBoard(); // the card board carries the racer's name too, and it is cached in state
+  }
   // The leaderboard is a derived credential surface, not source state. Rebuild it from verified round
   // history so past pruning bugs cannot erase an agent's earned record (e.g. agent-b525).
   rebuildLeaderboardFromHistory();
