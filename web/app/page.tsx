@@ -46,7 +46,7 @@ export default function Page() {
     ...(state?.round?.competitors ?? []).map((c) => c.id),
     ...(state?.history ?? []).flatMap((h) => (h.competitors ?? []).map((c) => c.id)),
   ].filter((id) => !seen.includes(id));
-  inheritLivery(state?.aliases); // a renamed racer keeps the color it raced under, it is the same agent
+  inheritLivery(state?.origins); // a renamed racer keeps the color it raced under, it is the same agent
   assignLivery([...seen, ...new Set(alsoSeen.sort())]);
   const [tab, setTab] = useState<Tab>("play");
   const [intro, setIntro] = useState(false);

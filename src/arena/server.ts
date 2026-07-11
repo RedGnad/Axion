@@ -158,9 +158,9 @@ interface ArenaState {
   /** The agents that will race next — so visitors can free-predict the NEXT race during the idle gap
    *  (at a low cadence the arena is idle most of the time; this is the main engagement lever). */
   roster?: { id: string; label: string }[];
-  /** OLD label -> CURRENT label for every racer that raced under another name, so the UI can carry an
-   *  identity (livery, grid slot) across a rename instead of treating the new name as a newcomer. */
-  aliases?: Record<string, string>;
+  /** CURRENT label -> the FIRST label this racer raced under, so the UI can carry an identity (its
+   *  livery) across a rename instead of coloring the new name as a newcomer. */
+  origins?: Record<string, string>;
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
@@ -786,7 +786,7 @@ function personaMeta(id: string): { label: string; blurb: string } {
 /** Publish the upcoming racers so the UI can let visitors free-predict the NEXT race while idle. */
 function refreshRoster(): void {
   state.roster = competitors.map((c) => ({ id: c.id, label: personaMeta(c.id).label }));
-  state.aliases = Object.fromEntries(racerAliasMap());
+  state.origins = Object.fromEntries(racerOriginMap());
 }
 
 /**
@@ -1009,6 +1009,26 @@ function racerAliasMap(): Map<string, string> {
       const current = byService.get(e.serviceId.toLowerCase());
       if (current && e.competitor !== current) m.set(e.competitor, current);
     }
+  }
+  return m;
+}
+
+/** CURRENT label -> the FIRST label this service ever raced under (itself, if it never renamed). The UI
+ *  keys a racer's livery on that name, so its color survives any number of renames, including renaming
+ *  back to a name it already used. Matched by serviceId, which is the only identity a racer cannot change. */
+function racerOriginMap(): Map<string, string> {
+  const firstLabel = new Map<string, string>();
+  for (const h of [...state.history].reverse()) { // oldest round first: the first write is the first name
+    for (const e of h.edges ?? []) {
+      if (!e.raceEntry || !e.serviceId) continue;
+      const key = e.serviceId.toLowerCase();
+      if (!firstLabel.has(key)) firstLabel.set(key, e.competitor);
+    }
+  }
+  const m = new Map<string, string>();
+  for (const j of joinedRoster) {
+    const origin = firstLabel.get(j.serviceId.toLowerCase());
+    if (origin) m.set(j.label, origin);
   }
   return m;
 }
@@ -2201,7 +2221,13 @@ async function main(): Promise<void> {
               const publicOwner = await crooPublicOwnerWalletForService(serviceId);
               ownerVerified = !!publicOwner && publicOwner.toLowerCase() === verifiedOwner.toLowerCase();
             }
-            const desiredName = cleanRacerLabel(label, serviceId);
+            // The label is OPTIONAL, and an omitted label means "leave it as it is", never "rename me to
+            // the default". A builder who re-submits the form to link a wallet or a payout must not lose
+            // the name their racer already races under (CROOCRED was silently renamed agent-0dc7 that way).
+            const currentLabel = joinedRoster.find((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase())?.label
+              ?? competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
+                c.kind === 'remote' && c.serviceId.toLowerCase() === serviceId.toLowerCase())?.id;
+            const desiredName = String(label ?? '').trim() ? cleanRacerLabel(label, serviceId) : (currentLabel ?? cleanRacerLabel(label, serviceId));
             const verifiedOwnerKey = racerOwnerKey(verifiedOwner);
             if (verifiedOwnerKey) {
               for (const row of [...joinedRoster]) {
