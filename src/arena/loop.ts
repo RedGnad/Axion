@@ -402,6 +402,12 @@ export async function runRound(
   // outlier (>grace slower than its peers) is. Hard ceiling = backstop for total provider failure.
   const grace = Math.max(5, Number(process.env.ARENA_ESTIMATE_GRACE_SECONDS ?? '45')) * 1000;
   const hardCap = Math.max(grace + 60_000, Number(process.env.ARENA_ESTIMATE_HARDCAP_SECONDS ?? '300') * 1000);
+  // ABSOLUTE FLOOR before any straggler can be cut. The grace is relative to the FASTEST agent, so a
+  // persona that hires one fast provider would open a 45s window before slower peers (2 hires each,
+  // ~20-40s per CAP order) have landed → they'd be wrongly marked "late". The floor guarantees every
+  // agent gets at least this long from round-open before the cutoff fires; it never DELAYS a round
+  // where everyone is already in (the loop ends as soon as done === competitors).
+  const graceFloor = Math.min(hardCap, Math.max(0, Number(process.env.ARENA_ESTIMATE_FLOOR_SECONDS ?? '140')) * 1000);
   const hiringStart = Date.now();
   let firstAt = 0;
   let dqAtMs = hiringStart + hardCap; // backstop until the fastest agent lands
@@ -420,7 +426,8 @@ export async function runRound(
         settled.add(c.id);
         if (!firstAt) {
           firstAt = Date.now();
-          dqAtMs = Math.min(hiringStart + hardCap, firstAt + grace); // grace relative to the fastest
+          // grace relative to the fastest, but never before the absolute floor from round-open
+          dqAtMs = Math.min(hiringStart + hardCap, Math.max(firstAt + grace, hiringStart + graceFloor));
           hooks.onFirstEstimate?.({ dqFromMs: firstAt, dqAtMs });
         }
         done.set(c.id, r);
