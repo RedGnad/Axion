@@ -2088,15 +2088,27 @@ function CredentialCard({
               className="ml-auto flex h-12 w-12 shrink-0 items-center justify-center self-center rounded-full"
               title="CROO certified"
               style={{
-                background: `conic-gradient(from 210deg, rgba(${stage.rgb},.55), rgba(255,255,255,.18), rgba(${stage.rgb},.38), rgba(255,255,255,.10), rgba(${stage.rgb},.55))`,
-                boxShadow: `0 0 16px rgba(${stage.rgb},.30), inset 0 0 5px rgba(0,0,0,.55)`,
+                // The foil is the STAMP, so it needs room to read: a 6px rim at .55 alpha, cut by an inner
+                // black shadow, collapsed into a black disc on the card face. Wide rim, opaque metal.
+                background: `conic-gradient(from 210deg, rgba(${stage.rgb},1), rgba(255,255,255,.85), rgba(${stage.rgb},.65), rgba(255,255,255,.35), rgba(${stage.rgb},1))`,
+                boxShadow: `0 0 18px rgba(${stage.rgb},.45), 0 1px 2px rgba(0,0,0,.55)`,
               }}
             >
-              <div className="flex h-9 w-9 flex-col items-center justify-center rounded-full bg-[#0c0c10]">
-                <span className="font-display text-[13px] leading-none" style={{ color: `rgb(${stage.rgb})` }}>
+              <div
+                className="flex h-[31px] w-[31px] flex-col items-center justify-center rounded-full"
+                style={{
+                  // Struck metal, not a hole: the core keeps the class tint so the check reads as engraved.
+                  background: `radial-gradient(circle at 50% 32%, rgba(${stage.rgb},.28), #0a0d11 80%)`,
+                  boxShadow: 'inset 0 1px 3px rgba(0,0,0,.8)',
+                }}
+              >
+                <span
+                  className="font-display text-[14px] font-bold leading-none text-ink"
+                  style={{ textShadow: `0 0 6px rgba(${stage.rgb},.9)` }}
+                >
                   ✓
                 </span>
-                <span className="mt-0.5 font-mono text-[5px] uppercase tracking-[0.18em] text-dim">
+                <span className="mt-[1px] font-mono text-[5px] uppercase leading-none tracking-[0.16em] text-ink/55">
                   CROO
                 </span>
               </div>
