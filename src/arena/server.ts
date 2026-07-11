@@ -158,6 +158,9 @@ interface ArenaState {
   /** The agents that will race next — so visitors can free-predict the NEXT race during the idle gap
    *  (at a low cadence the arena is idle most of the time; this is the main engagement lever). */
   roster?: { id: string; label: string }[];
+  /** OLD label -> CURRENT label for every racer that raced under another name, so the UI can carry an
+   *  identity (livery, grid slot) across a rename instead of treating the new name as a newcomer. */
+  aliases?: Record<string, string>;
   /** Free guest-prediction usage (proof of adoption): total calls, correct, unique visitors. */
   predictStats: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   /** Custodial-disclosed human USDC betting (off unless the house EOA is configured). */
@@ -783,6 +786,7 @@ function personaMeta(id: string): { label: string; blurb: string } {
 /** Publish the upcoming racers so the UI can let visitors free-predict the NEXT race while idle. */
 function refreshRoster(): void {
   state.roster = competitors.map((c) => ({ id: c.id, label: personaMeta(c.id).label }));
+  state.aliases = Object.fromEntries(racerAliasMap());
 }
 
 /**
@@ -2022,6 +2026,23 @@ async function main(): Promise<void> {
   // survives restarts/redeploys. Needs ARENA_SDK_KEY (the arena buyer that hires remotes).
   if (joinedRoster.length) {
     try {
+      // Grid order is SENIORITY: where a racer started racing, not where its roster row was last
+      // rewritten. A rename rewrites the row, so without this an old racer that changed its name would
+      // restart at the back of the grid and of the bet buttons. Read from history by serviceId (so it
+      // survives the rename); history is newest-first, so the HIGHEST index is the oldest race. Rows
+      // that never raced keep their join order, behind everyone who has.
+      const oldestRace = new Map<string, number>();
+      state.history.forEach((h, i) => {
+        for (const e of h.edges ?? []) {
+          if (e.raceEntry && e.serviceId) oldestRace.set(e.serviceId.toLowerCase(), i);
+        }
+      });
+      const seniority = (j: JoinedRacer, i: number) => oldestRace.get(j.serviceId.toLowerCase()) ?? -1 - i;
+      joinedRoster = joinedRoster
+        .map((j, i) => ({ j, i }))
+        .sort((a, b) => seniority(b.j, b.i) - seniority(a.j, a.i))
+        .map((x) => x.j);
+
       if (!remoteBuyer) remoteBuyer = await createRemoteBuyer(cfg);
       let restored = 0;
       for (const j of joinedRoster) {
@@ -2209,9 +2230,17 @@ async function main(): Promise<void> {
             let existing = competitors.find((c): c is Extract<Competitor, { kind: 'remote' }> =>
               c.kind === 'remote' && c.serviceId === serviceId
             );
+            // A rename is the SAME racer, so it keeps the slot it earned: the grid, the bet buttons and
+            // the roster order all follow `competitors`, and re-pushing at the end would move a veteran
+            // to the back of the grid for changing its name. Remember where it stood and put it back there.
+            let renameSlot: { competitors: number; roster: number } | null = null;
             if (existing && existing.id !== desiredName) {
               if (!verifiedOwnerKey) return reply(409, { error: 'connect the scorecard wallet to rename this racer' });
               if (metaById.has(desiredName)) return reply(409, { error: 'racer label already exists. Choose another label.' });
+              renameSlot = {
+                competitors: competitors.indexOf(existing),
+                roster: joinedRoster.findIndex((j) => j.serviceId.toLowerCase() === serviceId.toLowerCase()),
+              };
               removeCommunityCompetitor(serviceId, 'Updated racer label.', { persist: false });
               existing = undefined;
             }
@@ -2244,10 +2273,13 @@ async function main(): Promise<void> {
             // the deliverable and auto-purges bad community agents that do not return {prediction,rationale}.
             const comp = makeRemoteCompetitor(remoteBuyer, serviceId, name);
 
-            competitors.push(comp);
+            const row = { serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined, ownerVerified: ownerVerified || undefined };
+            if (renameSlot && renameSlot.competitors >= 0) competitors.splice(renameSlot.competitors, 0, comp);
+            else competitors.push(comp);
             metaById.set(name, { label: name, blurb: 'community agent' });
             if (payout) setAgentPayout(name, payout); // route this agent's winning purse on-chain
-            joinedRoster.push({ serviceId, label: name, payout: payout || undefined, ownerWallet: verifiedOwner || undefined, ownerVerified: ownerVerified || undefined });
+            if (renameSlot && renameSlot.roster >= 0) joinedRoster.splice(renameSlot.roster, 0, row);
+            else joinedRoster.push(row);
             joinedRoster = joinedRoster.slice(-50);
             // A racer can REJOIN under its old label (purge, redeploy): credit the graded races the
             // history still holds for that label, so a hiccup never wipes a builder's card.

@@ -147,6 +147,8 @@ export interface ArenaState {
   leaderboard: LeaderRow[];
   feed: FeedItem[];
   roster?: { id: string; label: string }[];
+  /** OLD label -> CURRENT label: a renamed racer keeps its livery and its grid slot. */
+  aliases?: Record<string, string>;
   predictStats?: { total: number; correct: number; visitors: number; pending?: number; resolved?: number };
   usdcBet?: { enabled: boolean; open?: boolean; betCutoffAtMs?: number; houseAddress: string; maxBetUSDC: number; multiplier: number; pool: { byAgent: { id: string; amount: string }[]; total: string; bettors: number } };
   budget?: { used: number; cap: number; resetsAt: number };

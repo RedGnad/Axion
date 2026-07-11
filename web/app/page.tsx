@@ -17,7 +17,7 @@ import {
   type SignedScorecard,
 } from "@/lib/runner";
 import { postUsdcBet, USDC_ADDRESS, ERC20_TRANSFER_ABI } from "@/lib/bet";
-import { assignLivery, cn, livery, usd } from "@/lib/utils";
+import { assignLivery, cn, inheritLivery, livery, usd } from "@/lib/utils";
 import Race from "@/components/Race";
 import ConnectModal from "@/components/ConnectModal";
 import {
@@ -46,6 +46,7 @@ export default function Page() {
     ...(state?.round?.competitors ?? []).map((c) => c.id),
     ...(state?.history ?? []).flatMap((h) => (h.competitors ?? []).map((c) => c.id)),
   ].filter((id) => !seen.includes(id));
+  inheritLivery(state?.aliases); // a renamed racer keeps the color it raced under, it is the same agent
   assignLivery([...seen, ...new Set(alsoSeen.sort())]);
   const [tab, setTab] = useState<Tab>("play");
   const [intro, setIntro] = useState(false);

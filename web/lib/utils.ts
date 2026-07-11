@@ -71,6 +71,28 @@ function pickHue(preferred: number, taken: number[]): number {
  * spoken for, so a joining agent can never recolor the field. `ids` must arrive in a stable order
  * (roster join order first) so a page reload replays the same assignment.
  */
+/** Labels that already took over the color of the name they used to race under. */
+const inherited = new Set<string>();
+
+/**
+ * A rename is the same racer, so it KEEPS its color: b525 becoming Remi stays orange instead of being
+ * handed a fresh hue as if it had just joined. `aliases` is the runner's OLD label -> CURRENT label map
+ * (built from the service id, so it survives any number of renames). Run this before `assignLivery` so
+ * the new name is already served when the newcomer pass looks for a free hue.
+ */
+export function inheritLivery(aliases?: Record<string, string>): void {
+  if (!aliases) return;
+  for (const [oldId, currentId] of Object.entries(aliases)) {
+    const from = liveryKey(oldId);
+    const to = liveryKey(currentId);
+    if (!from || !to || from === to || inherited.has(to)) continue;
+    if (LIVERY[from]) LIVERY[to] = LIVERY[from];
+    else if (assignedHues.has(from)) assignedHues.set(to, assignedHues.get(from)!);
+    else continue;
+    inherited.add(to);
+  }
+}
+
 export function assignLivery(ids: string[]): void {
   for (const id of ids) {
     const key = liveryKey(id);
