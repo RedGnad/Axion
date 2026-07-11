@@ -216,7 +216,7 @@ const OWN_SERVICE_IDS = new Set<string>(
 );
 
 /** Choose the data provider for a capability: curated seed by default; with live sourcing on, the best
- *  store provider by real 7d demand, occasionally an untried high-demand newcomer (to qualify it). */
+ *  store provider by real 7d demand, occasionally an untried newcomer (to grow distinct A2A counterparties). */
 async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   const seed = getDataAgent(capability) ?? null;
   if (!LIVE_SOURCING) return seed;
@@ -226,8 +226,11 @@ async function chooseProvider(capability: string): Promise<RosterEntry | null> {
   // high-demand providers show up more often but never EXCLUSIVELY (previously it always took the
   // single #1 → looked frozen on the same handful). Provider health is a soft weight, not a ban:
   // timeouts/slow hires become less likely, then recover as their score decays.
-  const pool = cands.slice(0, 6);
-  const untried = cands.filter((c) => isProviderUntried(c.serviceId) && c.orders7d >= 5);
+  const pool = cands.slice(0, 12);
+  // orders7d >= 1 (not 5): fresh store listings have low 7d demand, so a >=5 gate kept the untried
+  // pool empty once the high-demand matches were all tried → the arena froze on the same handful.
+  // >=1 lets genuinely new providers be probed, growing distinct A2A counterparties.
+  const untried = cands.filter((c) => isProviderUntried(c.serviceId) && c.orders7d >= 1);
   let pick: (typeof cands)[number];
   if (untried.length && Math.random() < PROVIDER_EXPLORATION_RATE) {
     pick = untried[Math.floor(Math.random() * Math.min(untried.length, 5))];
