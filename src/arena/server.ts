@@ -1033,6 +1033,25 @@ function racerOriginMap(): Map<string, string> {
   return m;
 }
 
+/** Undo our own damage: an omitted label used to be replaced by the auto default `agent-<serviceId>`,
+ *  which silently renamed racers that had already chosen a name and re-submitted the Garage form to link
+ *  a wallet (CROOCRED became agent-0dc7). A row wearing exactly that default while its service has raced
+ *  under a chosen name is that bug and nothing else, so the name it raced under is given back. Idempotent:
+ *  once a row holds its real name it no longer matches the default. */
+function healDefaultedRacerLabels(): number {
+  let healed = 0;
+  const origins = racerOriginMap();
+  for (const j of joinedRoster) {
+    if (j.label !== `agent-${j.serviceId.slice(0, 4)}`) continue;
+    const origin = origins.get(j.label);
+    if (!origin || origin === j.label) continue;
+    if (joinedRoster.some((o) => o !== j && racerLabelKey(o.label) === racerLabelKey(origin))) continue;
+    j.label = origin;
+    healed++;
+  }
+  return healed;
+}
+
 function rebuildLeaderboardFromHistory(): void {
   const alias = racerAliasMap();
   const rows = new Map<string, { id: string; label: string; wins: number; rounds: number; sumError: number; avgError: number }>();
@@ -1120,12 +1139,14 @@ async function loadHistory(): Promise<void> {
       }
     }
   }
+  const renamedBack = healDefaultedRacerLabels();
+  if (renamedBack) console.log(`[arena-server] restored ${renamedBack} racer name(s) clobbered by the default label`);
   // The leaderboard is a derived credential surface, not source state. Rebuild it from verified round
   // history so past pruning bugs cannot erase an agent's earned record (e.g. agent-b525).
   rebuildLeaderboardFromHistory();
   const deduped = dedupeJoinedRoster();
   const disabled = pruneDisabledCommunityRacers({ persist: false });
-  if (deduped || disabled) {
+  if (deduped || disabled || renamedBack) {
     if (deduped) console.log('[arena-server] deduped durable community roster');
     if (disabled) console.log(`[arena-server] pruned ${disabled} disabled community racer(s) from durable roster`);
     saveHistory();
