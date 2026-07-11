@@ -74,10 +74,16 @@ Single Node process (Render) runs the rounds AND serves state; the Next.js app o
   Garage (join + data market), On-chain proof tabs.
 
 ## Operational facts (current, verified on-chain 2026-06-26)
-- **Three persona AA wallets, each pays its own data hires** (~0.2 USDC/round each), all currently
-  near-empty → data hires fail → agents forecast on baseline ("no signal"). Fund all three with USDC
-  on Base (gas is paid in USDC via paymaster, no ETH needed). See memory `arena-wallet-funding`:
-  Slicer `0x5B6bEFFbbED35c55a7749f7E594B062B52BFF7FC`, Tanker `0xf398...BF76`, Wizord `0x62aa...F351`.
+- **Three persona AA wallets, each pays its own data hires** (~0.21 USDC/round each: 2 hires x 0.1042,
+  incl. the ~10% CAP escrow fee + USDC-paid gas). Fund with USDC on Base (paymaster, no ETH needed).
+  VERIFIED ON-CHAIN 2026-07-11 by decoding the pay txs (the AA that signs `payOrder` IS the wallet to
+  fund): Slicer `0xd49ade266a354288415c23b61d380d1059947053`, Tanker
+  `0xdbf72057c3c25e246e001d66c30c470d93cc8133`, Wizord `0x2e4ed0f996c887147441bb931feb6f36dad8518b`.
+  Arena buyer (hires the remote racers) + Axion PROVIDER agent (receives credential revenue) share
+  `0x064c6fb59c4fdbf6bdc0dc27a2d2bcdb59e7b5cb`.
+- **STALE ADDRESS, do not fund:** `0x5B6bEFFbbED35c55a7749f7E594B062B52BFF7FC` is Slicer's OLD AA (the
+  agent was re-created, new SDK key -> new AA). It still holds ~3.48 USDC, unreachable without the old
+  controller key. It is the address the docs and memory used to name, hence this warning.
 - Render `plan: free` spins down when idle (cold start); a cron ping keeps it warm. Any push
   redeploys Render and KILLS an in-flight round — check `/api/state` is idle before pushing.
 - Human USDC betting + the winning-agent purse need env: `HOUSE_EOA_ADDRESS/PRIVATE_KEY`,

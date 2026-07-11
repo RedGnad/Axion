@@ -694,6 +694,9 @@ function RaceControl({
       ? Math.max(0, state.budget.cap - state.budget.used)
       : null;
     const exhausted = budLeft === 0;
+    // Never offer a button that can only answer 409. With a countdown showing, the exhausted case used
+    // to keep the CTA lit, so the first thing a visitor did was click into a refusal.
+    showStart = !exhausted;
     if (nextAt && delta > 0) {
       kicker = "NEXT";
       big = clock(delta);
@@ -701,7 +704,6 @@ function RaceControl({
       kicker = "ARENA READY";
       big = exhausted ? "back tomorrow" : "start a race";
       accent = false;
-      showStart = !exhausted;
     }
     note =
       startMsg ??

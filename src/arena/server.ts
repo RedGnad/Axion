@@ -265,6 +265,9 @@ let rotationQueue: string[] = [];
 
 // Benchmark service: external agents PAY to MINT a signed credential over the ACCUMULATED record they
 // built via the free /api/submit intake. This is the only paid credential path; no more one-round mint.
+/** List price of the accuracy credential on CROO (service a08c9715…). A CAP order settles at the listed
+ *  price, so this is what a sale is worth when an order row comes back without one. */
+const CREDENTIAL_PRICE_USDC = 0.1;
 let benchmarkRevenueUSDC = 0;
 let benchmarkOrders = 0;
 
@@ -1114,10 +1117,13 @@ async function loadHistory(): Promise<void> {
     if (typeof d.benchmarkOrders === 'number') {
       benchmarkOrders = d.benchmarkOrders;
       restoreProviderSignals(d.providerSignals); // the bandit keeps its experience across redeploys
-      benchmarkRevenueUSDC = d.benchmarkRevenueUSDC ?? 0;
+      // A sale booked at 0 (missing price on the order row) must not under-report revenue for ever: the
+      // certified cards ARE the sales, and the credential has one list price, so they are the floor.
+      const cardsFloor = [...certifiedCards.values()].reduce((s, c) => s + (c.priceUSDC || CREDENTIAL_PRICE_USDC), 0);
+      benchmarkRevenueUSDC = Math.max(d.benchmarkRevenueUSDC ?? 0, cardsFloor);
     } else {
       benchmarkOrders = certifiedCards.size;
-      benchmarkRevenueUSDC = [...certifiedCards.values()].reduce((s, c) => s + (c.priceUSDC ?? 0.1), 0);
+      benchmarkRevenueUSDC = [...certifiedCards.values()].reduce((s, c) => s + (c.priceUSDC || CREDENTIAL_PRICE_USDC), 0);
     }
   };
   const fromStore = await loadState<Persisted>();
@@ -1440,7 +1446,12 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
               });
               done.add(o.orderId);
               const certifiedAtSec = Math.round(Date.now() / 1000);
-              const priceUSDC = Number(o.price) / 1_000_000 || 0;
+              // The row from listOrders can carry no price and no pay tx, which silently booked a real
+              // sale as 0 USDC revenue. Re-read the order: it is the authoritative record of what the
+              // buyer paid and of the tx that moved their money.
+              let paid: { price?: unknown; payTxHash?: string } = o;
+              try { paid = await client.getOrder(o.orderId) as typeof paid; } catch { /* keep the list row */ }
+              const priceUSDC = Number(paid.price ?? o.price) / 1_000_000 || Number(o.price) / 1_000_000 || 0;
               certifiedCards.set(checked.wallet.toLowerCase(), {
                 wallet: checked.wallet,
                 serviceId: signed.serviceId,
@@ -1450,7 +1461,9 @@ async function startAxionProvider(cfg: { baseURL: string; wsURL: string }): Prom
                 trustedErrorUsd: signed.trustedErrorUsd,
                 certifiedAtSec,
                 orderId: o.orderId,
-                txHash: delivered.txHash || o.deliverTxHash || o.payTxHash || undefined,
+                // The BUYER'S PAY tx, not our delivery: a judge clicking this must see USDC move. Our
+                // deliverOrder tx carries no transfer at all, so it proved nothing about the sale.
+                txHash: paid.payTxHash || o.payTxHash || delivered.txHash || o.deliverTxHash || undefined,
                 priceUSDC,
               });
               benchmarkRevenueUSDC += priceUSDC;
